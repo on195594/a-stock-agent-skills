@@ -1,0 +1,1 @@
+Use the canonical a-stock-research Skill from the isolated HOME and local fixture /home/lin/a-stock-agent-skills/tests/fixtures/research/framework-A.json. Read-only; no network, database writes, or notifications. Return framework route, hard score structure, data gaps, and fail-closed status.

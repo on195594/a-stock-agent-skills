@@ -1,0 +1,2 @@
+{"source": "/home/lin/a-stock-agent-skills", "release": "0.1.0-working-tree", "clients": ["claude", "codex", "hermes"], "mode": "symlink"}
+installed release 0.1.0-working-tree; rollback manifest: /tmp/tmp.hsWOfJu6IX/.local/share/a-stock-agent/rollback-1786194265.json

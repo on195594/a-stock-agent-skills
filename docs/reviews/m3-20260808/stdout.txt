@@ -1,0 +1,2 @@
+skill validation passed
+qa standalone smoke passed

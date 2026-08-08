@@ -1,0 +1,35 @@
+[project]
+name = "a-stock-agent-skills"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+  "akshare==1.18.64",
+  "pandas==3.0.2",
+  "requests==2.33.1",
+  "tushare==1.4.29",
+]
+
+[project.scripts]
+a-stock-cache = "a_stock_agent_runtime.cache:main"
+a-stock-fetch = "a_stock_agent_runtime.fetcher:main"
+a-stock-install = "a_stock_agent_runtime.install:main"
+
+[dependency-groups]
+dev = ["pytest==9.0.3", "ruff==0.11.0", "mypy==1.15.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

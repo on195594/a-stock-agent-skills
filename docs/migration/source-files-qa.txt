@@ -1,0 +1,8 @@
+.claude/ai-collab/config.yaml
+.gitignore
+CLAUDE.md
+README.md
+SKILL.md
+docs/specs/2026-07-04-a-stock-qa-design.md
+docs/specs/2026-07-04-a-stock-qa-phase1-integration.md
+rubrics/a-stock-research.md

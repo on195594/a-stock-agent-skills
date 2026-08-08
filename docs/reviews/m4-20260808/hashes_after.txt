@@ -1,0 +1,1 @@
+611c218303abbc7478b77e73e12f5b71c672c2bf8ddcaae26f04ca1d303a3797  docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md

@@ -1,0 +1,1 @@
+Use the isolated a-stock-research Skill with local fixture /home/lin/a-stock-agent-skills/tests/fixtures/research/framework-A.json. Read-only; no network, database writes, or notifications; return deterministic invariants only.

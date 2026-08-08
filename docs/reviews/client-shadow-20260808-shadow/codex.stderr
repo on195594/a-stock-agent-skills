@@ -1,0 +1,34 @@
+WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir "/tmp" (codex_home: AbsolutePathBuf("/tmp/tmp.hsWOfJu6IX/.codex"))
+Reading additional input from stdin...
+OpenAI Codex v0.147.0
+--------
+workdir: /tmp/tmp.hsWOfJu6IX
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: none
+reasoning summaries: none
+session id: 019fe17a-5114-7410-8a3b-1d89f6248ce1
+--------
+user
+Explicitly use a-stock-research from the isolated HOME with local fixture /home/lin/a-stock-agent-skills/tests/fixtures/research/framework-A.json. Read-only; no network, DB writes, or notifications. Return only deterministic invariants.
+2026-08-08T13:05:17.680121Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Operation not permitted (os error 1), url: wss://api.openai.com/v1/responses
+2026-08-08T13:05:17.762625Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Operation not permitted (os error 1), url: wss://api.openai.com/v1/responses
+2026-08-08T13:05:17.983955Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Operation not permitted (os error 1), url: wss://api.openai.com/v1/responses
+ERROR: Reconnecting... 2/5
+2026-08-08T13:05:18.417532Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Operation not permitted (os error 1), url: wss://api.openai.com/v1/responses
+ERROR: Reconnecting... 3/5
+2026-08-08T13:05:19.160510Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Operation not permitted (os error 1), url: wss://api.openai.com/v1/responses
+ERROR: Reconnecting... 4/5
+2026-08-08T13:05:20.642875Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Operation not permitted (os error 1), url: wss://api.openai.com/v1/responses
+ERROR: Reconnecting... 5/5
+2026-08-08T13:05:23.541770Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Operation not permitted (os error 1), url: wss://api.openai.com/v1/responses
+warning: Falling back from WebSockets to HTTPS transport. stream disconnected before completion: Operation not permitted (os error 1)
+ERROR: Reconnecting... 1/5
+ERROR: Reconnecting... 2/5
+ERROR: Reconnecting... 3/5
+ERROR: Reconnecting... 4/5
+ERROR: Reconnecting... 5/5
+ERROR: stream disconnected before completion: error sending request for url (https://api.openai.com/v1/responses)
+ERROR: stream disconnected before completion: error sending request for url (https://api.openai.com/v1/responses)

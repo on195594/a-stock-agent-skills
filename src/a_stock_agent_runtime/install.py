@@ -1,0 +1,238 @@
+"""Reversible, standard-library installer for the portable Skill suite."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import tomllib
+
+
+CLIENT_ROOTS = {
+    "claude": (".claude", "skills"),
+    "codex": (".agents", "skills"),
+    "hermes": (".hermes", "skills", "research"),
+}
+SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
+CONSOLE_SCRIPTS = ("a-stock-cache", "a-stock-fetch", "a-stock-install")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _tree_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    for item in sorted(path.rglob("*")):
+        if item.is_file() and ".git" not in item.parts:
+            digest.update(str(item.relative_to(path)).encode())
+            digest.update(_sha256(item).encode())
+    return digest.hexdigest()
+
+
+def _release(source: Path) -> str:
+    data = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))
+    version = str(data["project"]["version"])
+    try:
+        commit = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "--short=12", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        commit = "working-tree"
+    return f"{version}-{commit}"
+
+
+def _target(root: Path, client: str, skill: str) -> Path:
+    return root.joinpath(*CLIENT_ROOTS[client], skill)
+
+
+def _backup(path: Path, root: Path) -> Path:
+    backup_root = root / ".local" / "share" / "a-stock-agent" / "backups"
+    backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    destination = backup_root / f"{path.name}-{int(time.time())}"
+    if path.is_symlink():
+        destination.write_text(os.readlink(path), encoding="utf-8")
+    elif path.is_dir():
+        shutil.copytree(path, destination, symlinks=True)
+    else:
+        shutil.copy2(path, destination)
+    return destination
+
+
+def _install_runtime(source: Path, root: Path, lib_source: Path | None, lib_wheel: Path | None) -> tuple[Path, str]:
+    release = _release(source)
+    runtime_root = root / ".local" / "share" / "a-stock-agent" / "runtime" / release
+    venv = runtime_root / "venv"
+    runtime_root.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--system-site-packages", str(venv)],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    python = venv / "bin" / "python"
+    wheel = lib_wheel
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        if lib_source is not None:
+            temp_dir = tempfile.TemporaryDirectory(prefix="a-stock-lib-wheel-")
+            subprocess.run(
+                ["uv", "build", str(lib_source), "--out-dir", temp_dir.name],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            wheels = sorted(Path(temp_dir.name).glob("a_stock_lib-*.whl"))
+            if not wheels:
+                raise RuntimeError("a-stock-lib source did not produce a wheel")
+            wheel = wheels[-1]
+        if wheel is None:
+            raise ValueError("one of --a-stock-lib-source or --a-stock-lib-wheel is required")
+        installer = shutil.which("uv")
+        if installer:
+            install_cmd = [installer, "pip", "install", "--python", str(python), "--no-deps"]
+            subprocess.run([*install_cmd, "--force-reinstall", str(wheel)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            subprocess.run([*install_cmd, "--editable", str(source)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        else:
+            # Bootstrap must still work with only Python on PATH.  A .pth and
+            # three tiny console wrappers avoid a network/build-backend loop.
+            pip_cmd = [str(python), "-m", "pip", "install", "--no-deps", "--force-reinstall", str(wheel)]
+            subprocess.run(pip_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            site_packages = subprocess.check_output(
+                [str(python), "-c", "import site; print(site.getsitepackages()[0])"],
+                text=True,
+            ).strip()
+            paths = [str(source / "src")]
+            # A source checkout normally has a locked development venv.  It is
+            # a local bootstrap cache only; published installs use uv below.
+            dev_site = next((source / ".venv").glob("lib/python*/site-packages"), None)
+            if dev_site is not None:
+                paths.append(str(dev_site))
+            Path(site_packages, "a_stock_agent_skills.pth").write_text(
+                "\n".join(paths) + "\n", encoding="utf-8"
+            )
+            for name, module in (
+                ("a-stock-cache", "a_stock_agent_runtime.cache"),
+                ("a-stock-fetch", "a_stock_agent_runtime.fetcher"),
+                ("a-stock-install", "a_stock_agent_runtime.install"),
+            ):
+                (venv / "bin" / name).write_text(
+                    f"#!{python}\n"
+                    f"from {module} import main\n"
+                    "raise SystemExit(main())\n",
+                    encoding="utf-8",
+                )
+                (venv / "bin" / name).chmod(0o755)
+    finally:
+        if temp_dir is not None:
+            temp_dir.cleanup()
+    bin_dir = root / ".local" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name in CONSOLE_SCRIPTS:
+        command = venv / "bin" / name
+        link = bin_dir / name
+        if link.exists() or link.is_symlink():
+            link.unlink()
+        link.symlink_to(command)
+    return venv, release
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Install the portable A-stock Skills suite")
+    parser.add_argument("--client", choices=[*CLIENT_ROOTS, "all"], default="all")
+    parser.add_argument("--mode", choices=("symlink", "copy"), default="symlink")
+    parser.add_argument("--source", type=Path, default=Path.cwd())
+    parser.add_argument("--target-root", type=Path)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--a-stock-lib-source", type=Path)
+    parser.add_argument("--a-stock-lib-wheel", type=Path)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    source = args.source.expanduser().resolve()
+    root = (args.target_root or Path.home()).expanduser().resolve()
+    if not (source / "pyproject.toml").is_file():
+        print(f"source is not a canonical suite: {source}", file=sys.stderr)
+        return 2
+    if bool(args.a_stock_lib_source) == bool(args.a_stock_lib_wheel):
+        print("exactly one of --a-stock-lib-source or --a-stock-lib-wheel is required", file=sys.stderr)
+        return 2
+    lib_source = args.a_stock_lib_source.expanduser().resolve() if args.a_stock_lib_source else None
+    lib_wheel = args.a_stock_lib_wheel.expanduser().resolve() if args.a_stock_lib_wheel else None
+    if lib_source and not (lib_source / "pyproject.toml").is_file():
+        print(f"invalid a-stock-lib source: {lib_source}", file=sys.stderr)
+        return 2
+    if lib_wheel and (not lib_wheel.is_file() or lib_wheel.suffix != ".whl"):
+        print(f"invalid a-stock-lib wheel: {lib_wheel}", file=sys.stderr)
+        return 2
+    clients = list(CLIENT_ROOTS) if args.client == "all" else [args.client]
+    if root.joinpath(".local", "bin").as_posix() not in os.environ.get("PATH", "").split(os.pathsep):
+        print(f"PATH must contain {root / '.local' / 'bin'} for stable CLI discovery", file=sys.stderr)
+        return 2
+    release = _release(source)
+    print(json.dumps({"source": str(source), "release": release, "clients": clients, "mode": args.mode}, ensure_ascii=False))
+    if args.dry_run:
+        for client in clients:
+            for skill in SKILLS:
+                print(f"DRY-RUN {args.mode} {source / 'skills' / skill} -> {_target(root, client, skill)}")
+        print(f"DRY-RUN runtime -> {root / '.local/share/a-stock-agent/runtime' / release / 'venv'}")
+        return 0
+    try:
+        _install_runtime(source, root, lib_source, lib_wheel)
+        rollback: list[dict[str, str]] = []
+        for client in clients:
+            for skill in SKILLS:
+                source_skill = source / "skills" / skill
+                destination = _target(root, client, skill)
+                if destination.exists() or destination.is_symlink():
+                    if not args.force:
+                        raise FileExistsError(f"refusing to replace existing path: {destination}")
+                    backup = _backup(destination, root)
+                    rollback.append({"target": str(destination), "backup": str(backup)})
+                    if destination.is_dir() and not destination.is_symlink():
+                        shutil.rmtree(destination)
+                    else:
+                        destination.unlink()
+                destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                if args.mode == "symlink":
+                    destination.symlink_to(source_skill)
+                else:
+                    shutil.copytree(source_skill, destination, symlinks=True)
+                    manifest = {
+                        "release": release,
+                        "source": str(source),
+                        "source_hash": _tree_hash(source_skill),
+                        "installed_at": time.time(),
+                    }
+                    (destination / ".a-stock-suite-manifest.json").write_text(
+                        json.dumps(manifest, indent=2), encoding="utf-8"
+                    )
+        manifest_path = root / ".local" / "share" / "a-stock-agent" / f"rollback-{int(time.time())}.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        manifest_path.write_text(json.dumps({"release": release, "entries": rollback}, indent=2), encoding="utf-8")
+        for client in clients:
+            for skill in SKILLS:
+                if not (_target(root, client, skill) / "SKILL.md").is_file():
+                    raise RuntimeError(f"client discovery validation failed: {_target(root, client, skill)}")
+        print(f"installed release {release}; rollback manifest: {manifest_path}")
+        return 0
+    except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as exc:
+        print(f"install failed: {exc}", file=sys.stderr)
+        return 1
