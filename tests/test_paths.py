@@ -38,3 +38,21 @@ def test_importing_paths_does_not_create_home_state(tmp_path) -> None:
         check=False,
     )
     assert result.returncode != 0 or not (tmp_path / ".local").exists()
+
+
+def test_prompt_renderer_requires_explicit_external_root(tmp_path) -> None:
+    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": "src"}
+    env.pop("A_STOCK_LIB_ROOT", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from a_stock_agent_runtime.paths import PROMPT_RENDERER; assert PROMPT_RENDERER is None",
+        ],
+        cwd=tmp_path.parent,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

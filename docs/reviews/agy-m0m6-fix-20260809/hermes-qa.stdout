@@ -1,0 +1,26 @@
+  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only
+
+┌─ Reasoning ──────────────────────────────────────────────────────────────────┐
+**Loading skill rubric and fixture****Loading skill rubric and fixture****Evaluating framework consistency**
+
+
+**Finalizing deterministic verdicts****Evaluating framework consistency**
+整体 verdict：COMPLIANT
+
+确定性 findings：
+
+| # | 检查项 | 级别 | 结果 | 依据 |
+|---|---|---|---|---|
+| 1 | fetcher 先行 | Critical | PASS | 数据来源明确标注“结构化（AKShare缓存）/新浪实时接口”，未出现 WebSearch 获取当前股价。 |
+| 2 | 框架路由正确 | Important | PASS | 明确标注“框架类型：A框架”，文本中无行业与框架冲突信号。 |
+| 3 | 格雷厄姆数 | Important | PASS | 给出了格雷厄姆数计算过程、结果及买入参考价。 |
+| 4 | 异动检测 | Important | PASS | 主分析前包含“第零步异动检测”，并核查5日涨跌幅、减持和大宗交易。 |
+| 5 | data_period 标注 | Important | PASS | ROE、净利增速、EPS、负债率、毛利率、股息率及PE历史分位均标注“2025年报”。 |
+| 6 | checklist 核验状态 | Important | PASS | A框架报告明确标注 checklist 核验，相关覆盖字段均通过。 |
+| 7 | 股息率交叉验证 | Important | SKIP | 文本标明数据来自今日缓存，且无 FULL_MISS/WebSearch 搜索过程。 |
+| 8 | 关键字段缺失警告 | Minor | PASS | PE历史分位、毛利率、股息率及 checklist 覆盖字段均有值，无缺失警告触发条件。 |
+| 9 | 双轨评级完整输出 | Important | PASS | 同时包含配置评级A级、时机评级★★★、综合得分及仓位建议。 |
+| 10 | 周期位置判断 | Important | SKIP | A框架不适用。 |
+| 11 | 分红可持续性压力测试 | Important | SKIP | A框架不适用。 |
+
+结论：所有适用检查均为 PASS，其余检查符合 SKIP 条件，无 FAIL 项。

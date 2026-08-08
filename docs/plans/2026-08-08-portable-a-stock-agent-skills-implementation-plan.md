@@ -2,7 +2,7 @@
 title: 可移植 A 股 Agent Skills Suite 实施计划
 status: in_progress
 created: 2026-08-08
-updated: 2026-08-08
+updated: 2026-08-09
 spec: /home/lin/a-stock-agent-skills/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md
 spec_alignment: reviewed
 execution_authorized: true
@@ -13,7 +13,7 @@ risk_tier: active-layer
 
 > 本计划精确到文件、命令、验证和回滚，但不构成实施授权。用户一次明确要求“按 Spec 开始实施”即授权一个持续 Goal 执行 M0-M6；M7 生产切换仍需一次单独明确批准，M8 仅在未被 M7 带条件授权覆盖时单独确认。
 
-> 执行记录（2026-08-09）：M0-M5 已完成并提交；Claude 登录恢复后，按修正后的参数顺序在临时 shadow 完成 research/stale/monitor/QA 四个 smoke，全部 exit 0。Codex、Hermes、Claude 三端四组确定性 invariant 比较全部通过；Claude auth 的 mtime/hash 未变，临时 shadow 已清理。详见 `docs/reviews/client-shadow-20260808-claude/` 与 `docs/reviews/client-shadow-20260808-retry/`。M6 已完成，M7/M8 仍未授权。
+> 执行记录（2026-08-09）：M0-M5 已完成并提交；Claude 登录恢复后，按修正后的参数顺序在临时 shadow 完成 research/stale/monitor/QA 四个 smoke，全部 exit 0。Codex、Hermes、Claude 三端四组确定性 invariant 比较全部通过；Claude auth 的 mtime/hash 未变，临时 shadow 已清理。AGY 对 M0-M6 的分段复审发现 renderer 未配置时的哨兵值和 QA compliant 夹具证据不足，已分别改为显式 `None` 并补齐合规夹具，三端 QA 复跑均为 `COMPLIANT`。详见 `docs/reviews/client-shadow-20260808-claude/`、`docs/reviews/client-shadow-20260808-retry/` 与 `docs/reviews/agy-m0m6-fix-20260809/`。M6 已完成，M7/M8 仍未授权。
 
 ## 0. Minimum landing change
 

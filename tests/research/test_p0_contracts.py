@@ -108,7 +108,7 @@ def test_schema_migration_ledger_skips_done_work_but_applies_new_item(monkeypatc
 
 def test_agents_md_matches_canonical_prompt_renderer(tmp_path) -> None:
     """Prompt changes fail closed if the generated cross-agent contract drifts."""
-    if not PROMPT_RENDERER.is_file():
+    if PROMPT_RENDERER is None or not PROMPT_RENDERER.is_file():
         pytest.skip('set A_STOCK_LIB_ROOT to run the external renderer contract')
     skill_source = PROJECT_ROOT / 'skills' / 'a-stock-research' / 'SKILL.md'
     result = subprocess.run(
