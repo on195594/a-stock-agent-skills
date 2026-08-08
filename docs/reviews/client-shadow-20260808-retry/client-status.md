@@ -14,6 +14,10 @@ Codex and Hermes outputs were normalized to the deterministic invariant keys
 per-fixture comparisons all report `shadow invariants match`. Natural-language
 prose was not compared.
 
-The Claude model-level smoke remains the only unverified client requirement.
+Claude was re-run after login in a separate temporary shadow. Its research,
+stale, monitor, and QA cases all exited 0; its normalized invariants match the
+Codex and Hermes invariants for every fixture. The Claude auth mtime/hash was
+unchanged and the temporary shadow was removed afterward.
+
 No production DB, cron, Telegram, active Skill, or real client session was
 modified.

@@ -1,0 +1,39 @@
+I saved the full check to the plan file. Since ExitPlanMode/AskUserQuestion aren't available as callable tools in this session, here's the result directly.
+
+## Read-only check result — fixture: `holdings-l3.json`
+
+Fixture content:
+```json
+{"holdings":[{"code":"000001","framework":"A","shares":100,"l3_status":"verified"}],"notifications":"disabled","writes":false}
+```
+Only `code`, `framework`, `shares`, and a scalar `l3_status` are present. No `a-stock-cache`/`a-stock-fetch`/WebSearch calls were made (network, DB queries, and writes were all out of scope per your instructions).
+
+**持仓 000001（framework=A, shares=100）**
+
+| 检查项 | 状态 |
+|---|---|
+| 组合层风险贡献 | 无法计算（缺现价/止损价/总资产分母） |
+| 止损线 stop_loss_15/20 | 无法计算（fixture 无 cost/现价/止损列） |
+| 结构化 L3 逐条状态 | **不可核验** — 仅有顶层标量 `l3_status:"verified"`，不满足按条件拆分的结构化要求（C06），不得作为"未触发/已验证"结论使用 |
+| 活动预警 | 无法核验（无 alerts 数据） |
+| 当日异动 | 无法核验（无价格/行情字段） |
+| 估值退出信号 | 无法核验（无 PE/PB/PEG/PS） |
+| 通用财务恶化 | 无法核验（无 ROE/扣非净利润） |
+| Tier/技术信号 | 无法核验（无成本基准/技术指标） |
+| framework_confident | 缺失 |
+| 交易可执行性 | N/A — `writes:false`，本次不产生任何委托/账本动作 |
+
+**触发结构**：空（无条件被确认为 triggered，也不判定为"未触发"）
+
+**Fail-closed**：是，全部结论。按全局决策契约第4条，数据缺失 ≠ 已排除，因此不给出任何持有/加仓/减仓/止损/清仓建议。
+
+**数据缺口清单**（下一步需补全，来源：`a-stock-cache holdings/check-holdings/alerts/l3-list 000001` + `a-stock-fetch fetch 000001`，本次均未调用）：
+1. 结构化 L3 逐条条件（当前仅标量）
+2. 现价、成本、止损第一/二档价位
+3. 组合总资产（风险预算分母）
+4. 活动预警生命周期状态
+5. framework_confident
+6. PE 及近5/10年分位
+7. ROE、扣非净利润趋势
+
+Full detail written to `/tmp/a-stock-shadow-claude.A96ejD/.claude/plans/fixture-home-lin-a-stock-agent-skills-t-woolly-zebra.md`.

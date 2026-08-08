@@ -13,7 +13,7 @@ risk_tier: active-layer
 
 > 本计划精确到文件、命令、验证和回滚，但不构成实施授权。用户一次明确要求“按 Spec 开始实施”即授权一个持续 Goal 执行 M0-M6；M7 生产切换仍需一次单独明确批准，M8 仅在未被 M7 带条件授权覆盖时单独确认。
 
-> 执行记录（2026-08-08）：M0-M5 已完成并提交；M6 已完成临时三端入口、稳定 CLI/PATH 和无副作用验证。重试时修正了 Claude `--add-dir` 吞掉 prompt 的参数顺序，并使用现有隔离 auth：Codex 的 research/stale/monitor/QA 四个 smoke 与 Hermes 的四个 smoke 均通过，Codex/Hermes 的确定性 invariant 比较全部通过；Claude 已确认 OAuth session expired 且无法刷新，未生成结果。详见 `docs/reviews/client-shadow-20260808-retry/`。M6 仍保持 in_progress，M7/M8 未授权。
+> 执行记录（2026-08-09）：M0-M5 已完成并提交；Claude 登录恢复后，按修正后的参数顺序在临时 shadow 完成 research/stale/monitor/QA 四个 smoke，全部 exit 0。Codex、Hermes、Claude 三端四组确定性 invariant 比较全部通过；Claude auth 的 mtime/hash 未变，临时 shadow 已清理。详见 `docs/reviews/client-shadow-20260808-claude/` 与 `docs/reviews/client-shadow-20260808-retry/`。M6 已完成，M7/M8 仍未授权。
 
 ## 0. Minimum landing change
 
@@ -69,7 +69,7 @@ export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 | M3 | 三个标准 Skill | completed | M0-M6 持续 Goal |
 | M4 | Installer、三端隔离安装 | completed | M0-M6 持续 Goal；仅临时 target |
 | M5 | 状态外置和迁移工具 | completed | M0-M6 持续 Goal；仅 fixture |
-| M6 | 三端 shadow | in_progress | M0-M6 持续 Goal；隔离入口完成，模型级 smoke 等凭证/网络 |
+| M6 | 三端 shadow | completed | M0-M6 持续 Goal；三端四个 fixture smoke 与 invariant 比较完成 |
 | M7 | 生产 DB、配置、cron、Telegram、Hermes 切换 | not_started | 一次 cutover 明确批准 |
 | M8 | 稳定、回滚演练、Claude 停用 | not_started | 未被 M7 带条件授权覆盖时单独确认 |
 

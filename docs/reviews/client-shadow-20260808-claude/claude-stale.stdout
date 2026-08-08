@@ -1,0 +1,16 @@
+ExitPlanMode isn't available in this session, but this task requires no code changes — it's a read-only check. I read the fixture, cross-checked it against the golden invariant file and the runtime's stale-quote fail-closed logic (`fetcher.py`'s 120s intraday max-age rule + SKILL.md's fail-closed scoring policy), and made no network calls, no cache/DB writes, and sent no notifications.
+
+```json
+{"framework":"A","hard_score":null,"data_gaps":["quote refresh"],"fail_closed":true}
+```
+
+This matches `tests/golden/fail-closed-stale.json` and the existing Codex/Hermes invariants for the same fixture — stale quote → scoring blocked, `hard_score` null, gap flagged as `"quote refresh"`, `fail_closed: true`.
+alidates the Sina quote via `a_stock_lib.providers.validated_realtime_quotes.validate_quote_observation(..., max_intraday_age_seconds=120)`; any staleness/future-timestamp error aborts with `SystemExit(1)` *before* any cache write occurs — so a stale quote can never produce a fabricated `hard_score`.
+- No `a-stock-fetch` (network) or `a-stock-cache ... --confirm-write` (DB write) calls were made, and no notification path was touched — the constraint was satisfied by construction, since only local file reads were needed.
+
+**Result (the 4 requested fields):**
+```json
+{"framework":"A","hard_score":null,"data_gaps":["quote refresh"],"fail_closed":true}
+```
+
+This is the validation outcome the plan produces — no code or files need to change. Let me know if you'd like me to proceed/exit plan mode to finalize this as the answer, or if you want this wired into an actual automated test (e.g. a pytest that reads the fixture and asserts this invariant, since none currently exists for this specific file).
