@@ -1,17 +1,19 @@
 ---
 title: 可移植 A 股 Agent Skills Suite 实施计划
-status: ready_for_execution
+status: in_progress
 created: 2026-08-08
 updated: 2026-08-08
 spec: /home/lin/a-stock-agent-skills/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md
 spec_alignment: reviewed
-execution_authorized: false
+execution_authorized: true
 risk_tier: active-layer
 ---
 
 # 可移植 A 股 Agent Skills Suite 实施计划
 
 > 本计划精确到文件、命令、验证和回滚，但不构成实施授权。用户一次明确要求“按 Spec 开始实施”即授权一个持续 Goal 执行 M0-M6；M7 生产切换仍需一次单独明确批准，M8 仅在未被 M7 带条件授权覆盖时单独确认。
+
+> 执行记录（2026-08-08）：M0-M5 已完成并提交；M6 已完成临时三端入口、稳定 CLI/PATH 和无副作用验证。Claude/Codex/Hermes 模型级 smoke 已尝试，但隔离 profile 缺少登录/Provider，Codex 另受平台网络限制；详见 `docs/reviews/client-shadow-20260808-shadow/client-status.md`。M7/M8 未授权。
 
 ## 0. Minimum landing change
 
@@ -61,13 +63,13 @@ export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 
 | 阶段 | 结果 | 初始状态 | Goal / 审批边界 |
 |---|---|---|---|
-| M0 | Spec、来源、基线冻结 | not_started | M0-M6 持续 Goal |
-| M1 | Canonical 仓库和 provenance | not_started | M0-M6 持续 Goal |
-| M2 | Runtime、CLI、renderer | not_started | M0-M6 持续 Goal |
-| M3 | 三个标准 Skill | not_started | M0-M6 持续 Goal |
-| M4 | Installer、三端隔离安装 | not_started | M0-M6 持续 Goal；仅临时 target |
-| M5 | 状态外置和迁移工具 | not_started | M0-M6 持续 Goal；仅 fixture |
-| M6 | 三端 shadow | not_started | M0-M6 持续 Goal；仅隔离入口，不替换 active Skill |
+| M0 | Spec、来源、基线冻结 | completed | M0-M6 持续 Goal |
+| M1 | Canonical 仓库和 provenance | completed | M0-M6 持续 Goal |
+| M2 | Runtime、CLI、renderer | completed | M0-M6 持续 Goal |
+| M3 | 三个标准 Skill | completed | M0-M6 持续 Goal |
+| M4 | Installer、三端隔离安装 | completed | M0-M6 持续 Goal；仅临时 target |
+| M5 | 状态外置和迁移工具 | completed | M0-M6 持续 Goal；仅 fixture |
+| M6 | 三端 shadow | in_progress | M0-M6 持续 Goal；隔离入口完成，模型级 smoke 等凭证/网络 |
 | M7 | 生产 DB、配置、cron、Telegram、Hermes 切换 | not_started | 一次 cutover 明确批准 |
 | M8 | 稳定、回滚演练、Claude 停用 | not_started | 未被 M7 带条件授权覆盖时单独确认 |
 
