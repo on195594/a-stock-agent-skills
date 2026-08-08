@@ -25,3 +25,14 @@ def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
     manifest = next((tmp_path / ".agents/skills/a-stock-research").glob(".a-stock-suite-manifest.json"))
     assert json.loads(manifest.read_text(encoding="utf-8"))["source_hash"]
     assert (tmp_path / ".local/bin/a-stock-cache").is_symlink()
+
+
+def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
+    lib_source = "/home/lin/a-stock-lib"
+    result = _run(["--client", "claude", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-source", lib_source], tmp_path, "")
+    assert result.returncode == 0, result.stderr
+    metadata = next((tmp_path / ".local/share/a-stock-agent/runtime").glob("*/a-stock-lib-install.json"))
+    payload = json.loads(metadata.read_text(encoding="utf-8"))
+    assert payload["name"] == "a-stock-lib"
+    assert payload["version"] == "0.4.1"
+    assert len(payload["wheel_sha256"]) == 64

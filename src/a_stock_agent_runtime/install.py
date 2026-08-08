@@ -54,6 +54,43 @@ def _release(source: Path) -> str:
     return f"{version}-{commit}"
 
 
+def _git_commit(path: Path) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def _build_lib_wheel(source: Path, destination: Path) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
+    uv = shutil.which("uv")
+    if uv:
+        command = [uv, "build", str(source), "--out-dir", str(destination)]
+    else:
+        source_python = source / ".venv" / "bin" / "python"
+        if source_python.is_file():
+            command = [str(source_python), "-m", "build", str(source), "--wheel", "--outdir", str(destination)]
+        else:
+            command = []
+    if command:
+        try:
+            subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        except (OSError, subprocess.CalledProcessError):
+            # A checked-in/generated dist wheel is an explicit source checkout
+            # fallback when bootstrap networking is unavailable.
+            pass
+    wheels = sorted(destination.glob("a_stock_lib-*.whl"))
+    if not wheels:
+        wheels = sorted((source / "dist").glob("a_stock_lib-*.whl"))
+    if not wheels:
+        raise RuntimeError("a-stock-lib source did not produce a wheel")
+    return wheels[-1]
+
+
 def _target(root: Path, client: str, skill: str) -> Path:
     return root.joinpath(*CLIENT_ROOTS[client], skill)
 
@@ -85,23 +122,17 @@ def _install_runtime(source: Path, root: Path, lib_source: Path | None, lib_whee
     )
     python = venv / "bin" / "python"
     wheel = lib_wheel
+    wheel_hash = ""
+    wheel_display = ""
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     try:
         if lib_source is not None:
             temp_dir = tempfile.TemporaryDirectory(prefix="a-stock-lib-wheel-")
-            subprocess.run(
-                ["uv", "build", str(lib_source), "--out-dir", temp_dir.name],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            wheels = sorted(Path(temp_dir.name).glob("a_stock_lib-*.whl"))
-            if not wheels:
-                raise RuntimeError("a-stock-lib source did not produce a wheel")
-            wheel = wheels[-1]
+            wheel = _build_lib_wheel(lib_source, Path(temp_dir.name))
         if wheel is None:
             raise ValueError("one of --a-stock-lib-source or --a-stock-lib-wheel is required")
+        wheel_hash = _sha256(wheel)
+        wheel_display = str(wheel)
         installer = shutil.which("uv")
         if installer:
             install_cmd = [installer, "pip", "install", "--python", str(python), "--no-deps"]
@@ -140,6 +171,17 @@ def _install_runtime(source: Path, root: Path, lib_source: Path | None, lib_whee
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
+    lib_version = wheel.name.split("-", 2)[1].replace("_", "-")
+    metadata = {
+        "name": "a-stock-lib",
+        "version": lib_version,
+        "source_commit": _git_commit(lib_source) if lib_source else "wheel-input",
+        "wheel": wheel_display,
+        "wheel_sha256": wheel_hash,
+    }
+    (runtime_root / "a-stock-lib-install.json").write_text(
+        json.dumps(metadata, indent=2), encoding="utf-8"
+    )
     bin_dir = root / ".local" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in CONSOLE_SCRIPTS:
