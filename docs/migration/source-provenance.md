@@ -22,3 +22,7 @@ The source research database was observed by file metadata only:
 
 The host denied `crontab -l` during the non-invasive baseline. No cron state
 was changed; production cron remains an M7-only concern.
+
+Post-extraction renderer contract commit (independent repository):
+`a-stock-lib@56ee305` (`fix: require explicit skill source`). The original
+baseline commit above remains the provenance point for the copied source.
