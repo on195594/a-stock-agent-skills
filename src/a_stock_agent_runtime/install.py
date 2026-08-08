@@ -172,6 +172,12 @@ def _install_runtime(source: Path, root: Path, lib_source: Path | None, lib_whee
         if temp_dir is not None:
             temp_dir.cleanup()
     lib_version = wheel.name.split("-", 2)[1].replace("_", "-")
+    installed = subprocess.check_output(
+        [str(python), "-c", "import importlib.metadata as m; print(m.version('a-stock-lib'))"],
+        text=True,
+    ).strip()
+    if installed != lib_version:
+        raise RuntimeError(f"a-stock-lib version mismatch: expected {lib_version}, got {installed}")
     metadata = {
         "name": "a-stock-lib",
         "version": lib_version,
