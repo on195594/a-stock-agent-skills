@@ -1,0 +1,9 @@
+{
+  "framework_route": "A",
+  "deterministic_score": {
+    "hard_score": 60,
+    "scale": 60
+  },
+  "data_gaps": [],
+  "fail_closed": false
+}

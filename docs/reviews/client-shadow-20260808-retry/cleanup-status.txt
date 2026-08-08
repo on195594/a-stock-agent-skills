@@ -1,0 +1,9 @@
+Temporary shadow roots were removed after the read-only runs:
+
+- `/tmp/a-stock-shadow-retry.32l4RB`
+- `/tmp/a-stock-shadow-retry.xFWjUJ`
+- `/tmp/a-stock-shadow-retry-codex.nqLbim`
+- `/tmp/a-stock-shadow-retry-hermes.LlwmCD`
+
+The Hermes root contained only temporary `.hermes/state.db`, WAL/SHM, and log
+files; none remain after cleanup. Real auth files had unchanged mtime/hash.

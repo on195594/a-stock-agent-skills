@@ -1,0 +1,27 @@
+Framework route: `A（通用框架）`
+
+Deterministic score structure:
+```json
+{
+  "fundamentals": null,
+  "timing": null,
+  "hard_score": null,
+  "total": null
+}
+```
+
+Data gaps:
+```json
+["quote refresh"]
+```
+
+Fail-closed status:
+```json
+{
+  "quote_status": "stale",
+  "fail_closed": true,
+  "scoring_blocked": true
+}
+```
+
+Proof: fixture deterministically pairs `quote_status: "stale"` with `hard_score: null` and `fail_closed: true`; therefore stale行情 cannot produce a score or investment conclusion.

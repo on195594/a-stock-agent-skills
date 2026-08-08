@@ -14,3 +14,16 @@ Model-level invocations were attempted with read-only settings:
 
 This is an external credential/network prerequisite for completing the final
 three-client semantic smoke. It is not evidence of a Skill or runtime failure.
+
+## Retry evidence
+
+The corrected Claude invocation placed the prompt before the variadic
+`--add-dir` option. It reached authentication and reported that the OAuth
+session was expired and could not be refreshed; the real credential file hash
+and mtime were unchanged.
+
+Using existing isolated auth files without mutating them, Codex and Hermes
+completed research, stale-data, monitor, and QA fixture smokes in read-only
+ephemeral sessions. Their deterministic invariants match for every fixture;
+the evidence is in `docs/reviews/client-shadow-20260808-retry/`. Claude still
+needs a fresh login or API credential before M6 can be closed.
