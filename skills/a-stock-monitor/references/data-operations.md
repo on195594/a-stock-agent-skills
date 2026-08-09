@@ -49,6 +49,8 @@ $CACHE l3-list <代码>
 # Tier（豁免声明只能在建仓当日写入）
 $CACHE --confirm-write tier-config <代码> <A|B|C|none> <目标涨幅%|none> <E|F|none>
 $CACHE --confirm-write tier-update <代码> <tier1|tier2|tier3> <状态>
+# Tier1 实际补回已卖出份额并完成 buy-holding 后，显式开启新的 Tier1 周期；Tier2/3 不变
+$CACHE --confirm-write tier-update <代码> tier1 pending
 
 # 显式迁移既有持仓框架并按 reference_cost 重算止损线
 $CACHE --confirm-write holding-framework <代码> <A|B|C|D|E|F>

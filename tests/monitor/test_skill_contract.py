@@ -5,6 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2] / "skills" / "a-stock-monitor"
 SKILL = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+CD_ACCUMULATION = (ROOT / "references" / "step3.5-cd-accumulation.md").read_text(
+    encoding="utf-8"
+)
+TIER_RULES = (ROOT / "references" / "step4-tier-system.md").read_text(encoding="utf-8")
 DECISIONS = json.loads(
     (ROOT / "references" / "decision-table.json").read_text(encoding="utf-8")
 )
@@ -60,3 +64,21 @@ def test_all_routed_reference_files_exist():
     paths = set(re.findall(r"`(references/[^`]+)`", SKILL))
     for relative in paths:
         assert (ROOT / relative).exists(), relative
+
+
+def test_cd_accumulation_keeps_cumulative_cap_while_allowing_one_lot():
+    assert "max(100股, initial_shares 的1/3)" in CD_ACCUMULATION
+    assert "累计增持总量仍不得超过 `initial_shares`" in CD_ACCUMULATION
+
+    def single_op_cap(initial_shares: int, cumulative_additions: int) -> int:
+        return min(max(100, initial_shares / 3), initial_shares - cumulative_additions)
+
+    assert single_op_cap(100, 0) == 100
+    assert single_op_cap(200, 0) == 100
+    assert single_op_cap(200, 100) == 100
+    assert single_op_cap(200, 200) == 0
+
+
+def test_tier1_rebuild_explicitly_resets_only_tier1():
+    assert "tier-update <代码> tier1 pending" in TIER_RULES
+    assert "Tier2/Tier3 状态保持不变" in TIER_RULES
