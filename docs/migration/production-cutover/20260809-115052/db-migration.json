@@ -1,0 +1,47 @@
+{
+  "source": {
+    "path": "/home/lin/.claude/skills/a-stock-research/cache.db",
+    "sha256": "589e92ba1931ce14cbaacd797f3bfb1b55eb2cdbf1b54e6e8cfcb61b98f4898d",
+    "journal_mode": "wal",
+    "user_version": 0,
+    "integrity": "ok",
+    "counts": {
+      "analysis_results": 177,
+      "holding_alerts": 26,
+      "holding_events": 16,
+      "holding_l3_conditions": 15,
+      "holding_tier_state": 0,
+      "holdings": 8,
+      "market_indicator_snapshots": 1,
+      "qualitative_only_securities": 1,
+      "quote_snapshots": 89,
+      "retro_notes": 0,
+      "schema_migrations": 27,
+      "stock_fundamentals": 30
+    }
+  },
+  "target": {
+    "path": "/home/lin/.local/share/a-stock-agent/cache.db",
+    "sha256": "b9cd123e61015655b589c93a6693166826f0af6cc2bf1a92c6fbac9344a089d2",
+    "journal_mode": "wal",
+    "user_version": 0,
+    "integrity": "ok",
+    "counts": {
+      "analysis_results": 177,
+      "holding_alerts": 26,
+      "holding_events": 16,
+      "holding_l3_conditions": 15,
+      "holding_tier_state": 0,
+      "holdings": 8,
+      "market_indicator_snapshots": 1,
+      "qualitative_only_securities": 1,
+      "quote_snapshots": 89,
+      "retro_notes": 0,
+      "schema_migrations": 27,
+      "stock_fundamentals": 30
+    }
+  },
+  "expected_tables": ["holdings", "analysis_results"],
+  "missing_expected_tables": [],
+  "sensitive_row_samples": "omitted from repository evidence"
+}

@@ -657,7 +657,7 @@ Hermes 额外完成生产候选 smoke；Claude Code 和 Codex 的验证使用隔
 - M0-M6 Goal execution approval：pending（一次批准覆盖非生产实施、验证和可回滚 shadow 安装，不逐阶段重复）
 - Canonical 仓库创建及源码迁移：pending
 - 三端 shadow Skill 安装：包含在 M0-M6 Goal 授权中，执行前自动备份
-- M7 production cutover：pending（一次审批合并生产 DB、配置、active Skill、cron、Hermes smoke 和回滚步骤）
+- M7 production cutover：completed 2026-08-09（一次审批合并生产 DB、配置、active Skill、cron、Hermes smoke 和回滚步骤；证据见 `docs/migration/production-cutover/20260809-115052/`）
 - M8 Claude 停用：pending（默认在 Hermes 验收后单独确认；若 M7 已明确包含带条件的停用授权则不重复）
 
 本文件的生成仅批准保存规范文档，不自动启动实施 Goal。用户后续一次明确要求“按 Spec 开始实施”即授权 M0-M6 Goal；该授权不包含生产 DB/配置/cron/Telegram 切换或 Claude 停用。

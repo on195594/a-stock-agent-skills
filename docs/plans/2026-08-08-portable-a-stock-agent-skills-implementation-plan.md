@@ -13,7 +13,7 @@ risk_tier: active-layer
 
 > 本计划精确到文件、命令、验证和回滚，但不构成实施授权。用户一次明确要求“按 Spec 开始实施”即授权一个持续 Goal 执行 M0-M6；M7 生产切换仍需一次单独明确批准，M8 仅在未被 M7 带条件授权覆盖时单独确认。
 
-> 执行记录（2026-08-09）：M0-M5 已完成并提交；Claude 登录恢复后，按修正后的参数顺序在临时 shadow 完成 research/stale/monitor/QA 四个 smoke，全部 exit 0。Codex、Hermes、Claude 三端四组确定性 invariant 比较全部通过；Claude auth 的 mtime/hash 未变，临时 shadow 已清理。AGY 对 M0-M6 的分段复审发现 renderer 未配置时的哨兵值和 QA compliant 夹具证据不足，已分别改为显式 `None` 并补齐合规夹具，三端 QA 复跑均为 `COMPLIANT`。详见 `docs/reviews/client-shadow-20260808-claude/`、`docs/reviews/client-shadow-20260808-retry/` 与 `docs/reviews/agy-m0m6-fix-20260809/`。M6 已完成，M7/M8 仍未授权。
+> 执行记录（2026-08-09）：M0-M6 已完成并提交；Claude 登录恢复后，按修正后的参数顺序在临时 shadow 完成 research/stale/monitor/QA 四个 smoke，全部 exit 0。Codex、Hermes、Claude 三端四组确定性 invariant 比较全部通过；Claude auth 的 mtime/hash 未变，临时 shadow 已清理。AGY 对 M0-M6 的分段复审发现 renderer 未配置时的哨兵值和 QA compliant 夹具证据不足，已分别改为显式 `None` 并补齐合规夹具，三端 QA 复跑均为 `COMPLIANT`。M7 已按用户一次性 cutover 请求完成：生产 DB 通过 Online Backup API 迁移并完成 integrity/schema/关键计数/holdings 摘要核验；runtime.env 设为 0600；三端切到 release `0.1.0-48a82c85b367`；Hermes 候选 smoke、CLI/cron 禁通知 smoke、受控 Telegram 验证（HTTP 200）全部通过；cron after 仅替换持仓检查任务，rollback manifest 保留。详见 `docs/reviews/client-shadow-20260808-claude/`、`docs/reviews/client-shadow-20260808-retry/`、`docs/reviews/agy-m0m6-fix-20260809/` 与 `docs/migration/production-cutover/20260809-115052/`。M8 Claude 停用仍未授权。
 
 ## 0. Minimum landing change
 
@@ -70,7 +70,7 @@ export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 | M4 | Installer、三端隔离安装 | completed | M0-M6 持续 Goal；仅临时 target |
 | M5 | 状态外置和迁移工具 | completed | M0-M6 持续 Goal；仅 fixture |
 | M6 | 三端 shadow | completed | M0-M6 持续 Goal；三端四个 fixture smoke 与 invariant 比较完成 |
-| M7 | 生产 DB、配置、cron、Telegram、Hermes 切换 | not_started | 一次 cutover 明确批准 |
+| M7 | 生产 DB、配置、cron、Telegram、Hermes 切换 | completed | 2026-08-09 cutover evidence；rollback manifest 保留 |
 | M8 | 稳定、回滚演练、Claude 停用 | not_started | 未被 M7 带条件授权覆盖时单独确认 |
 
 ---
@@ -1245,7 +1245,7 @@ Hermes 父级逐项核验后才宣布切换完成。
 - Cron/Telegram boundary：candidate-first，notify disabled 默认。
 - Golden-master：比较结构与安全不变量，不比较全文。
 - Independent review：每阶段 Codex review，父级复核；均属于持续 Goal 内质量检查。
-- No promotion：本计划文件不授权 active Skill、DB、cron、gateway 或 Claude 停用。
+- No promotion：M7 已由用户一次性 cutover 请求授权并完成；本计划不授权 M8 Claude 停用。
 - No placeholders：`<run-id>` 等仅是实施时由 `date` 生成的运行标识，不是未定义设计决策。
 
 # 5. 下一授权点

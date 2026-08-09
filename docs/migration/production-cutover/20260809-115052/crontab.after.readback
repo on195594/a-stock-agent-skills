@@ -1,0 +1,49 @@
+# Edit this file to introduce tasks to be run by cron.
+#
+# Each task to run has to be defined through a single line
+# indicating with different fields when the task will be run
+# and what command to run for the task
+#
+# To define the time you can provide concrete values for
+# minute (m), hour (h), day of month (dom), month (mon),
+# and day of week (dow) or use '*' in these fields (for 'any').
+#
+# Notice that tasks will be started based on the cron's system
+# daemon's notion of time and timezones.
+#
+# Output of the crontab jobs (including errors) is sent through
+# email to the user the crontab file belongs to (unless redirected).
+#
+# For example, you can run a backup of all your user accounts
+# at 5 a.m every week with:
+# 0 5 * * 1 tar -zcf /var/backups/home.tgz /home/
+#
+# For more information see the manual pages of crontab(5) and cron(8)
+#
+# m h  dom mon dow   command
+# 30 23 * * * /home/lin/backup.sh
+0 4 * * * /usr/sbin/logrotate --state /home/lin/.claude/logs/logrotate.state /home/lin/.claude/logs/logrotate.conf
+35 9 * * 1-5 A_STOCK_CONFIG_FILE=/home/lin/.config/a-stock-agent/runtime.env /home/lin/a-stock-agent-skills/scripts/check-holdings-cron.sh >> /home/lin/.local/share/a-stock-agent/logs/check-holdings.log 2>&1
+
+# telegram对话记忆flush到memory-vault (2026-06-20新增，开关见~/.claude/channels/telegram/.env)
+*/10 * * * * /usr/bin/python3 /home/lin/.claude/scripts/flush_telegram_memory.py
+
+# telegram渠道卡死兜底检测 (2026-06-22新增)
+*/2 * * * * /usr/bin/python3 /home/lin/.claude/scripts/telegram_stall_watchdog.py >> /home/lin/.claude/channels/telegram/logs/stall_watchdog.log 2>&1
+
+# East Cable Monitor
+0 20 * * * /home/lin/project/east-cable-monitor/run.sh
+
+# >>> a-stock-tracker cron >>>
+# a-stock-tracker weekly 基本面刷新 (每周六 10:00)
+00 10 * * 6 /home/lin/a-stock-tracker/cron-alert-wrap.sh "cd /home/lin/a-stock-tracker && .venv/bin/python -m scripts.run_tushare_primary_production_cycle weekly" weekly >> /home/lin/a-stock-tracker/logs/weekly.log 2>&1
+
+# a-stock-tracker QFQ 日线采集 (TuShare, 工作日 16:00，pipeline 前)
+00 16 * * 1-5 /home/lin/a-stock-tracker/cron-alert-wrap.sh "cd /home/lin/a-stock-tracker && .venv/bin/python scripts/fetch_qfq_daily_bars_tushare.py" qfq-daily-bars >> /home/lin/a-stock-tracker/logs/qfq-daily-bars.log 2>&1
+
+# a-stock-tracker TuShare primary daily (工作日 17:15)
+15 17 * * 1-5 /home/lin/a-stock-tracker/cron-alert-wrap.sh "cd /home/lin/a-stock-tracker && .venv/bin/python -m scripts.run_tushare_primary_production_cycle daily" tushare-primary-daily >> /home/lin/a-stock-tracker/logs/tushare-primary-daily.log 2>&1
+
+# a-stock-tracker daily (工作日 17:30)
+30 17 * * 1-5 /home/lin/a-stock-tracker/cron-alert-wrap.sh "cd /home/lin/a-stock-tracker && .venv/bin/python pipeline.py daily" daily >> /home/lin/a-stock-tracker/logs/daily.log 2>&1
+# <<< a-stock-tracker cron <<<

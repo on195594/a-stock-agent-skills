@@ -1,0 +1,11 @@
+--- docs/migration/production-cutover/20260809-115052/crontab.before	2026-08-09 11:52:03.112000000 +0800
++++ docs/migration/production-cutover/20260809-115052/crontab.candidate	2026-08-09 13:53:16.484000000 +0800
+@@ -23,7 +23,7 @@
+ # m h  dom mon dow   command
+ # 30 23 * * * /home/lin/backup.sh
+ 0 4 * * * /usr/sbin/logrotate --state /home/lin/.claude/logs/logrotate.state /home/lin/.claude/logs/logrotate.conf
+-35 9 * * 1-5 /home/lin/.claude/skills/a-stock-research/check-holdings-cron.sh >> /home/lin/.claude/skills/a-stock-research/logs/check-holdings.log 2>&1
++35 9 * * 1-5 A_STOCK_CONFIG_FILE=/home/lin/.config/a-stock-agent/runtime.env /home/lin/a-stock-agent-skills/scripts/check-holdings-cron.sh >> /home/lin/.local/share/a-stock-agent/logs/check-holdings.log 2>&1
+
+ # telegram对话记忆flush到memory-vault (2026-06-20新增，开关见~/.claude/channels/telegram/.env)
+ */10 * * * * /usr/bin/python3 /home/lin/.claude/scripts/flush_telegram_memory.py

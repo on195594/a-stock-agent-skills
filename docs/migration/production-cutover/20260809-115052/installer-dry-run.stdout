@@ -1,0 +1,11 @@
+{"source": "/home/lin/a-stock-agent-skills", "release": "0.1.0-48a82c85b367", "clients": ["claude", "codex", "hermes"], "mode": "symlink"}
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-research -> /home/lin/.claude/skills/a-stock-research
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-monitor -> /home/lin/.claude/skills/a-stock-monitor
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-qa -> /home/lin/.claude/skills/a-stock-qa
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-research -> /home/lin/.agents/skills/a-stock-research
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-monitor -> /home/lin/.agents/skills/a-stock-monitor
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-qa -> /home/lin/.agents/skills/a-stock-qa
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-research -> /home/lin/.hermes/skills/research/a-stock-research
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-monitor -> /home/lin/.hermes/skills/research/a-stock-monitor
+DRY-RUN symlink /home/lin/a-stock-agent-skills/skills/a-stock-qa -> /home/lin/.hermes/skills/research/a-stock-qa
+DRY-RUN runtime -> /home/lin/.local/share/a-stock-agent/runtime/0.1.0-48a82c85b367/venv

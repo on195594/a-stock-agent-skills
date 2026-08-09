@@ -1,0 +1,10 @@
+{
+  "source_backup": "/home/lin/.local/share/a-stock-agent/backups/a-stock-research-1786248172/cache.db",
+  "source_holdings_digest": "66c638d1bd9b91419b9e14b8ae2243dd98ecda136010840753b0f78c737d0e22",
+  "target_holdings_digest": "66c638d1bd9b91419b9e14b8ae2243dd98ecda136010840753b0f78c737d0e22",
+  "source_holdings_count": 8,
+  "target_holdings_count": 8,
+  "target_holding_events_count": 16,
+  "target_analysis_results_count": 177,
+  "holdings_unchanged_vs_source": true
+}

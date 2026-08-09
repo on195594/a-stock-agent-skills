@@ -1,0 +1,10 @@
+{
+  "checks": {
+    "user_version": true,
+    "tables": true,
+    "critical_counts": true,
+    "holdings_sample": true
+  },
+  "all_pass": true,
+  "sensitive_row_samples": "omitted from repository evidence"
+}

@@ -1,0 +1,11 @@
+49c50ba5b3d530fa5e8089192a989d97dc85c7eb7125aa9d07281fa27648d06b  /home/lin/.claude/skills/a-stock-research/SKILL.md
+49c50ba5b3d530fa5e8089192a989d97dc85c7eb7125aa9d07281fa27648d06b  /home/lin/.agents/skills/a-stock-research/SKILL.md
+49c50ba5b3d530fa5e8089192a989d97dc85c7eb7125aa9d07281fa27648d06b  /home/lin/.hermes/skills/research/a-stock-research/SKILL.md
+/home/lin/.local/bin/a-stock-cache
+/home/lin/.local/bin/a-stock-fetch
+/home/lin/.local/bin/a-stock-install
+600 lin:lin regular file /home/lin/.config/a-stock-agent/runtime.env
+644 lin:lin regular file /home/lin/.local/share/a-stock-agent/cache.db
+664 lin:lin regular file /home/lin/.local/share/a-stock-agent/rollback-1786248175.json
+MISSING /home/lin/.local/share/a-stock-agent/cache.db-wal
+MISSING /home/lin/.local/share/a-stock-agent/cache.db-shm

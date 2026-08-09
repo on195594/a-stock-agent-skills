@@ -1,0 +1,13 @@
+lrwxrwxrwx 1 lin lin 54 Aug  9 12:02 /home/lin/.claude/skills/a-stock-research -> /home/lin/a-stock-agent-skills/skills/a-stock-research
+/home/lin/a-stock-agent-skills/skills/a-stock-research
+lrwxrwxrwx 1 lin lin 54 Aug  9 12:02 /home/lin/.agents/skills/a-stock-research -> /home/lin/a-stock-agent-skills/skills/a-stock-research
+/home/lin/a-stock-agent-skills/skills/a-stock-research
+lrwxrwxrwx 1 lin lin 54 Aug  9 12:02 /home/lin/.hermes/skills/research/a-stock-research -> /home/lin/a-stock-agent-skills/skills/a-stock-research
+/home/lin/a-stock-agent-skills/skills/a-stock-research
+777 lin:lin symbolic link /home/lin/.local/bin/a-stock-cache
+/home/lin/.local/share/a-stock-agent/runtime/0.1.0-48a82c85b367/venv/bin/a-stock-cache
+777 lin:lin symbolic link /home/lin/.local/bin/a-stock-fetch
+/home/lin/.local/share/a-stock-agent/runtime/0.1.0-48a82c85b367/venv/bin/a-stock-fetch
+777 lin:lin symbolic link /home/lin/.local/bin/a-stock-install
+/home/lin/.local/share/a-stock-agent/runtime/0.1.0-48a82c85b367/venv/bin/a-stock-install
+664 lin:lin regular file /home/lin/.local/share/a-stock-agent/rollback-1786248175.json
