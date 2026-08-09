@@ -37,7 +37,7 @@ risk_tier: active-layer
 
 ## 3. 非目标
 
-- 不修改 A/B/C/D/E/F 投资框架、评分阈值、红线或交易判断语义。
+- 本迁移本身不修改 A/B/C/D/E/F 投资框架、评分阈值、红线或交易判断语义；迁移完成后的投资规则修复须由独立、明确授权的后续规范管理。2026-08-09 的授权修复见 [`2026-08-09-investment-framework-repair-spec.md`](2026-08-09-investment-framework-repair-spec.md)。
 - 不证明策略具有样本外收益、Sharpe 或回撤优势。
 - 不新增自动下单、券商接口或无人审批的持仓写入。
 - 不把 `a-stock-tracker` 改造成 Skill，也不迁移其生产数据管道。

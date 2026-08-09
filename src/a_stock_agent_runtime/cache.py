@@ -122,6 +122,9 @@ _SCHEMA_INITIALIZED_PATH: str = ""
 _CST = timezone(timedelta(hours=8))
 _UTC = timezone.utc
 _DATA_PERIOD_RE = re.compile(r'^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$')
+_VALUATION_CONFLICT_RE = re.compile(
+    r'估值冲突\[状态=待核实；PB结论="[^"]+"；交叉估值结论="[^"]+"\]'
+)
 _FRAMEWORK_ALIASES = {
     'A': 'A通用', 'A通用': 'A通用',
     'B': 'B银行', 'B银行': 'B银行',
@@ -1312,7 +1315,13 @@ def cmd_set_analysis(args: list[str]) -> None:
     _validate_cycle_stage_for_framework(result, framework)
     today = cst_today()
     scoring_status = 'complete'
-    if framework == 'D公用' and get_market_indicator_snapshot(
+    valuation_conflict = framework == 'C资源' and _VALUATION_CONFLICT_RE.search(result)
+    if valuation_conflict:
+        scoring_status = 'incomplete'
+        if score is not None:
+            print("错误：C资源估值冲突待核实时不得写入完整总分", file=sys.stderr)
+            sys.exit(1)
+    elif framework == 'D公用' and get_market_indicator_snapshot(
         'bond_yield_10y', max_age=timedelta(hours=24)
     ) is None:
         scoring_status = 'incomplete'
@@ -1437,7 +1446,7 @@ def _validate_score_breakdown_schema(
         if not isinstance(section, dict) or 'subtotal' not in section:
             return f"score_breakdown['{key}'] 必须是包含 'subtotal' 字段的对象"
         subtotal = section['subtotal']
-        allow_null_timing = key == 'timing' and framework == 'D公用' and scoring_status == 'incomplete'
+        allow_null_timing = key == 'timing' and scoring_status == 'incomplete'
         if subtotal is None and allow_null_timing:
             subtotals[key] = None
             continue
@@ -1448,11 +1457,11 @@ def _validate_score_breakdown_schema(
         if not 0 <= subtotal <= maximum:
             return f"score_breakdown['{key}'] 的 subtotal 必须在 0—{maximum} 之间"
         subtotals[key] = float(subtotal)
-    if framework == 'D公用' and scoring_status == 'incomplete':
+    if scoring_status == 'incomplete':
         if breakdown['timing']['subtotal'] is not None:
-            return "D公用 incomplete 状态的 timing.subtotal 必须为 null"
+            return "incomplete 状态的 timing.subtotal 必须为 null"
         if breakdown.get('total') is not None:
-            return "D公用 incomplete 状态的 total 必须为 null"
+            return "incomplete 状态的 total 必须为 null"
         return None
     total = breakdown.get('total')
     if not isinstance(total, (int, float)) or isinstance(total, bool):

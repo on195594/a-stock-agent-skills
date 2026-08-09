@@ -49,7 +49,7 @@ def _patch_tushare_provider(monkeypatch, provider_factory):
     )
 
 
-@pytest.mark.parametrize('name', ['info', 'financials', 'dividends', 'price_history', 'pb_baidu'])
+@pytest.mark.parametrize('name', ['info', 'financials', 'dividends', 'price_history'])
 @pytest.mark.parametrize('source', ['tushare', 'akshare'])
 def test_structured_fetchers_honor_data_source(monkeypatch, name, source):
     """每条结构化抓取入口都必须选择对应 provider，不能静默走 AKShare。"""
@@ -60,6 +60,19 @@ def test_structured_fetchers_honor_data_source(monkeypatch, name, source):
     monkeypatch.setattr(fetcher, f'_fetch_{name}_akshare', lambda code: selected if source == 'akshare' else other)
 
     assert getattr(fetcher, f'_fetch_{name}')('600519') is selected
+
+
+def test_current_pb_uses_the_same_report_period_bps_as_pb_history(monkeypatch):
+    assert not hasattr(fetcher, '_fetch_pb_baidu')
+    results = {'bps': 6.9176, 'eps': 1.95}
+    null_reasons = {}
+
+    fetcher._fetch_pb_pe_data('601899', 35.15, results, null_reasons)
+
+    assert results['pb'] == 5.08
+    assert results['pe_ttm'] == 18.03
+    assert fetcher.FIELDS['pb'][1] == 'computed'
+    assert 'pb' not in null_reasons
 
 
 def test_trading_dates_prefer_tushare(monkeypatch):

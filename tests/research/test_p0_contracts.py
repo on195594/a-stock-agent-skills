@@ -341,6 +341,47 @@ def test_cycle_frameworks_reject_missing_cycle_tag(monkeypatch, framework: str) 
         cache.cmd_set_analysis([framework, framework, '60'])
 
 
+def test_c_valuation_conflict_is_incomplete_and_rejects_a_total_score(monkeypatch) -> None:
+    record_quote('601899')
+    report = (
+        f'{report_for("C")}\n'
+        '估值冲突[状态=待核实；PB结论="高于历史中枢"；交叉估值结论="中周期估值不高"]'
+    )
+    monkeypatch.setattr('sys.stdin', StringIO(report))
+
+    with pytest.raises(SystemExit):
+        cache.cmd_set_analysis(['601899', 'C', '48'])
+    with cache.db_session() as conn:
+        assert conn.execute(
+            'SELECT COUNT(*) FROM analysis_results WHERE code=?', ('601899',)
+        ).fetchone()[0] == 0
+
+    monkeypatch.setattr('sys.stdin', StringIO(report))
+    cache.cmd_set_analysis(['601899', 'C'])
+    with pytest.raises(SystemExit):
+        cache.cmd_set_score_breakdown([
+            '601899',
+            json.dumps({
+                'fundamentals': {'subtotal': 44},
+                'timing': {'subtotal': 4},
+                'total': 48,
+            }),
+        ])
+    incomplete_breakdown = {
+        'fundamentals': {'subtotal': 44},
+        'timing': {'subtotal': None},
+        'total': None,
+    }
+    cache.cmd_set_score_breakdown(['601899', json.dumps(incomplete_breakdown)])
+    with cache.db_session() as conn:
+        stored = conn.execute(
+            'SELECT score, scoring_status, score_breakdown FROM analysis_results WHERE code=?',
+            ('601899',),
+        ).fetchone()
+    assert stored[:2] == (None, 'incomplete')
+    assert json.loads(stored[2]) == incomplete_breakdown
+
+
 def test_d_without_bond_snapshot_is_incomplete_and_accepts_null_timing(monkeypatch) -> None:
     run_set_analysis(monkeypatch, '600900', 'D', score=None)
     breakdown = {

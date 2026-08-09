@@ -65,7 +65,7 @@ DATA_SOURCE = os.environ.get('FETCHER_DATA_SOURCE', 'tushare').strip().lower() o
 #   web       = 需要 WebSearch 补充（fetcher 不负责）
 FIELDS = {
     'pe_ttm':             ('PE_静态（年报EPS，非TTM）',  'structured'),
-    'pb':                 ('PB（市净率）',               'structured'),
+    'pb':                 ('PB（当前价/同期BPS）',        'computed'),
     'roe_3y_avg':         ('ROE近3年均值(%)',            'structured'),
     'net_profit_growth':  ('净利润增速近3年均值(%)',      'structured'),
     'debt_ratio':         ('资产负债率(%)',               'structured'),
@@ -567,34 +567,6 @@ def _fetch_price_history(code: str) -> Any:
     )
 
 
-def _fetch_pb_baidu_akshare(code: str) -> Any:
-    import akshare as ak
-    return ak.stock_zh_valuation_baidu(symbol=code, indicator='市净率')
-
-
-def _fetch_pb_baidu_tushare(code: str) -> Any:
-    from a_stock_lib.providers import TushareValuationProvider
-    import pandas as pd
-
-    result = TushareValuationProvider().fetch_valuation_history(
-        code,
-        (date.today() - timedelta(days=30)).isoformat(),
-        date.today().isoformat(),
-    )
-    frame = _tushare_frame(result, 'tushare.daily_basic')
-    if isinstance(frame, tuple) or frame is None:
-        return frame
-    return pd.DataFrame({'value': frame['pb']})
-
-
-def _fetch_pb_baidu(code: str) -> Any:
-    return (
-        _fetch_pb_baidu_akshare(code)
-        if DATA_SOURCE == 'akshare'
-        else _fetch_pb_baidu_tushare(code)
-    )
-
-
 def _fetch_bond_yield_api(start_date: str, end_date: str) -> Any:
     import akshare as ak
     return ak.bond_china_yield(start_date=start_date, end_date=end_date)
@@ -983,22 +955,15 @@ def _fetch_fin_data(code: str, results: dict, null_reasons: dict) -> tuple[Any, 
 
 def _fetch_pb_pe_data(code: str, current_price: float | None,
                       results: dict, null_reasons: dict) -> None:
-    """Step 3: PB（百度历史估值最新值）+ PE_TTM（当前价/年化EPS自算）。"""
-    logger.info("  [3/7] PB（百度）/ PE_TTM（自算）...")
-    # PB：百度历史估值序列取最新值
-    pb_df = timed_call(_fetch_pb_baidu, code, timeout=API_TIMEOUT)
-    if isinstance(pb_df, (str, tuple)) or pb_df is None:
-        err = pb_df[1] if isinstance(pb_df, tuple) else pb_df
-        null_reasons['pb'] = f'百度PB获取失败: {err}'
-        logger.warning("  ⚠️ PB 获取失败: %s", null_reasons['pb'])
+    """Step 3: use the same annual EPS/BPS basis as historical percentiles."""
+    logger.info("  [3/7] PB / PE_静态（当前价÷同期每股指标）...")
+    bps = results.get('bps')
+    if current_price and bps and bps > 0:
+        results['pb'] = round(current_price / bps, 2)
+        logger.info(f"  ✅ PB={results['pb']}（{current_price}/{bps}）")
     else:
-        curr_pb = parse_float(pb_df['value'].iloc[-1]) if not pb_df.empty else None
-        if curr_pb and curr_pb > 0:
-            results['pb'] = round(curr_pb, 2)
-            logger.info(f"  ✅ PB={curr_pb}")
-        else:
-            null_reasons['pb'] = f'PB值无效: {curr_pb}'
-            logger.warning("  ⚠️ PB 无效")
+        null_reasons['pb'] = f'BPS不可用（bps={bps}）或价格不可用'
+        logger.warning("  ⚠️ PB 无法计算: %s", null_reasons['pb'])
     # 静态PE（非TTM）：当前价 ÷ 最近完整年报EPS。季报后实际PE偏高，分析时注意口径
     eps = results.get('eps')
     if current_price and eps and eps > 0:
