@@ -1,8 +1,8 @@
 ---
 title: 可移植 A 股 Agent Skills Suite 迁移规范
-status: draft
+status: accepted
 created: 2026-08-08
-updated: 2026-08-08
+updated: 2026-08-09
 owner: lin / Hermes
 risk_tier: active-layer
 ---
@@ -83,6 +83,15 @@ risk_tier: active-layer
 - 当前检查时未发现 `cache.db-wal` 或 `cache.db-shm` 文件；迁移时必须重新检查，不能依赖本次快照。
 - 持仓、交易事件、分析缓存、L3/Tier 状态属于生产数据。
 - 当前存在工作日持仓检查 cron 和 tracker 数据任务。
+
+### 4.5 已落地状态（2026-08-09）
+
+- M0-M6 已完成：canonical runtime、三个 Skill、installer、fixture 和三端 shadow 验证均已提交。
+- M7 已完成：生产 DB 通过 SQLite Online Backup API 迁移，`integrity=ok`；Hermes 已作为生产主入口；三端 Skill 入口指向同一 canonical release `v0.1.0`。
+- 生产配置位于仓库外且权限为 `0600`；cron 只保留一条 canonical 持仓检查任务；受控 Telegram 验证已通过。
+- M8 尚未开始：稳定期时长和判定条件未约定，Claude 入口仍保留，旧仓库和回滚证据不得删除。
+
+当前事实证据见 `docs/migration/production-cutover/20260809-115052/`；本节不替代生产状态文件或凭证存储。
 
 ## 5. 架构决策
 
@@ -653,11 +662,11 @@ Hermes 额外完成生产候选 smoke；Claude Code 和 Codex 的验证使用隔
 
 ## 19. 审批状态
 
-- Spec approval：pending
-- M0-M6 Goal execution approval：pending（一次批准覆盖非生产实施、验证和可回滚 shadow 安装，不逐阶段重复）
-- Canonical 仓库创建及源码迁移：pending
+- Spec approval：accepted for implementation
+- M0-M6 Goal execution approval：completed（一次批准覆盖非生产实施、验证和可回滚 shadow 安装，不逐阶段重复）
+- Canonical 仓库创建及源码迁移：completed
 - 三端 shadow Skill 安装：包含在 M0-M6 Goal 授权中，执行前自动备份
 - M7 production cutover：completed 2026-08-09（一次审批合并生产 DB、配置、active Skill、cron、Hermes smoke 和回滚步骤；证据见 `docs/migration/production-cutover/20260809-115052/`）
-- M8 Claude 停用：pending（默认在 Hermes 验收后单独确认；若 M7 已明确包含带条件的停用授权则不重复）
+- M8 Claude 停用：pending（稳定期时长和判定条件尚未约定；默认在 Hermes 验收后单独确认）
 
 本文件的生成仅批准保存规范文档，不自动启动实施 Goal。用户后续一次明确要求“按 Spec 开始实施”即授权 M0-M6 Goal；该授权不包含生产 DB/配置/cron/Telegram 切换或 Claude 停用。

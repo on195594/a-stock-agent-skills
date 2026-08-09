@@ -3,7 +3,9 @@ title: 可移植 A 股 Agent Skills Suite 实施计划
 status: in_progress
 created: 2026-08-08
 updated: 2026-08-09
-spec: /home/lin/a-stock-agent-skills/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md
+current_milestone: M8_pending_confirmation
+release: v0.1.0
+spec: ../specs/2026-08-08-portable-a-stock-agent-skills-spec.md
 spec_alignment: reviewed
 execution_authorized: true
 risk_tier: active-layer

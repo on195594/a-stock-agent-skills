@@ -38,7 +38,8 @@ checks:
 ## 设计决策
 
 本 skill 采用独立共享 skill 架构（Option B），而非内嵌各 skill 或接入 ai-collab。
-详见 `docs/specs/2026-07-04-a-stock-qa-design.md`。
+历史设计记录见
+`docs/migration/source-qa-specs/2026-07-04-a-stock-qa-design.md`。
 
 ## 版本
 
