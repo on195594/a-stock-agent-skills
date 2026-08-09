@@ -368,6 +368,24 @@ def test_fetch_spot_data_preserves_sina_name_when_akshare_info_fails(monkeypatch
     assert current_price == 1600.0
 
 
+def test_fetch_spot_data_marks_cached_industry_stale(monkeypatch):
+    monkeypatch.setattr(fetcher, 'timed_call', lambda *args, **kwargs: (None, 'API失败'))
+    monkeypatch.setattr(fetcher, '_fetch_industry_from_lib', lambda code: None)
+    monkeypatch.setattr(fetcher, '_lookup_cached_name', lambda code: '缓存名称')
+    monkeypatch.setattr(fetcher, '_lookup_cached_industry', lambda code: '缓存行业')
+    monkeypatch.setattr(fetcher, 'update_qualitative_only_security', lambda *args: None)
+    monkeypatch.setattr(fetcher, '_fetch_realtime_quote', lambda code: QuoteObservation(
+        price=10.0, quote_date='2026-07-14', quote_time='10:00:00', source='sina',
+    ))
+    results = {}
+
+    _, industry, _ = fetcher._fetch_spot_data('600000', results, {})
+
+    assert industry == '缓存行业'
+    assert results['industry_status'] == 'stale_cache'
+    assert results['_industry_source'] == 'historical_cache'
+
+
 def test_fetch_spot_data_persists_qualitative_only_routing_before_fundamentals(monkeypatch):
     monkeypatch.setattr(fetcher, 'timed_call', lambda *args, **kwargs: {
         '股票简称': '保险公司', '行业': '保险',

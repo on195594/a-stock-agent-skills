@@ -81,6 +81,7 @@ FIELDS = {
     'operating_cf_per_share': ('每股经营现金流(元)',     'structured'),
     'eps':                    ('基本每股收益(元)',        'structured'),
     'bps':                    ('每股净资产(元)',          'structured'),
+    'industry_status':        ('行业来源状态',             'structured'),
     'bond_yield_10y':     ('10年期国债收益率(%)',         'akshare'),
     'nim':                ('净息差（银行）',               'web'),
     'npl_ratio':          ('不良贷款率（银行）',           'web'),
@@ -904,14 +905,24 @@ def _fetch_spot_data(code: str, results: dict, null_reasons: dict) -> tuple[str,
         or _lookup_cached_name(code)
         or code
     )
-    industry = (
-        lib_industry
-        or info.get('行业')
-        or _lookup_cached_industry(code)
-        or '未知'
-    )
+    info_industry = info.get('行业') if isinstance(info, dict) else None
+    cached_industry = None if lib_industry or info_industry else _lookup_cached_industry(code)
+    industry = lib_industry or info_industry or cached_industry or '未知'
+    if lib_industry:
+        results['industry_status'] = 'verified'
+        results['_industry_source'] = 'a_stock_lib'
+    elif info_industry:
+        results['industry_status'] = 'verified'
+        results['_industry_source'] = DATA_SOURCE
+    elif cached_industry:
+        results['industry_status'] = 'stale_cache'
+        results['_industry_source'] = 'historical_cache'
+    else:
+        results['industry_status'] = 'missing'
+        results['_industry_source'] = 'none'
     current_price = quote.price
-    update_qualitative_only_security(code, name, industry)
+    if results['industry_status'] == 'verified':
+        update_qualitative_only_security(code, name, industry)
     results['_quote_as_of'] = quote.as_of
     total_mv  = parse_float(info.get('总市值'))
     float_mv  = parse_float(info.get('流通市值'))
@@ -1129,6 +1140,8 @@ def _build_cache_payload(code: str, name: str, industry: str,
     for key in business_fields:
         source_layer = FIELDS[key][1]
         provenance_source = DATA_SOURCE if source_layer == 'structured' else source_layer
+        if key == 'industry_status':
+            provenance_source = results.get('_industry_source', provenance_source)
         if cache_data[key] is None:
             reason = null_reasons.get(key) or ('需要WebSearch补充' if source_layer == 'web' else '数据源未返回有效值')
             normalized_reasons[key] = reason

@@ -43,6 +43,24 @@ def test_financial_deterioration_is_review_not_direct_trade():
     assert rule["action_source"] == "none"
 
 
+def test_roe_warning_and_red_review_are_separate_rules():
+    by_id = {rule["id"]: rule for rule in DECISIONS["rules"]}
+    assert by_id["D03Y"]["condition"] == "roe_yoy_drop_gt_3pts_two_quarters"
+    assert by_id["D03Y"]["effect"] == "open_yellow_alert"
+    assert "roe_yoy_drop_gt_5pts_two_quarters" in by_id["D03"]["condition"]
+
+
+def test_add_risk_requires_portfolio_risk_preconditions():
+    by_id = {rule["id"]: rule for rule in DECISIONS["rules"]}
+    required = {
+        "portfolio_value_known",
+        "single_name_risk_within_budget",
+        "portfolio_risk_within_budget",
+        "not_in_drawdown_breach_state",
+    }
+    assert required <= set(by_id["D09"]["preconditions"])
+
+
 def test_thesis_break_outranks_stops_tiers_and_accumulation():
     priorities = {rule["id"]: rule["priority"] for rule in DECISIONS["rules"]}
     assert priorities["D01"] > priorities["D04"] > priorities["D07"] > priorities["D09"]
@@ -82,3 +100,10 @@ def test_cd_accumulation_keeps_cumulative_cap_while_allowing_one_lot():
 def test_tier1_rebuild_explicitly_resets_only_tier1():
     assert "tier-update <代码> tier1 pending" in TIER_RULES
     assert "Tier2/Tier3 状态保持不变" in TIER_RULES
+
+
+def test_monitor_has_no_ambiguous_direct_sell_shortcuts():
+    assert "净利增速转负｜监管重大转向" not in SKILL
+    assert "重大利空公告时立即清仓" not in TIER_RULES
+    assert "3pts=黄色预警入口" in SKILL
+    assert "5pts=红色框架复核入口" in SKILL

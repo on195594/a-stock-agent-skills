@@ -11,6 +11,8 @@ compatibility: Reads this Skill's rubric and checks supplied report text.
 
 独立合规检查层。在投研分析完成后调用，验证强制步骤执行情况和数据完整性。
 
+> **能力边界**：QA PASS 仅代表报告文本符合流程规则，不证明外部数据真实、周期判断正确、评分已校准或策略具有投资有效性；不得把 `COMPLIANT` 表述为“投资结论可靠/可直接交易”。
+
 ## 调用前提
 
 必须已有完整分析输出文本（a-stock-research 报告、a-stock-monitor 复核记录等）。

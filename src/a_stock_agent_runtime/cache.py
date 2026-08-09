@@ -1084,21 +1084,29 @@ def cmd_check(args: list[str]) -> None:
             if latest_quote is not None and analysis_quote:
                 signed_deviation = (latest_quote['price'] - analysis_quote) / analysis_quote
                 absolute_deviation = abs(signed_deviation)
-            if absolute_deviation is None or absolute_deviation < ANALYSIS_PRICE_INVALIDATION_THRESHOLD:
+            if latest_quote is None or not analysis_quote:
+                print(
+                    f"ANALYSIS_PRICE_STALE {code} 缺少新鲜行情或分析价格快照，需要重新分析"
+                )
+            elif (
+                absolute_deviation is not None
+                and signed_deviation is not None
+                and absolute_deviation < ANALYSIS_PRICE_INVALIDATION_THRESHOLD
+            ):
                 name_str = f"({name})" if name else ""
-                quote_note = ""
-                if latest_quote is not None and analysis_quote:
-                    quote_note = (
-                        f" 最新报价:{latest_quote['price']:.3f}({latest_quote['source']})"
-                        f" 较分析快照:{signed_deviation * 100:+.2f}%"
-                    )
+                quote_note = (
+                    f" 最新报价:{latest_quote['price']:.3f}({latest_quote['source']})"
+                    f" 较分析快照:{signed_deviation * 100:+.2f}%"
+                )
                 print(f"ANALYSIS_HIT {code}{name_str} [{format_timestamp_cst(created_at)}]{quote_note}")
                 print(result)
                 return
-            print(
-                f"ANALYSIS_PRICE_STALE {code} 最新报价较分析快照偏离"
-                f"{absolute_deviation * 100:.2f}%（阈值3.00%），需要重新分析"
-            )
+            else:
+                assert absolute_deviation is not None
+                print(
+                    f"ANALYSIS_PRICE_STALE {code} 最新报价较分析快照偏离"
+                    f"{absolute_deviation * 100:.2f}%（阈值3.00%），需要重新分析"
+                )
 
         # 再检查基本面缓存
         fund_row = conn.execute(

@@ -470,6 +470,20 @@ def test_analysis_hit_reports_signed_price_decline(monkeypatch, capsys) -> None:
     assert '较分析快照:-2.00%' in output
 
 
+def test_analysis_without_fresh_quote_cannot_hit(monkeypatch, capsys) -> None:
+    run_set_analysis(monkeypatch, '600000', 'A', score=60)
+    with cache.db_session() as conn:
+        conn.execute("DELETE FROM quote_snapshots WHERE code='600000'")
+        conn.commit()
+
+    cache.cmd_check(['600000'])
+    output = capsys.readouterr().out
+
+    assert 'ANALYSIS_HIT' not in output
+    assert 'ANALYSIS_PRICE_STALE' in output
+    assert 'FULL_MISS' in output
+
+
 def test_unsupported_financial_watchlist_rows_are_terminal_qualitative_only() -> None:
     for code, industry in [('HOLDINS', '保险'), ('PENDBRK', '证券公司')]:
         cache.update_qualitative_only_security(code, '金融公司', industry)

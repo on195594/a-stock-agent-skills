@@ -122,10 +122,12 @@ def test_cmd_check_full_miss(capsys):
 def test_cmd_check_analysis_hit(capsys):
     code = '600036'
     today = datetime.now().strftime('%Y-%m-%d')
+    record_valid_quote(code, 10.0)
     conn = cache.get_db()
     conn.execute(
-        "INSERT INTO analysis_results (code, date, name, result, created_at) VALUES (?,?,?,?,?)",
-        (code, today, '招商银行', '结论：买入', datetime.now().isoformat())
+        "INSERT INTO analysis_results "
+        "(code, date, name, result, created_at, quote_price) VALUES (?,?,?,?,?,?)",
+        (code, today, '招商银行', '结论：买入', datetime.now().isoformat(), 10.0)
     )
     conn.commit()
     conn.close()

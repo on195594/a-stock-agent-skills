@@ -32,6 +32,16 @@
       "heuristic": false
     },
     {
+      "id": "D03Y",
+      "priority": 75,
+      "condition": "roe_yoy_drop_gt_3pts_two_quarters",
+      "effect": "open_yellow_alert",
+      "action_source": "none",
+      "requires_user_confirmation": false,
+      "requires_executable_sizing": false,
+      "heuristic": false
+    },
+    {
       "id": "D04",
       "priority": 70,
       "condition": "price <= stored_second_stop",
@@ -89,7 +99,13 @@
       "action_source": "accumulation_sizing_rule",
       "requires_user_confirmation": true,
       "requires_executable_sizing": true,
-      "heuristic": true
+      "heuristic": true,
+      "preconditions": [
+        "portfolio_value_known",
+        "single_name_risk_within_budget",
+        "portfolio_risk_within_budget",
+        "not_in_drawdown_breach_state"
+      ]
     }
   ]
 }

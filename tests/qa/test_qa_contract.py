@@ -64,3 +64,24 @@ def test_investment_review_repairs_are_part_of_the_research_and_qa_contract() ->
     assert "唯一决策出口与仓位范围" in rubric
     assert "C资源估值冲突与成本证据" in rubric
     assert "关键择时数据缺失或估值冲突明确进入 `incomplete`" in rubric
+
+
+def test_second_investment_review_fail_closed_contract() -> None:
+    rubric = (ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md").read_text(
+        encoding="utf-8"
+    )
+    qa_skill = (ROOT / "skills/a-stock-qa/SKILL.md").read_text(encoding="utf-8")
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+
+    assert "不得用10年分位替代5年分位" in research
+    assert "最新中报/季报冲突门" in research
+    assert "B框架三项核心数据全缺" in research
+    assert "亏损 Biotech" in research and "定性路线" in research
+    assert "估值项进入 `incomplete`" in research
+    assert "评分上限仍为10/15" not in research
+    assert "估值项记0/15" in research
+    assert "只输出观察/试探/标准阶段标签" in research
+    assert "industry_status=stale_cache" in research
+    assert "关键估值能力与最新财报核验" in rubric
+    assert "银行核心数据完整性" in rubric
+    assert "QA PASS 仅代表报告文本符合流程规则" in qa_skill
