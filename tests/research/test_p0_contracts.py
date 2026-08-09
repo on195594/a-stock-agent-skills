@@ -130,7 +130,7 @@ def test_agents_md_matches_canonical_prompt_renderer(tmp_path) -> None:
 
 def test_project_version_is_single_release_source() -> None:
     pyproject = tomllib.loads((PROJECT_ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
-    assert pyproject['project']['version'] == '0.1.0'
+    assert pyproject['project']['version'] == '0.1.1'
     for skill in ('a-stock-research', 'a-stock-monitor', 'a-stock-qa'):
         text = (PROJECT_ROOT / 'skills' / skill / 'SKILL.md').read_text(encoding='utf-8')
         assert '\nversion:' not in text

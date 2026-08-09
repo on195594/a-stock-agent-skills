@@ -1424,12 +1424,27 @@ def test_portfolio_risk_no_holdings(capsys):
 def test_portfolio_risk_with_holdings(capsys, monkeypatch):
     """有持仓时正常输出持仓明细和框架分布"""
     cache.cmd_add_holding(['600036', '45.0', '100', '测试招行'])
-    monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 50.0)
+    monkeypatch.setattr(
+        cache, 'fetch_current_price_quote',
+        lambda code: cache.PriceQuote(50.0, cache.cst_today(), '15:00:00'),
+    )
     cache.cmd_portfolio_risk()
     out = capsys.readouterr().out
     assert '600036' in out
     assert '框架分布' in out
     assert '+11.1%' in out
+
+
+def test_portfolio_risk_rejects_quote_without_date(capsys, monkeypatch):
+    cache.cmd_add_holding(['600036', '45.0', '100', '测试招行'])
+    monkeypatch.setattr(
+        cache, 'fetch_current_price_quote',
+        lambda code: cache.PriceQuote(50.0, None, None),
+    )
+    cache.cmd_portfolio_risk()
+    out = capsys.readouterr().out
+    assert '无法计算：所有持仓均缺少股数或实时价格' in out
+    assert '+11.1%' not in out
 
 
 # ── check-holdings 止损预警（P3-4，逐股现价查询）────────────────────────────────
@@ -1444,7 +1459,7 @@ def test_check_holdings_no_holdings(capsys):
 def test_check_holdings_price_fetch_fails(capsys, monkeypatch):
     """实时取价失败时显示'无实时价格'，不崩溃"""
     cache.cmd_add_holding(['600036', '40.0', '100', '测试'])
-    monkeypatch.setattr(cache, 'fetch_current_price', lambda code: None)
+    monkeypatch.setattr(cache, 'fetch_current_price_quote', lambda code: None)
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
     assert '无实时价格' in out
@@ -1453,7 +1468,10 @@ def test_check_holdings_price_fetch_fails(capsys, monkeypatch):
 def test_check_holdings_normal(capsys, monkeypatch):
     """现价高于止损线时显示✅正常，不计入预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
-    monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 38.0)
+    monkeypatch.setattr(
+        cache, 'fetch_current_price_quote',
+        lambda code: cache.PriceQuote(38.0, cache.cst_today(), '15:00:00'),
+    )
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
     assert '✅ 正常' in out
@@ -1463,7 +1481,10 @@ def test_check_holdings_normal(capsys, monkeypatch):
 def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
     """现价跌破15%止损线但未到20%时触发⚠️黄色预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
-    monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 33.0)
+    monkeypatch.setattr(
+        cache, 'fetch_current_price_quote',
+        lambda code: cache.PriceQuote(33.0, cache.cst_today(), '15:00:00'),
+    )
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
     assert '⚠️ 已跌破15%止损线' in out
@@ -1473,7 +1494,10 @@ def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
 def test_check_holdings_alerts_below_20pct(capsys, monkeypatch):
     """现价跌破20%止损线时触发🔴红色预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
-    monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 31.0)
+    monkeypatch.setattr(
+        cache, 'fetch_current_price_quote',
+        lambda code: cache.PriceQuote(31.0, cache.cst_today(), '15:00:00'),
+    )
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
     assert '🔴 已跌破20%止损线' in out
@@ -1484,7 +1508,10 @@ def test_check_holdings_skips_closed_positions(capsys, monkeypatch):
     """已平仓持仓不参与止损检查"""
     cache.cmd_add_holding(['600036', '40.0', '100', '测试'])
     cache.cmd_close_holding(['600036', '50.0'])
-    monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 31.0)
+    monkeypatch.setattr(
+        cache, 'fetch_current_price_quote',
+        lambda code: cache.PriceQuote(31.0, cache.cst_today(), '15:00:00'),
+    )
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
     assert '暂无持仓' in out
@@ -1516,6 +1543,19 @@ def test_check_holdings_stale_quote_is_observation_only(capsys, monkeypatch):
     assert '无预警' in out
     assert '🔴' not in out
     assert '⚠️' not in out
+
+
+def test_check_holdings_unknown_quote_timestamp_is_not_actionable(capsys, monkeypatch):
+    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])
+    monkeypatch.setattr(
+        cache, 'fetch_current_price_quote',
+        lambda code: cache.PriceQuote(price=31.0, quote_date=None, quote_time=None),
+    )
+    cache.cmd_check_holdings()
+    out = capsys.readouterr().out
+    assert '行情时间戳不可验证' in out
+    assert '无预警' in out
+    assert '建议立即止损' not in out
 
 
 def test_check_holdings_intraday_breach_uses_alarm_prefix(capsys, monkeypatch):
@@ -1673,18 +1713,18 @@ def test_cmd_checklist_b_framework_output_unchanged(capsys):
         "────────────────────────────────\n"
         "ROE加权年化: 14.0% | 优线≥13% 格线≥9% | 结果:达优 | 数据:完整\n"
         "\n"
-        "需Claude主观判断（不参与代码核对）：护城河、行业地位\n"
+        "需人工主观判断（不参与代码核对）：护城河、行业地位\n"
         "\n"
-        "checklist工具无法核验（仍需Claude按框架文档人工评分，权重不变）：\n"
-        "- 净息差趋势：数据缺口：该字段无AKShare API，需Claude WebSearch后手动写入缓存"
+        "checklist工具无法核验（仍需按框架文档人工评分，权重不变）：\n"
+        "- 净息差趋势：数据缺口：该字段无AKShare API，需人工检索公开来源后手动写入缓存"
         "（fetcher.py FIELDS注册表标注来源为web），核验对象与核验来源同源，不构成独立校验；"
-        "权重不变，仍需Claude结合WebSearch人工评分\n"
-        "- 不良贷款率：数据缺口：该字段无AKShare API，需Claude WebSearch后手动写入缓存"
+        "权重不变，仍需结合公开来源人工评分\n"
+        "- 不良贷款率：数据缺口：该字段无AKShare API，需人工检索公开来源后手动写入缓存"
         "（fetcher.py FIELDS注册表标注来源为web），核验对象与核验来源同源，不构成独立校验；"
-        "权重不变，仍需Claude结合WebSearch人工评分\n"
-        "- 拨备覆盖率：数据缺口：该字段无AKShare API，需Claude WebSearch后手动写入缓存"
+        "权重不变，仍需结合公开来源人工评分\n"
+        "- 拨备覆盖率：数据缺口：该字段无AKShare API，需人工检索公开来源后手动写入缓存"
         "（fetcher.py FIELDS注册表标注来源为web），核验对象与核验来源同源，不构成独立校验；"
-        "权重不变，仍需Claude结合WebSearch人工评分\n"
+        "权重不变，仍需结合公开来源人工评分\n"
     )
 
 

@@ -221,7 +221,7 @@ _FRAMEWORK_A = _register(FrameworkMetadata(
             'higher_better',
             30,
             None,
-            '达优档要求的"稳定"/格档"无明显下滑"代码不做验证，仅核对当期数值是否过线，趋势需Claude结合历史数据复核；'
+            '达优档要求的"稳定"/格档"无明显下滑"代码不做验证，仅核对当期数值是否过线，趋势需人工结合历史数据复核；'
             '格档本身无数值线（"无明显下滑"是质性判断），"未达"只代表未过30%优档线，不代表完全不及格',
             True,
         ),
@@ -236,21 +236,21 @@ _FRAMEWORK_B = _register(FrameworkMetadata(
     skipped_items=[
         SkippedChecklistItem(
             label='净息差趋势',
-            reason='数据缺口：该字段无AKShare API，需Claude WebSearch后手动写入缓存'
+            reason='数据缺口：该字段无AKShare API，需人工检索公开来源后手动写入缓存'
             '（fetcher.py FIELDS注册表标注来源为web），核验对象与核验来源同源，不构成独立校验；'
-            '权重不变，仍需Claude结合WebSearch人工评分',
+            '权重不变，仍需结合公开来源人工评分',
         ),
         SkippedChecklistItem(
             label='不良贷款率',
-            reason='数据缺口：该字段无AKShare API，需Claude WebSearch后手动写入缓存'
+            reason='数据缺口：该字段无AKShare API，需人工检索公开来源后手动写入缓存'
             '（fetcher.py FIELDS注册表标注来源为web），核验对象与核验来源同源，不构成独立校验；'
-            '权重不变，仍需Claude结合WebSearch人工评分',
+            '权重不变，仍需结合公开来源人工评分',
         ),
         SkippedChecklistItem(
             label='拨备覆盖率',
-            reason='数据缺口：该字段无AKShare API，需Claude WebSearch后手动写入缓存'
+            reason='数据缺口：该字段无AKShare API，需人工检索公开来源后手动写入缓存'
             '（fetcher.py FIELDS注册表标注来源为web），核验对象与核验来源同源，不构成独立校验；'
-            '权重不变，仍需Claude结合WebSearch人工评分',
+            '权重不变，仍需结合公开来源人工评分',
         ),
     ],
     checklist_definitions=[
@@ -269,7 +269,7 @@ _FRAMEWORK_C = _register(FrameworkMetadata(
         SkippedChecklistItem(
             label='前瞻股息率（压力测试后）',
             reason='数据缺口：分红压力测试所需历史派息率/利润情景假设数据未采集，checklist工具无法核验；'
-            'C.md已定义人工压力测试流程，权重不变，仍需Claude按框架文档人工评分',
+            'C.md已定义人工压力测试流程，权重不变，仍需按框架文档人工评分',
         ),
     ],
     checklist_definitions=[
@@ -299,17 +299,17 @@ _FRAMEWORK_D = _register(FrameworkMetadata(
         SkippedChecklistItem(
             label='ROE行业相对',
             reason='数据缺口：fetcher.py仅采集ROE绝对值（roe_3y_avg），未做同行业分位排名，'
-            'checklist工具无法核验是否处于行业前30%/50%分位；权重不变，仍需Claude结合同业对比人工评分',
+            'checklist工具无法核验是否处于行业前30%/50%分位；权重不变，仍需结合同业对比人工评分',
         ),
         SkippedChecklistItem(
             label='业务量增长',
             reason='数据缺口：业务量（如发电量/售电量）由实物量驱动，fetcher.py仅采集财务报表字段，'
-            '未采集业务量数据，checklist工具无法核验；权重不变，仍需Claude按框架文档人工评分',
+            '未采集业务量数据，checklist工具无法核验；权重不变，仍需按框架文档人工评分',
         ),
         SkippedChecklistItem(
             label='前瞻股息率（压力测试后）',
             reason='数据缺口：分红压力测试所需历史派息率/利润情景假设数据未采集，checklist工具无法核验；'
-            'D.md已定义人工压力测试流程，权重不变，仍需Claude按框架文档人工评分',
+            'D.md已定义人工压力测试流程，权重不变，仍需按框架文档人工评分',
         ),
     ],
     checklist_definitions=[
@@ -328,7 +328,7 @@ _FRAMEWORK_E = _register(FrameworkMetadata(
         SkippedChecklistItem(
             label='存货周转天数',
             reason='数据缺口：fetcher.py未采集存货周转天数字段，checklist工具无法核验；'
-            '该字段公开财报可查，权重不变，仍需Claude按框架文档人工评分',
+            '该字段公开财报可查，权重不变，仍需按框架文档人工评分',
         ),
     ],
     checklist_definitions=[
@@ -348,7 +348,7 @@ _FRAMEWORK_F = _register(FrameworkMetadata(
         SkippedChecklistItem(
             label='研发投入强度（R&D/收入）',
             reason='数据缺口：fetcher.py未采集研发投入字段，checklist工具无法核验；'
-            '该字段公开财报可查，权重不变，仍需Claude按框架文档人工评分',
+            '该字段公开财报可查，权重不变，仍需按框架文档人工评分',
         ),
     ],
     checklist_definitions=[
@@ -360,7 +360,7 @@ _FRAMEWORK_F = _register(FrameworkMetadata(
             'higher_better',
             50,
             30,
-            '达优/达格档要求的"不下滑"/"趋势平稳"代码不做验证，仅核对当期数值是否过线，趋势需Claude结合历史数据复核',
+            '达优/达格档要求的"不下滑"/"趋势平稳"代码不做验证，仅核对当期数值是否过线，趋势需人工结合历史数据复核',
             True,
         ),
     ],
@@ -369,36 +369,6 @@ _FRAMEWORK_F = _register(FrameworkMetadata(
     industry_keywords=('互联网', '软件', '科技', '半导体', '游戏', '通信'),
     stop_loss_pct=(0.80, 0.72),
 ))
-
-
-# ── 旧模块级常量：兼容导出，从 FRAMEWORK_REGISTRY 派生，不是平行维护的第二份数据 ──
-# 不作为新写路径维护；新代码（build_checklist/cache.cmd_checklist）一律读
-# framework_metadata.FRAMEWORK_REGISTRY，这些常量只服务旧测试和可能存在的外部脚本。
-
-FRAMEWORK_NAMES = {
-    key: metadata.checklist_name for key, metadata in framework_metadata.FRAMEWORK_REGISTRY.items()
-}
-
-A_SUBJECTIVE_ITEMS = _FRAMEWORK_A.subjective_items
-A_SUBJECTIVE_NOTE = '需Claude判断，不参与代码核对'
-B_SUBJECTIVE_ITEMS = _FRAMEWORK_B.subjective_items
-C_SUBJECTIVE_ITEMS = _FRAMEWORK_C.subjective_items
-D_SUBJECTIVE_ITEMS = _FRAMEWORK_D.subjective_items
-E_SUBJECTIVE_ITEMS = _FRAMEWORK_E.subjective_items
-F_SUBJECTIVE_ITEMS = _FRAMEWORK_F.subjective_items
-
-B_SKIPPED_ITEMS = [{'label': i.label, 'reason': i.reason} for i in _FRAMEWORK_B.skipped_items]
-C_SKIPPED_ITEMS = [{'label': i.label, 'reason': i.reason} for i in _FRAMEWORK_C.skipped_items]
-D_SKIPPED_ITEMS = [{'label': i.label, 'reason': i.reason} for i in _FRAMEWORK_D.skipped_items]
-E_SKIPPED_ITEMS = [{'label': i.label, 'reason': i.reason} for i in _FRAMEWORK_E.skipped_items]
-F_SKIPPED_ITEMS = [{'label': i.label, 'reason': i.reason} for i in _FRAMEWORK_F.skipped_items]
-
-A_CHECKLIST_DEFINITIONS = _FRAMEWORK_A.checklist_definitions
-B_CHECKLIST_DEFINITIONS = _FRAMEWORK_B.checklist_definitions
-C_CHECKLIST_DEFINITIONS = _FRAMEWORK_C.checklist_definitions
-D_CHECKLIST_DEFINITIONS = _FRAMEWORK_D.checklist_definitions
-E_CHECKLIST_DEFINITIONS = _FRAMEWORK_E.checklist_definitions
-F_CHECKLIST_DEFINITIONS = _FRAMEWORK_F.checklist_definitions
 
 
 def build_checklist(code: str, framework: str, cycle_stage: str | None = None) -> list[ChecklistItem]:
@@ -437,7 +407,8 @@ def format_checklist(
 ) -> str:
     """生成人类可读的 checklist 文本报告。"""
     normalized_framework = framework.upper()
-    framework_name = FRAMEWORK_NAMES.get(normalized_framework, f'{normalized_framework}框架')
+    metadata = framework_metadata.FRAMEWORK_REGISTRY.get(normalized_framework)
+    framework_name = metadata.checklist_name if metadata else f'{normalized_framework}框架'
 
     lines = [
         f"框架客观指标核对清单：{framework_name} {code}",
@@ -456,13 +427,13 @@ def format_checklist(
     if subjective:
         lines.extend([
             "",
-            f"需Claude主观判断（不参与代码核对）：{'、'.join(subjective)}",
+            f"需人工主观判断（不参与代码核对）：{'、'.join(subjective)}",
         ])
 
     if skipped:
         lines.extend([
             "",
-            "checklist工具无法核验（仍需Claude按框架文档人工评分，权重不变）：",
+            "checklist工具无法核验（仍需按框架文档人工评分，权重不变）：",
         ])
         for skipped_item in skipped:
             lines.append(f"- {skipped_item['label']}：{skipped_item['reason']}")

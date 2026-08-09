@@ -1,6 +1,6 @@
 ---
 name: a-stock-qa
-description: Use after an a-stock research or monitoring report to independently verify that mandatory analysis steps were executed and data fields are complete. Returns a structured compliance verdict (COMPLIANT/PARTIAL/NON_COMPLIANT) with per-check details.
+description: Use after an a-stock-research report to independently verify that mandatory analysis steps were executed and data fields are complete. Unsupported report types return SKIP. Returns a structured compliance verdict (COMPLIANT/PARTIAL/NON_COMPLIANT) with per-check details.
 license: Proprietary
 compatibility: Reads this Skill's rubric and checks supplied report text.
 ---
@@ -15,7 +15,7 @@ compatibility: Reads this Skill's rubric and checks supplied report text.
 
 ## 调用前提
 
-必须已有完整分析输出文本（a-stock-research 报告、a-stock-monitor 复核记录等）。
+必须已有完整 a-stock-research 分析输出文本。
 如无完整输出，直接返回 `verdict: SKIP`，附注"无分析输出可检查"。
 当前仅支持已有的 a-stock-research rubric；其他类型返回 `SKIP`。
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from checklist import ChecklistDefinition, ChecklistItem
+    from a_stock_agent_runtime.checklist import ChecklistDefinition, ChecklistItem
 
 
 @dataclass(frozen=True)

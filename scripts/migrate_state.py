@@ -23,11 +23,12 @@ def _read_only(path: Path) -> sqlite3.Connection:
 
 
 def _snapshot(conn: sqlite3.Connection) -> dict[str, object]:
-    tables = [
-        row[0] for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    schema = {
+        row[0]: row[1] for row in conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
         )
-    ]
+    }
+    tables = list(schema)
     counts: dict[str, int] = {}
     for table in tables:
         counts[table] = int(conn.execute(f"SELECT COUNT(*) FROM \"{table}\"").fetchone()[0])
@@ -41,10 +42,18 @@ def _snapshot(conn: sqlite3.Connection) -> dict[str, object]:
         "journal_mode": conn.execute("PRAGMA journal_mode").fetchone()[0],
         "user_version": conn.execute("PRAGMA user_version").fetchone()[0],
         "tables": tables,
+        "schema": schema,
         "counts": counts,
         "holdings_sample": sample,
         "integrity": integrity,
     }
+
+
+def _invariant_mismatches(source: dict[str, object], target: dict[str, object]) -> list[str]:
+    return [
+        field for field in ("schema", "counts", "user_version", "holdings_sample")
+        if source[field] != target[field]
+    ]
 
 
 def migrate(source: Path, target: Path, report: Path, expected_tables: list[str], dry_run: bool) -> int:
@@ -65,18 +74,25 @@ def migrate(source: Path, target: Path, report: Path, expected_tables: list[str]
     with _read_only(target) as target_conn:
         target_after = _snapshot(target_conn)
     missing = sorted(set(expected_tables) - set(target_after["tables"]))
-    if source_before["integrity"] != "ok" or target_after["integrity"] != "ok" or missing:
-        print("migration invariant failed", file=sys.stderr)
-        return 1
+    mismatches = _invariant_mismatches(source_before, target_after)
     payload = {
         "source": {"path": str(source), "sha256": _digest(source), **source_before},
         "target": {"path": str(target), "sha256": _digest(target), **target_after},
         "expected_tables": expected_tables,
         "missing_expected_tables": missing,
+        "invariant_mismatches": mismatches,
     }
     report.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     report.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(payload, ensure_ascii=False))
+    failed = source_before["integrity"] != "ok" or target_after["integrity"] != "ok" or bool(missing or mismatches)
+    print(json.dumps({
+        "source": str(source), "target": str(target), "report": str(report),
+        "missing_expected_tables": missing, "invariant_mismatches": mismatches,
+        "status": "failed" if failed else "ok",
+    }, ensure_ascii=False))
+    if failed:
+        print("migration invariant failed", file=sys.stderr)
+        return 1
     return 0
 
 

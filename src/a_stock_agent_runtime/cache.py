@@ -119,6 +119,7 @@ SCHEMA_MIGRATIONS = [
 _SCHEMA_LOCK = threading.Lock()
 _SCHEMA_INITIALIZED: bool = False
 _SCHEMA_INITIALIZED_PATH: str = ""
+_READ_ONLY_REQUEST: bool = False
 _CST = timezone(timedelta(hours=8))
 _UTC = timezone.utc
 _DATA_PERIOD_RE = re.compile(r'^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$')
@@ -629,6 +630,11 @@ def _bootstrap_database_schema(conn: sqlite3.Connection) -> None:
 
 def get_db(timeout: float = 30.0) -> sqlite3.Connection:
     global _SCHEMA_INITIALIZED, _SCHEMA_INITIALIZED_PATH
+    if _READ_ONLY_REQUEST:
+        path = os.path.abspath(os.path.expanduser(DB_PATH))
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=timeout)
+        conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
+        return conn
     ensure_db_parent(DB_PATH)
     conn = sqlite3.connect(DB_PATH, timeout=timeout)
     conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
@@ -2620,7 +2626,8 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     print(f"{'─'*104}")
 
     codes = [h[0] for h in holdings]
-    prices = fetch_current_prices(codes)
+    quotes = fetch_current_price_quotes(codes)
+    today_str = cst_today()
     valued_rows = []
     for (
         code, name, cost, shares, buy_date, score, industry, holding_framework,
@@ -2630,7 +2637,8 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
             fw, confident = holding_framework, bool(framework_confident)
         else:
             fw, confident = infer_framework(industry)
-        curr = prices.get(code)
+        quote = quotes.get(code)
+        curr = quote.price if quote and quote.quote_date == today_str else None
         market_value = curr * shares if curr and shares else None
         valued_rows.append(
             (code, name, cost, shares, score, fw, confident, sl20, curr, market_value)
@@ -2753,8 +2761,8 @@ def _evaluate_holding_status(
     elif quote.quote_date == today_str:
         status, is_alert = _legacy_style_status(curr, sl15, sl20, "收盘价")
     else:
-        # quote_date 未知（新浪字段不足 / mock-compat 兼容路径）：保持改动前行为不变
-        status, is_alert = _legacy_style_status(curr, sl15, sl20, "现价")
+        status = "─ 行情时间戳不可验证，不触发止损预警"
+        is_alert = False
 
     return label, status, is_alert
 
@@ -3666,12 +3674,12 @@ COMMAND_CLASSIFICATION = {
     **dict.fromkeys(
         (
             'get', 'get-analysis', 'holdings', 'position-return',
-            'portfolio-risk', 'retro-pending', 'retro-stats', 'retro-outliers',
+            'retro-pending', 'retro-stats', 'retro-outliers',
             'alerts', 'l3-list', 'watchlist', 'list', 'checklist',
         ),
         'R0',
     ),
-    **dict.fromkeys(('check', 'check-holdings'), 'R1'),
+    **dict.fromkeys(('check', 'check-holdings', 'portfolio-risk'), 'R1'),
     **dict.fromkeys(
         (
             'set', 'set-analysis', 'set-score', 'set-score-breakdown',
@@ -3697,6 +3705,7 @@ def _invoke(command: str, args: list[str]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global _READ_ONLY_REQUEST
     args = list(sys.argv[1:] if argv is None else argv)
     if not args or args == ['--help']:
         print(__doc__)
@@ -3728,9 +3737,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(f'[a-stock-cache] 操作数据库: {DB_PATH}', file=sys.stderr)
     try:
+        _READ_ONLY_REQUEST = classification == 'R0'
         _invoke(command, remaining)
     except SystemExit as exc:
         return int(exc.code or 0)
+    except sqlite3.Error as exc:
+        print(f'数据库查询失败：{exc}', file=sys.stderr)
+        return 1
+    finally:
+        _READ_ONLY_REQUEST = False
     return 0
 
 if __name__ == '__main__':

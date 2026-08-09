@@ -68,6 +68,10 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
             text = path.read_text(encoding="utf-8", errors="ignore")
             if re.search(r"(?:~|/home/[^/]+)/\.(?:claude|agents|hermes)/skills", text):
                 errors.append(f"host path in business content: {path}")
+            if (root / "skills") in path.parents and re.search(
+                r"(?:\bagy\s+--|\bcodex:|\bclaude:|\bhermes:)", text, re.I
+            ):
+                errors.append(f"{path}: client-specific tool invocation")
             if re.search(r"(?:cache\.db(?:-(?:wal|shm))?|\.env|/logs/|/locks/)", path.name):
                 errors.append(f"mutable file packaged: {path}")
     return errors

@@ -79,6 +79,14 @@ def _item_by_key(items, key):
     return next(item for item in items if item.key == key)
 
 
+def _metadata(key):
+    return framework_metadata.FRAMEWORK_REGISTRY[key]
+
+
+def _skipped(key):
+    return [{'label': item.label, 'reason': item.reason} for item in _metadata(key).skipped_items]
+
+
 def test_a_framework_roe_excellent():
     _set_a_fundamentals(roe_3y_avg=18.2)
 
@@ -162,12 +170,12 @@ def test_format_checklist_outputs_subjective_note():
         items,
         framework='A',
         code='600036',
-        subjective=checklist.A_SUBJECTIVE_ITEMS,
+        subjective=_metadata('A').subjective_items,
     )
 
     assert '框架客观指标核对清单：A通用框架 600036' in report
     assert 'ROE近3年均值: 18.2%' in report
-    assert '需Claude主观判断（不参与代码核对）：护城河、行业地位' in report
+    assert '需人工主观判断（不参与代码核对）：护城河、行业地位' in report
 
 
 def test_format_checklist_outputs_item_note():
@@ -323,15 +331,15 @@ def test_format_checklist_outputs_c_skipped_items():
         items,
         framework='C',
         code='600900',
-        subjective=checklist.C_SUBJECTIVE_ITEMS,
-        skipped=checklist.C_SKIPPED_ITEMS,
+        subjective=_metadata('C').subjective_items,
+        skipped=_skipped('C'),
     )
 
     assert '框架客观指标核对清单：能源/资源框架 600900' in report
-    assert 'checklist工具无法核验（仍需Claude按框架文档人工评分，权重不变）：' in report
+    assert 'checklist工具无法核验（仍需按框架文档人工评分，权重不变）：' in report
     assert (
         '- 前瞻股息率（压力测试后）：数据缺口：分红压力测试所需历史派息率/利润情景假设数据未采集，checklist工具无法核验；'
-        'C.md已定义人工压力测试流程，权重不变，仍需Claude按框架文档人工评分'
+        'C.md已定义人工压力测试流程，权重不变，仍需按框架文档人工评分'
     ) in report
 
 
@@ -378,7 +386,7 @@ def test_f_framework_gross_margin_thresholds_are_simplified(gross_margin, expect
     assert item.label == '毛利率及趋势'
     assert item.result == expected
     assert item.data_status == '简化判定（不判断趋势/连续性）'
-    assert item.note == '达优/达格档要求的"不下滑"/"趋势平稳"代码不做验证，仅核对当期数值是否过线，趋势需Claude结合历史数据复核'
+    assert item.note == '达优/达格档要求的"不下滑"/"趋势平稳"代码不做验证，仅核对当期数值是否过线，趋势需人工结合历史数据复核'
 
 
 def test_f_framework_gross_margin_missing_is_not_simplified():
@@ -434,11 +442,11 @@ def test_f_framework_rd_intensity_is_skipped_and_not_built():
 
     items = checklist.build_checklist('688111', 'F')
 
-    assert checklist.F_SKIPPED_ITEMS == [
+    assert _skipped('F') == [
         {
             'label': '研发投入强度（R&D/收入）',
             'reason': '数据缺口：fetcher.py未采集研发投入字段，checklist工具无法核验；'
-            '该字段公开财报可查，权重不变，仍需Claude按框架文档人工评分',
+            '该字段公开财报可查，权重不变，仍需按框架文档人工评分',
         },
     ]
     assert '研发投入强度（R&D/收入）' not in [item.label for item in items]
@@ -450,7 +458,7 @@ def test_build_checklist_f_framework_is_case_insensitive():
     items = checklist.build_checklist('688111', 'f')
 
     assert _item_by_key(items, 'revenue_growth_3y').result == '达优'
-    assert checklist.FRAMEWORK_NAMES['F'] == '科技/互联网框架'
+    assert _metadata('F').checklist_name == '科技/互联网框架'
 
 
 @pytest.mark.parametrize(
@@ -491,17 +499,17 @@ def test_format_checklist_outputs_d_skipped_items():
         items,
         framework='D',
         code='600025',
-        subjective=checklist.D_SUBJECTIVE_ITEMS,
-        skipped=checklist.D_SKIPPED_ITEMS,
+        subjective=_metadata('D').subjective_items,
+        skipped=_skipped('D'),
     )
 
     assert '框架客观指标核对清单：水电/公用事业框架 600025' in report
-    assert 'checklist工具无法核验（仍需Claude按框架文档人工评分，权重不变）：' in report
+    assert 'checklist工具无法核验（仍需按框架文档人工评分，权重不变）：' in report
     assert '- ROE行业相对：' in report
     assert '- 业务量增长：' in report
     assert (
         '- 前瞻股息率（压力测试后）：数据缺口：分红压力测试所需历史派息率/利润情景假设数据未采集，checklist工具无法核验；'
-        'D.md已定义人工压力测试流程，权重不变，仍需Claude按框架文档人工评分'
+        'D.md已定义人工压力测试流程，权重不变，仍需按框架文档人工评分'
     ) in report
 
 
@@ -588,14 +596,14 @@ def test_format_checklist_outputs_e_skipped_items():
         items,
         framework='E',
         code='600887',
-        subjective=checklist.E_SUBJECTIVE_ITEMS,
-        skipped=checklist.E_SKIPPED_ITEMS,
+        subjective=_metadata('E').subjective_items,
+        skipped=_skipped('E'),
     )
 
     assert '框架客观指标核对清单：消费框架 600887' in report
     assert (
         '- 存货周转天数：数据缺口：fetcher.py未采集存货周转天数字段，checklist工具无法核验；'
-        '该字段公开财报可查，权重不变，仍需Claude按框架文档人工评分'
+        '该字段公开财报可查，权重不变，仍需按框架文档人工评分'
     ) in report
 
 
@@ -608,8 +616,8 @@ def test_build_checklist_e_framework_is_case_insensitive():
 
 
 def test_framework_names_include_d_and_e():
-    assert checklist.FRAMEWORK_NAMES['D'] == '水电/公用事业框架'
-    assert checklist.FRAMEWORK_NAMES['E'] == '消费框架'
+    assert _metadata('D').checklist_name == '水电/公用事业框架'
+    assert _metadata('E').checklist_name == '消费框架'
 
 
 @pytest.mark.parametrize(
@@ -649,12 +657,12 @@ def test_format_checklist_outputs_b_skipped_items():
         items,
         framework='B',
         code='601988',
-        subjective=checklist.B_SUBJECTIVE_ITEMS,
-        skipped=checklist.B_SKIPPED_ITEMS,
+        subjective=_metadata('B').subjective_items,
+        skipped=_skipped('B'),
     )
 
     assert '框架客观指标核对清单：银行框架 601988' in report
-    assert 'checklist工具无法核验（仍需Claude按框架文档人工评分，权重不变）：' in report
+    assert 'checklist工具无法核验（仍需按框架文档人工评分，权重不变）：' in report
     assert '- 净息差趋势：' in report
     assert '- 不良贷款率：' in report
     assert '- 拨备覆盖率：' in report
@@ -670,7 +678,7 @@ def test_build_checklist_b_framework_is_case_insensitive():
 
 
 def test_framework_names_include_b():
-    assert checklist.FRAMEWORK_NAMES['B'] == '银行框架'
+    assert _metadata('B').checklist_name == '银行框架'
 
 
 def test_framework_registry_has_all_six_frameworks_with_required_fields():
@@ -707,22 +715,6 @@ def test_unsupported_framework_error_message_unchanged():
     assert str(exc_info.value) == (
         "暂不支持框架 'Z' 的 checklist；当前仅支持 'A'/'B'/'C'/'D'/'E'/'F'"
     )
-
-
-def test_legacy_skipped_items_constants_stay_list_of_dict():
-    """旧常量必须是list[dict]（不是list[SkippedChecklistItem]）——这是
-    format_checklist()能正常工作的前提，4个现有测试直接依赖这个形状。"""
-    for legacy_constant in (
-        checklist.B_SKIPPED_ITEMS,
-        checklist.C_SKIPPED_ITEMS,
-        checklist.D_SKIPPED_ITEMS,
-        checklist.E_SKIPPED_ITEMS,
-        checklist.F_SKIPPED_ITEMS,
-    ):
-        assert isinstance(legacy_constant, list)
-        for item in legacy_constant:
-            assert isinstance(item, dict)
-            assert set(item.keys()) == {'label', 'reason'}
 
 
 def test_framework_metadata_module_has_no_circular_import():

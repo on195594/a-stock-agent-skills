@@ -406,7 +406,10 @@ class TestCheckHoldingsBoundary:
 
     def test_price_exactly_at_15pct_stop_triggers_yellow(self, capsys, monkeypatch):
         self._add_holding_cost40()
-        monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 34.0)
+        monkeypatch.setattr(
+            cache, 'fetch_current_price_quote',
+            lambda code: cache.PriceQuote(34.0, cache.cst_today(), '15:00:00'),
+        )
         cache.cmd_check_holdings()
         out = capsys.readouterr().out
         assert '⚠️ 已跌破15%止损线' in out
@@ -414,7 +417,10 @@ class TestCheckHoldingsBoundary:
 
     def test_price_exactly_at_20pct_stop_triggers_red(self, capsys, monkeypatch):
         self._add_holding_cost40()
-        monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 32.0)
+        monkeypatch.setattr(
+            cache, 'fetch_current_price_quote',
+            lambda code: cache.PriceQuote(32.0, cache.cst_today(), '15:00:00'),
+        )
         cache.cmd_check_holdings()
         out = capsys.readouterr().out
         assert '🔴 已跌破20%止损线' in out
@@ -423,7 +429,10 @@ class TestCheckHoldingsBoundary:
     def test_price_one_cent_above_15pct_stop_is_normal(self, capsys, monkeypatch):
         """34.001 > sl15=34.000，不应触发预警"""
         self._add_holding_cost40()
-        monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 34.001)
+        monkeypatch.setattr(
+            cache, 'fetch_current_price_quote',
+            lambda code: cache.PriceQuote(34.001, cache.cst_today(), '15:00:00'),
+        )
         cache.cmd_check_holdings()
         out = capsys.readouterr().out
         assert '✅ 正常' in out

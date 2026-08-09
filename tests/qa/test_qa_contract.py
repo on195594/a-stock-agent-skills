@@ -13,6 +13,15 @@ def test_qa_is_runtime_independent() -> None:
     assert "Python" not in skill.split("---", 2)[1]
     assert "a_stock_agent_runtime" not in skill
     assert "research rubric" in skill
+    assert "monitoring report" not in skill
+    assert "a-stock-monitor report" not in skill
+
+
+def test_research_qa_routing_is_host_neutral() -> None:
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+    assert "a-stock-qa" in research
+    for client_command in ("agy --", "codex:", "claude:", "hermes:"):
+        assert client_command not in research.lower()
 
 
 def test_standalone_smoke_uses_isolated_python() -> None:

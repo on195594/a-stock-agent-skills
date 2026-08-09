@@ -467,46 +467,19 @@ JSON数据结构示例：
 
 ## 质量合规检查（每次产生新分析后自动触发）
 
-完整分析报告输出完成后，由当前宿主运行 **agy（Google Antigravity CLI，Gemini 引擎）** 独立评估——
-跨提供商隔离，实现模型层面的评估者 ≠ 优化者。
-
 **触发豁免**：ANALYSIS_HIT 路径直接输出缓存结论，跳过 QA（无新分析内容可评估）。
 
-**主路径：agy + Gemini**
-
-在当前宿主中执行以下 QA 任务：
-  任务：用 agy CLI 对投研报告进行合规检查，输出 PASS/FAIL/SKIP 表格 + verdict
-  rubric 文件：the discovered a-stock-qa research rubric
-  模型：Gemini 3.5 Flash (High)
-
-  执行步骤：
-  1. 读取 rubric 文件全部内容
-  2. 创建临时文件：`QA_TMP=$(mktemp /tmp/qa-input-XXXX.txt)`；将 rubric 内容和下方报告文本合并写入 `$QA_TMP`
-  3. 执行（捕获 stdout；使用 agy 原生5分钟超时，不绕过权限审批）：
-     `OUTPUT=$(agy --model "Gemini 3.5 Flash (High)" --print-timeout 5m --prompt "$(cat "$QA_TMP")")`
-  4. 若命令退出码非 0、超时或 `$OUTPUT` 为空 → 立即上报"agy失败，需切换备用"，终止本 Agent
-  5. 将 $OUTPUT 整理为标准 PASS/FAIL/SKIP 表格 + verdict（COMPLIANT/PARTIAL/NON_COMPLIANT/SKIP）
-  6. 删除临时文件：`rm -f "$QA_TMP"`
-
-  待评估报告文本：
-  <上方完整报告文本>
-
-**若 agy 失败**（任意原因：非零退出 / 5 分钟超时 / 输出无法解析为 verdict）：若当前宿主提供 Codex rescue 子代理，则调用 `codex:codex-rescue`，传入 rubric 路径和报告文本；若不提供，则标记 QA 未执行，不得把未执行伪装为通过。备用 verdict 标注后缀改为"（codex）"。
+完整分析报告输出完成后，通过当前宿主的 Skill discovery/invocation 调用
+`a-stock-qa`，传入 `skill_type=a-stock-research` 和完整报告文本。宿主无法发现或执行
+该 Skill 时，明确标记“QA 未执行”及原因；不得把未执行伪装为通过，也不得改用
+客户端专属命令或子代理名称。
 
 **根据 verdict 处理**：
-- COMPLIANT → 在报告末尾追加一行：`✓ a-stock-qa 合规检查通过（Gemini）`
+- COMPLIANT → 在报告末尾追加一行：`✓ a-stock-qa 合规检查通过`
 - PARTIAL → 在报告末尾追加：`⚠️ a-stock-qa Minor问题：[FAIL检查项及说明（来自QA明细表）]`
-- NON_COMPLIANT → **在报告首部置顶警告**（重新输出报告开头）：`⛔ a-stock-qa：以下步骤存在合规问题，报告可信度降低：[FAIL检查项及说明]`；同时执行「独立审查闭环规则」中的根因溯源（区分偶发执行错误 vs 框架规则缺失，仅后者需更新 SKILL.md）
-- SKIP → 在报告末尾追加一行：`⚠️ a-stock-qa 未执行（无分析输出可检查）`
+- NON_COMPLIANT → **在报告首部置顶警告**（重新输出报告开头）：`⛔ a-stock-qa：以下步骤存在合规问题，报告可信度降低：[FAIL检查项及说明]`
+- SKIP → 在报告末尾追加一行：`⚠️ a-stock-qa 未执行：[原因]`
 
----
-
-## 独立审查闭环规则
-
-当 agy / codex 等独立审查在已完成的评估报告中发现 **Critical 或 Important** 级问题时，除单次评分修正外，必须追加以下操作，不得仅停留在个案修正：
-
-1. **根因溯源**：判断问题是偶发数据误读，还是框架规则（SKILL.md / frameworks/*.md）本身的缺失或错误
-2. **框架闭环（根因为框架时）**：在同一轮回复中更新 SKILL.md 或对应框架文件，并在 docs/CHANGELOG.md 中记录，版本号小版本+1
-3. **证据存档**：更新时引用触发案例（公司代码 + 审查日期 + 审查工具），供后续版本追溯
-
-**首例记录**：2026-06-29 比亚迪(002594) agy审查 — Critical-1（送转股PE分位折扣）→ SKILL.md 择时评分注意事项；Critical-2（汇兑损益未剔除）→ SKILL.md 第二步基本面评分规则；Important-2（流动比率遗漏）→ A.md 风险关注项。
+QA 发现 Critical/Important 问题时，只修正本次报告并说明根因。若根因疑似框架规则，
+仅提出变更建议；不得在普通投研请求中修改 `SKILL.md`、framework、rubric、版本或
+changelog。投资规则变更仍须独立 dated spec 和用户直接授权。

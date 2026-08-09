@@ -73,6 +73,6 @@ for auditability and is not a scratch directory.
 ## Generated files
 
 The following are disposable and ignored by Git: `__pycache__/`, `.pytest_cache/`,
-`.ruff_cache/`, `.mypy_cache/` and `*.egg-info/`. Remove only those generated
+`.ruff_cache/` and `*.egg-info/`. Remove only those generated
 paths when cleaning a worktree; keep `.venv/` if it is the active development
 environment.

@@ -1,6 +1,6 @@
 [project]
 name = "a-stock-agent-skills"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.13"
 dependencies = [
   "akshare==1.18.64",
@@ -15,7 +15,7 @@ a-stock-fetch = "a_stock_agent_runtime.fetcher:main"
 a-stock-install = "a_stock_agent_runtime.install:main"
 
 [dependency-groups]
-dev = ["pytest==9.0.3", "ruff==0.11.0", "mypy==1.15.0"]
+dev = ["pytest==9.0.3", "ruff==0.11.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
