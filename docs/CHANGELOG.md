@@ -18,3 +18,12 @@
 - `a-stock-qa`: added checks for current-report/valuation capability, bank completeness, reproducible timing arithmetic, and an explicit text-only compliance boundary.
 
 Trigger: 紫金矿业（601899）investment review, 2026-08-09, AGY with parent adjudication.
+
+### Fixed (2026-08-10 engineering repairs)
+
+- Development environment: documented `uv sync --frozen --inexact`; the plain form uninstalled the externally provisioned `a-stock-lib` and broke every runtime import.
+- Installer tests no longer depend on a warm host `uv` cache reachable through the relocated `HOME`, and locate `a-stock-lib` via `A_STOCK_LIB_SOURCE` instead of a hardcoded path, skipping when it is absent.
+
+### Changed (2026-08-10 engineering repairs)
+
+- Added `scripts/check.sh` as the single repository gate; this repository has no git remote, so there is no hosted CI to be the source of truth.

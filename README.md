@@ -75,8 +75,18 @@ credential, runtime log or Telegram token in the repository.
 
 ## Development checks
 
+Run every gate with one command:
+
 ```bash
-uv sync --frozen
+bash scripts/check.sh
+```
+
+It runs the individual checks below. Use `--inexact` whenever syncing by hand:
+`a-stock-lib` is deliberately absent from the lockfile, so a plain
+`uv sync --frozen` uninstalls it and breaks every runtime import.
+
+```bash
+uv sync --frozen --inexact
 uv run pytest -q
 uv run ruff check .
 uv run python scripts/validate.py

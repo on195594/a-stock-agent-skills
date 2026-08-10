@@ -10,17 +10,24 @@ Requirements are Python 3.13+, `uv`, and an explicit `a-stock-lib` checkout or
 wheel. Install the locked development environment with:
 
 ```bash
-uv sync --frozen
+uv sync --frozen --inexact
 ```
+
+`--inexact` is required, not cosmetic. `a-stock-lib` is deliberately not a
+declared dependency — the installer takes an explicit checkout or wheel and
+records its provenance — so it is absent from the lockfile and a plain
+`uv sync --frozen` uninstalls it, breaking every runtime import.
 
 The source checkout is only needed when exercising the installer or the
 external prompt renderer. It must be passed explicitly; the project never
-guesses a sibling home-directory path.
+guesses a sibling home-directory path. Tests locate it at `~/a-stock-lib` or at
+`A_STOCK_LIB_SOURCE`, and skip when it is not provisioned.
 
 ## Validation matrix
 
 Run the smallest relevant check while iterating, then run the full matrix
-before committing:
+before committing. `scripts/check.sh` runs all of it in one command; this
+repository has no git remote, so that script is the only gate there is.
 
 ```bash
 uv run pytest -q

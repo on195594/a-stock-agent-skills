@@ -7,10 +7,32 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from a_stock_agent_runtime.install import _backup
 
 
-def _run(args, home, path):
+# Resolved against the real environment at import time, before any test swaps HOME.
+# The installer shells out to `uv build`, which needs its package cache to satisfy
+# `build-system.requires` while UV_OFFLINE is set; a relocated HOME would hide it.
+UV_CACHE_DIR = os.environ.get("UV_CACHE_DIR") or str(
+    Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "uv"
+)
+
+# a-stock-lib is deliberately not a declared dependency: the installer takes an
+# explicit checkout or wheel and records its provenance.  Tests locate it the same
+# way an operator would, and skip rather than fail when it is not provisioned here.
+LIB_ROOT = Path(os.environ.get("A_STOCK_LIB_SOURCE") or Path.home() / "a-stock-lib")
+LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.5.0-py3-none-any.whl"
+
+_MISSING = f"a-stock-lib not provisioned at {LIB_ROOT}; set A_STOCK_LIB_SOURCE"
+requires_lib_wheel = pytest.mark.skipif(not LIB_WHEEL.is_file(), reason=_MISSING)
+requires_lib_checkout = pytest.mark.skipif(
+    not (LIB_ROOT / "pyproject.toml").is_file(), reason=_MISSING
+)
+
+
+def _run(args, home):
     uv = shutil.which("uv")
     assert uv
     env = {
@@ -18,20 +40,21 @@ def _run(args, home, path):
         "HOME": str(home),
         "PATH": f"{home / '.local/bin'}:{Path(uv).parent}:/usr/bin:/bin",
         "UV_OFFLINE": "1",
+        "UV_CACHE_DIR": UV_CACHE_DIR,
     }
     return subprocess.run([sys.executable, "scripts/install.py", *args], env=env, capture_output=True, text=True, check=False)
 
 
+@requires_lib_wheel
 def test_dry_run_has_no_files(tmp_path) -> None:
-    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.5.0-py3-none-any.whl"
-    result = _run(["--client", "all", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", wheel, "--dry-run"], tmp_path, "")
+    result = _run(["--client", "all", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", str(LIB_WHEEL), "--dry-run"], tmp_path)
     assert result.returncode == 0, result.stderr
     assert list(tmp_path.iterdir()) == []
 
 
+@requires_lib_wheel
 def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
-    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.5.0-py3-none-any.whl"
-    result = _run(["--client", "codex", "--mode", "copy", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", wheel], tmp_path, "")
+    result = _run(["--client", "codex", "--mode", "copy", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", str(LIB_WHEEL)], tmp_path)
     assert result.returncode == 0, result.stderr
     manifest = next((tmp_path / ".agents/skills/a-stock-research").glob(".a-stock-suite-manifest.json"))
     assert json.loads(manifest.read_text(encoding="utf-8"))["source_hash"]
@@ -44,9 +67,9 @@ def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
     assert str(Path.cwd()) not in module_path
 
 
+@requires_lib_checkout
 def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
-    lib_source = "/home/lin/a-stock-lib"
-    result = _run(["--client", "claude", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-source", lib_source], tmp_path, "")
+    result = _run(["--client", "claude", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-source", str(LIB_ROOT)], tmp_path)
     assert result.returncode == 0, result.stderr
     metadata = next((tmp_path / ".local/share/a-stock-agent/runtime").glob("*/a-stock-lib-install.json"))
     payload = json.loads(metadata.read_text(encoding="utf-8"))
@@ -55,11 +78,11 @@ def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
     assert len(payload["wheel_sha256"]) == 64
 
 
+@requires_lib_wheel
 def test_existing_skill_is_rejected_before_runtime_install(tmp_path) -> None:
-    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.5.0-py3-none-any.whl"
     target = tmp_path / ".agents/skills/a-stock-research"
     target.mkdir(parents=True)
-    result = _run(["--client", "codex", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", wheel], tmp_path, "")
+    result = _run(["--client", "codex", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", str(LIB_WHEEL)], tmp_path)
     assert result.returncode == 1
     assert not (tmp_path / ".local/share/a-stock-agent/runtime").exists()
 
