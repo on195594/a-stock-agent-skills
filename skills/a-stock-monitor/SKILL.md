@@ -33,7 +33,7 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 
 | ID | 必检项 | 完成标准 |
 |---|---|---|
-| C01 | 组合风险 | 明确总资产分母；输出单股权重、单股止损风险、组合止损风险 |
+| C01 | 组合风险 | 明确总资产分母；输出单股权重、当前净值至第二档线潜在回撤、组合潜在回撤；成本口径不一致时输出对账状态 |
 | C02 | 持仓框架 | 读取 `holdings.framework/framework_confident`；未知或`?`则停止框架专属动作 |
 | C03 | 活动预警 | `alerts <代码>`；逐项复核 active/pending/resolved 与到期日 |
 | C04 | 当日异动 | ≥3%或弱于行业≥2pts时取得同日公告和行业横截面 |

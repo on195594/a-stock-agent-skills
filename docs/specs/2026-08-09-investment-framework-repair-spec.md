@@ -78,3 +78,25 @@
 2. Research/Monitor/QA 契约测试固定上述路由、incomplete、风险预算和动作语义。
 3. 项目既有完整测试、Ruff、Skill validator、QA standalone smoke 与 diff check 全部通过。
 4. 基线 commit 为 `87a3757a231f4bdd9547141cba559e03b40ca33c`；回滚仅恢复本批修改文件，不执行 reset/rebase，不触碰生产状态。
+
+## 组合回撤与成本来源澄清（2026-08-10）
+
+用户在持仓截图分析及AGY只读复核后，明确授权修复canonical Skill源码。本批只修复
+术语和成本来源门禁，不改变风险公式、2%/8%启发式阈值、框架系数或交易动作。
+
+### 范围
+
+1. 将`股数 × max(现价−第二档止损价, 0) ÷ 当前组合总资产`明确命名为“当前净值至
+   第二档线潜在回撤”；说明其包含浮盈回吐，不是本金亏损或安全垫。
+2. 券商截图成本与本地`cost_price/reference_cost`不一致时，分别标明账户盈亏与规则
+   来源；在交易、费用、分红和公司行动对账完成前，不授权成本比例派生的交易。
+3. 绝对L3价格线须确认除权口径一致；不一致或无法核实时保持待核实。
+4. 增加一个聚焦契约测试，锁定术语和fail-closed门禁。
+
+### 非范围与验收
+
+- 不修改runtime、数据库schema、生产状态、cron、凭证、持仓或交易记录。
+- 不新增回测、券商接口、成本同步器或新的投资阈值。
+- 聚焦monitor契约测试、项目既有测试、Ruff、Skill validator、QA standalone smoke及
+  `git diff --check`全部通过；AGY复审不得把该回撤指标再解释为本金风险。
+- 基线commit为`a7d670d`；回滚仅恢复本批修改文件，不执行reset/rebase。

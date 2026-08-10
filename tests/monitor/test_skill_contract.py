@@ -9,6 +9,7 @@ CD_ACCUMULATION = (ROOT / "references" / "step3.5-cd-accumulation.md").read_text
     encoding="utf-8"
 )
 TIER_RULES = (ROOT / "references" / "step4-tier-system.md").read_text(encoding="utf-8")
+PORTFOLIO_RISK = (ROOT / "references" / "portfolio-risk.md").read_text(encoding="utf-8")
 DECISIONS = json.loads(
     (ROOT / "references" / "decision-table.json").read_text(encoding="utf-8")
 )
@@ -59,6 +60,13 @@ def test_add_risk_requires_portfolio_risk_preconditions():
         "not_in_drawdown_breach_state",
     }
     assert required <= set(by_id["D09"]["preconditions"])
+
+
+def test_portfolio_risk_names_drawdown_and_fails_closed_on_cost_drift():
+    assert "单股当前净值回撤贡献" in PORTFOLIO_RISK
+    assert "它不是买入本金亏损，也不是现价距离止损线的“安全垫”" in PORTFOLIO_RISK
+    assert "成本比例派生的止损/Tier只可展示来源，不得授权对应交易" in PORTFOLIO_RISK
+    assert "账户盈亏成本来源、规则参考成本来源及对账状态" in PORTFOLIO_RISK
 
 
 def test_thesis_break_outranks_stops_tiers_and_accumulation():

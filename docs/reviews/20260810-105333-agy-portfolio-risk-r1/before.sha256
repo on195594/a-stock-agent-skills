@@ -1,0 +1,4 @@
+d026047111eb4d283fd295ee5d99bd7098f7cff90fc986c51128c9b55ee7f7c7  skills/a-stock-monitor/SKILL.md
+5161360a5993be85a6fc0562d90d514281ccc2f60f6714e3de3463cef691ec5a  skills/a-stock-monitor/references/portfolio-risk.md
+856116660c97aff89f936c5a738deb2aa050d5f1c311fb8e36004850118b8602  tests/monitor/test_skill_contract.py
+33fd6e2e62767f3a3cd045010a07fda9205f837f7b938354b268189873745fb5  docs/specs/2026-08-09-investment-framework-repair-spec.md
