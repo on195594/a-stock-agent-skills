@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tomllib
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -101,6 +102,51 @@ def test_schema_migration_ledger_skips_done_work_but_applies_new_item(monkeypatc
         ).fetchone()
     assert 'future_field' in columns
     assert new_row == ('999-test-incremental-column',)
+
+
+def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None:
+    """An incremental release whose second migration dies must still self-heal.
+
+    Python's sqlite3 opens an implicit transaction only before DML, so the first
+    pending migration's DDL autocommits before any ledger INSERT exists to open a
+    transaction.  Its column therefore survives a failure later in the batch while
+    its ledger row does not, leaving the schema ahead of the ledger.  Recovery is
+    not atomicity -- it is `apply_column_migration` swallowing `duplicate column
+    name` when the ledger replays that item on the next run.
+    """
+    with cache.db_session():  # bring the fixture database to the current release
+        pass
+
+    released = list(cache.SCHEMA_MIGRATIONS)
+    good = ('998-test-recovery', 'ALTER TABLE stock_fundamentals ADD COLUMN recovery_field TEXT')
+    doomed = ('999-test-doomed', 'ALTER TABLE stock_fundamentals ADD COLUMN bad TEXT, NOT SQL')
+
+    monkeypatch.setattr(cache, 'SCHEMA_MIGRATIONS', [*released, good, doomed])
+    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED', False)
+    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED_PATH', '')
+    with pytest.raises(sqlite3.OperationalError):
+        with cache.db_session():
+            pass
+
+    probe = sqlite3.connect(cache.DB_PATH)
+    try:
+        columns = {row[1] for row in probe.execute('PRAGMA table_info(stock_fundamentals)')}
+        recorded = probe.execute(
+            'SELECT 1 FROM schema_migrations WHERE migration_id=?', (good[0],)
+        ).fetchone()
+    finally:
+        probe.close()
+    assert 'recovery_field' in columns, 'first pending DDL autocommits outside the ledger transaction'
+    assert recorded is None, 'its ledger row is rolled back with the rest of the batch'
+
+    # Replay without the doomed item: the duplicate column must not be fatal.
+    monkeypatch.setattr(cache, 'SCHEMA_MIGRATIONS', [*released, good])
+    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED', False)
+    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED_PATH', '')
+    with cache.db_session() as conn:
+        assert conn.execute(
+            'SELECT 1 FROM schema_migrations WHERE migration_id=?', (good[0],)
+        ).fetchone() == (1,)
 
 
 def test_project_version_is_single_release_source() -> None:

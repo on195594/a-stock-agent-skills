@@ -24,8 +24,12 @@ Trigger: 紫金矿业（601899）investment review, 2026-08-09, AGY with parent 
 - Development environment: documented `uv sync --frozen --inexact`; the plain form uninstalled the externally provisioned `a-stock-lib` and broke every runtime import.
 - Installer tests no longer depend on a warm host `uv` cache reachable through the relocated `HOME`, and locate `a-stock-lib` via `A_STOCK_LIB_SOURCE` instead of a hardcoded path, skipping when it is absent.
 - `a-stock-cache --help` now states the global `--confirm-write` gate and its W1 command list, and documents the four `retro-*` commands; a test keeps the text in sync with the command table.
+- A failed schema bootstrap no longer leaks the connection it opened. `get_db` closes it before re-raising, so the still-open ledger transaction cannot lock the database and mask the real migration error behind `database is locked`.
+- Pinned the migration ledger's real recovery contract: Python's sqlite3 opens an implicit transaction only before DML, so the first pending migration's DDL autocommits and can outlive a failure later in the batch. Recovery is the replay swallowing `duplicate column name`, not atomicity.
 
 ### Changed (2026-08-10 engineering repairs)
 
 - Added `scripts/check.sh` as the single repository gate; this repository has no git remote, so there is no hosted CI to be the source of truth.
 - Removed the superseded `apply_schema_migrations` duplicate and the redundant `_invoke` dispatch branch; the migration ledger's `apply_column_migration` is now the only column-migration path.
+
+Trigger: P0/P1 engineering repairs, 2026-08-10, AGY review with parent adjudication.

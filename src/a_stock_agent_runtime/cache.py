@@ -655,12 +655,20 @@ def get_db(timeout: float = 30.0) -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=timeout)
     conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
     if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != DB_PATH:
-        with _SCHEMA_LOCK:
-            if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != DB_PATH:
-                with schema_process_lock(DB_PATH):
-                    _bootstrap_database_schema(conn)
-                    _SCHEMA_INITIALIZED = True
-                    _SCHEMA_INITIALIZED_PATH = DB_PATH
+        try:
+            with _SCHEMA_LOCK:
+                if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != DB_PATH:
+                    with schema_process_lock(DB_PATH):
+                        _bootstrap_database_schema(conn)
+                        _SCHEMA_INITIALIZED = True
+                        _SCHEMA_INITIALIZED_PATH = DB_PATH
+        except BaseException:
+            # The caller never received this connection, so nothing else can close
+            # it.  A failed bootstrap leaves the ledger INSERT transaction open;
+            # leaking it here would lock the database and mask the real migration
+            # error behind "database is locked" for every later attempt.
+            conn.close()
+            raise
     return conn
 
 
