@@ -24,8 +24,8 @@ the source of truth for milestone state:
 
 ## Install or update
 
-Requirements: Python 3.13+, `uv`, and an explicit checkout or wheel for the
-independent `a-stock-lib` package. The installer itself uses only the Python
+Requirements: Python 3.13+, `uv`, and an explicit checkout or wheel for
+`a-stock-lib==0.5.0`. The installer itself uses only the Python
 standard library, so it can bootstrap the runtime:
 
 ```bash

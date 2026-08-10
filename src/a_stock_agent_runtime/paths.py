@@ -89,11 +89,3 @@ DEFAULT_ARTIFACT_DIR = artifact_dir()
 def configured_value(name: str, default: str = "") -> str:
     """Return a non-secret setting using CLI/env/config precedence upstream."""
     return _setting(name, default)
-
-
-# The renderer is an explicit external dependency.  No source checkout is
-# guessed; callers and the installer must set A_STOCK_LIB_ROOT when needed.
-A_STOCK_LIB_ROOT = Path(os.environ.get("A_STOCK_LIB_ROOT", "")).expanduser() if os.environ.get("A_STOCK_LIB_ROOT") else None
-PROMPT_RENDERER: Path | None = (
-    A_STOCK_LIB_ROOT / "scripts" / "render_prompts.py" if A_STOCK_LIB_ROOT else None
-)

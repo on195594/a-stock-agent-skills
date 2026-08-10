@@ -2,9 +2,9 @@
 title: 可移植 A 股 Agent Skills Suite 实施计划
 status: in_progress
 created: 2026-08-08
-updated: 2026-08-09
+updated: 2026-08-10
 current_milestone: M8_pending_confirmation
-release: v0.1.0
+release: v0.1.1
 spec: ../specs/2026-08-08-portable-a-stock-agent-skills-spec.md
 spec_alignment: reviewed
 execution_authorized: true
@@ -355,7 +355,7 @@ pythonpath = ["src"]
 target-version = "py313"
 ```
 
-`a-stock-lib` 暂不通过隐式 sibling source 解析。开发和 bootstrap 必须显式提供 `$A_STOCK_LIB_SOURCE` 构建出的可校验 wheel；installer 验证包名 `a-stock-lib`、版本 `0.4.1`、source commit 和 wheel hash。长期包源化按 Spec 后置，不阻塞本机迁移。
+`a-stock-lib` 暂不通过隐式 sibling source 解析。开发和 bootstrap 必须显式提供 `$A_STOCK_LIB_SOURCE` 构建出的可校验 wheel；installer 验证包名 `a-stock-lib`、当前版本 `0.5.0`、source commit 和 wheel hash。长期包源化按 Spec 后置，不阻塞本机迁移。
 
 若源测试包含共享 `tests/research/helpers.py`，在修改导入前将其移动为 `tests/helpers.py`，不保留两份副本。
 
@@ -366,8 +366,8 @@ cd "$SUITE"
 LIB_WHEEL_DIR=$(mktemp -d)
 uv build "$A_STOCK_LIB_SOURCE" --out-dir "$LIB_WHEEL_DIR"
 uv sync --all-groups
-uv pip install --python .venv/bin/python --no-deps "$LIB_WHEEL_DIR"/a_stock_lib-0.4.1-py3-none-any.whl
-uv run python -c "import importlib.metadata as m; assert m.version('a-stock-lib') == '0.4.1'"
+uv pip install --python .venv/bin/python --no-deps "$LIB_WHEEL_DIR"/a_stock_lib-0.5.0-py3-none-any.whl
+uv run python -c "import importlib.metadata as m; assert m.version('a-stock-lib') == '0.5.0'"
 uv run pytest tests/test_cli_contract.py tests/test_import_graph.py tests/test_paths.py tests/test_command_classification.py -q
 ```
 
@@ -471,41 +471,9 @@ uv run pytest tests/test_command_classification.py tests/test_side_effect_bounda
 
 分类测试必须枚举 `COMMANDS` 全集；每个 W1 至少验证缺少确认时退出码为 3 且 fixture DB hash 不变。
 
-## Task M2.4：修复 a-stock-lib renderer（独立仓库）
+## Task M2.4：prompt carrier 收口（已由 0.5.0 取代）
 
-**修改：**
-
-- `/home/lin/a-stock-lib/scripts/render_prompts.py`
-- `/home/lin/a-stock-lib/tests/test_render_prompts.py`
-- `/home/lin/a-stock-lib/README.md`（若记录调用方式）
-
-**合同：**
-
-- 删除 `/home/lin/.claude/skills/a-stock-research/SKILL.md` 默认常量；
-- `--skill-source` 为正常调用必填；
-- `A_STOCK_SKILL_SOURCE` 只作显式兼容覆盖；
-- 无有效 source 时非零退出；
-- 输出不得重新写入 `.claude` 路径。
-
-**验证：**
-
-```bash
-cd "$A_STOCK_LIB_SOURCE"
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -p no:cacheprovider tests/test_render_prompts.py -q
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -p no:cacheprovider tests -q
-ruff check scripts/render_prompts.py tests/test_render_prompts.py
-codex review --uncommitted
-```
-
-父级复核后：
-
-```bash
-git add scripts/render_prompts.py tests/test_render_prompts.py README.md
-git diff --cached --check
-git commit -m 'refactor: make skill source explicit in prompt renderer'
-```
-
-如 README 无变化，不得强行 add。
+`skills/` 是唯一 canonical prompt/Skill 源。`a-stock-lib 0.5.0` 已删除 fragments、manifest 和 renderer；runtime 不再解析 `A_STOCK_LIB_ROOT` 或调用外部 renderer。跨客户端安装由本仓库 installer 直接分发同一份 Skill 内容。
 
 ## Task M2.5：Runtime 全量门禁和提交
 

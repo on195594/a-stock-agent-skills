@@ -209,7 +209,7 @@ M2 必须原子完成包导入迁移：业务模块改用 `a_stock_agent_runtime
 
 默认 runtime 安装在 `~/.local/share/a-stock-agent/runtime/<release>/venv`，稳定 console scripts 链接到 `~/.local/bin/`。Installer 必须验证三个命令可由 `PATH` 发现；若 `~/.local/bin` 不在 `PATH` 中则失败并给出一次性修复提示，不允许 Skill 自行猜测 venv 路径。隔离测试通过临时 `HOME` 和 `PATH` 验证同一合同。
 
-`a-stock-lib/scripts/render_prompts.py` 必须取消 Claude 路径默认值和路径替换常量：renderer 接受必填 `--skill-source`，环境变量 `A_STOCK_SKILL_SOURCE` 只可作为显式兼容覆盖；未提供有效源文件时失败退出。对应测试必须使用临时 Skill source，不再断言 `/home/lin/.claude/skills`。
+`skills/` 是唯一 canonical prompt/Skill 源。自 `a-stock-lib 0.5.0` 起不再保留 prompt fragments、manifest 或 renderer；runtime 与 installer 不得通过 `A_STOCK_LIB_ROOT` 回读外部 prompt 源，三个客户端直接安装本仓库同一份 Skill 内容。
 
 ## 6. Agent Skills 兼容合同
 

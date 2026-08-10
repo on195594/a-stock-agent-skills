@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 import tomllib
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -14,7 +12,6 @@ import pytest
 from a_stock_agent_runtime import cache
 from a_stock_agent_runtime import fetcher
 from tests.helpers import valid_fundamentals_payload
-from a_stock_agent_runtime.paths import PROMPT_RENDERER
 
 
 MOAT = '护城河[评级=优；证据="客户留存率连续三年稳定";置信度=高]'
@@ -104,28 +101,6 @@ def test_schema_migration_ledger_skips_done_work_but_applies_new_item(monkeypatc
         ).fetchone()
     assert 'future_field' in columns
     assert new_row == ('999-test-incremental-column',)
-
-
-def test_agents_md_matches_canonical_prompt_renderer(tmp_path) -> None:
-    """Prompt changes fail closed if the generated cross-agent contract drifts."""
-    if PROMPT_RENDERER is None or not PROMPT_RENDERER.is_file():
-        pytest.skip('set A_STOCK_LIB_ROOT to run the external renderer contract')
-    skill_source = PROJECT_ROOT / 'skills' / 'a-stock-research' / 'SKILL.md'
-    result = subprocess.run(
-        [
-            sys.executable, str(PROMPT_RENDERER), 'agents_md',
-            '--output-dir', str(tmp_path),
-            '--skill-source', str(skill_source),
-        ],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    rendered = (tmp_path / 'AGENTS.md').read_text(encoding='utf-8')
-    assert rendered.startswith('# AGENTS.md')
-    assert '.claude/skills' not in rendered
 
 
 def test_project_version_is_single_release_source() -> None:

@@ -23,14 +23,14 @@ def _run(args, home, path):
 
 
 def test_dry_run_has_no_files(tmp_path) -> None:
-    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.4.1-py3-none-any.whl"
+    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.5.0-py3-none-any.whl"
     result = _run(["--client", "all", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", wheel, "--dry-run"], tmp_path, "")
     assert result.returncode == 0, result.stderr
     assert list(tmp_path.iterdir()) == []
 
 
 def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
-    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.4.1-py3-none-any.whl"
+    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.5.0-py3-none-any.whl"
     result = _run(["--client", "codex", "--mode", "copy", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", wheel], tmp_path, "")
     assert result.returncode == 0, result.stderr
     manifest = next((tmp_path / ".agents/skills/a-stock-research").glob(".a-stock-suite-manifest.json"))
@@ -51,12 +51,12 @@ def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
     metadata = next((tmp_path / ".local/share/a-stock-agent/runtime").glob("*/a-stock-lib-install.json"))
     payload = json.loads(metadata.read_text(encoding="utf-8"))
     assert payload["name"] == "a-stock-lib"
-    assert payload["version"] == "0.4.1"
+    assert payload["version"] == "0.5.0"
     assert len(payload["wheel_sha256"]) == 64
 
 
 def test_existing_skill_is_rejected_before_runtime_install(tmp_path) -> None:
-    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.4.1-py3-none-any.whl"
+    wheel = "/home/lin/a-stock-lib/dist/a_stock_lib-0.5.0-py3-none-any.whl"
     target = tmp_path / ".agents/skills/a-stock-research"
     target.mkdir(parents=True)
     result = _run(["--client", "codex", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", wheel], tmp_path, "")
