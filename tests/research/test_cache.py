@@ -785,9 +785,9 @@ def test_schema_migration_ignores_only_duplicate_column():
             raise sqlite3.OperationalError("duplicate column name: name")
 
         def commit(self):
-            raise AssertionError("commit should not run for duplicate-column errors")
+            raise AssertionError("the migration ledger owns commits, not this helper")
 
-    cache.apply_schema_migrations(DuplicateColumnConn())
+    cache.apply_column_migration(DuplicateColumnConn(), cache.SCHEMA_MIGRATIONS[0][1])
 
     class LockedConn:
         def execute(self, _sql):
@@ -797,7 +797,7 @@ def test_schema_migration_ignores_only_duplicate_column():
             raise AssertionError("commit should not run after failed execute")
 
     with pytest.raises(sqlite3.OperationalError, match="database is locked"):
-        cache.apply_schema_migrations(LockedConn())
+        cache.apply_column_migration(LockedConn(), cache.SCHEMA_MIGRATIONS[0][1])
 
 
 # ── update-return ──────────────────────────────────────────────────────────────

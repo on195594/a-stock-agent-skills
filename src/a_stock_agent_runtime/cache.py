@@ -2,6 +2,18 @@
 """
 A股投研数据缓存管理器
 用法：
+  cache.py [--confirm-write] <子命令> [参数...]
+
+写入安全边界（全局）：
+  --confirm-write 必须位于子命令之前。所有 W1（修改投资状态）子命令缺少该参数时
+  返回退出码 3，且不打开写事务；R0/R1 只读子命令不需要该参数。
+  W1：set / set-analysis / set-score / set-score-breakdown / set-flag / clear-flag /
+      alert-open / alert-pending / alert-resolve / l3-add / l3-update / tier-config /
+      tier-update / holding-framework / add-holding / buy-holding / sell-holding /
+      record-dividend / corporate-action / close-holding / retro-add / remove-holding /
+      update-return / cleanup / clear
+
+子命令：
   cache.py check <代码>                                  # 【推荐】一次性检查分析结论+基本面缓存状态
   cache.py get <代码>                                    # 获取基本面缓存数据
   cache.py set <代码> <名称> <行业> <JSON> [TTL]            # 写入基本面数据（TTL自动按行业推断）
@@ -27,6 +39,11 @@ A股投研数据缓存管理器
                                                         # 除权/送转，分离经济成本与规则参考成本
   cache.py close-holding <代码> <卖出价> [日期]           # 记录平仓（保留历史，用于评分验证）
   cache.py update-return <代码> <实际回报%>             # 卖出后记录实际回报（如 15.5 或 -8.2）
+  cache.py retro-add <代码> <error_tags> [--note 备注] [--thesis 买入理由] [--gap 框架改进建议]
+                                                        # 添加平仓复盘
+  cache.py retro-pending                                # 已平仓但尚未复盘的记录
+  cache.py retro-stats [框架名]                          # 复盘统计（按框架汇总错误标签）
+  cache.py retro-outliers [--loss N]                     # 亏损超阈值且未复盘的记录（默认 10）
   cache.py holdings                                     # 显示在仓持股 + 已平仓历史（含盈亏%）
   cache.py position-return <代码> [当前价]               # 交易事件口径总回报
   cache.py remove-holding <代码>                        # 彻底删除持仓记录（慎用）
@@ -225,17 +242,24 @@ def get_stop_loss_pct(framework: str) -> tuple[float, float]:
     return DEFAULT_STOP_LOSS_PCT
 
 
-def apply_schema_migrations(conn: sqlite3.Connection) -> None:
-    """Apply additive schema migrations, ignoring only duplicate-column cases."""
-    for _, col_def in SCHEMA_MIGRATIONS:
-        try:
-            conn.execute(col_def)
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            if 'duplicate column name' in str(e).lower():
-                continue
-            logger.exception("Schema migration failed: %s", col_def)
-            raise
+def apply_column_migration(conn: sqlite3.Connection, sql: str) -> None:
+    """Add one column, ignoring only the already-applied duplicate-column case.
+
+    Swallowing ``duplicate column name`` is the recovery mechanism, not a
+    convenience.  Python's sqlite3 opens an implicit transaction only before DML,
+    so this DDL autocommits immediately while the ledger INSERT that records it
+    does not.  A batch that dies midway therefore leaves columns on disk that the
+    ledger still reports as pending, and the next run replays them; this branch is
+    what makes that replay idempotent.  Do not "tidy" it away, and do not add a
+    commit here -- the ledger owns commits.
+    """
+    try:
+        conn.execute(sql)
+    except sqlite3.OperationalError as exc:
+        if 'duplicate column name' in str(exc).lower():
+            return
+        logger.exception('Schema migration failed: %s', sql)
+        raise
 
 
 def _create_core_tables(conn: sqlite3.Connection) -> None:
@@ -606,17 +630,9 @@ def _bootstrap_database_schema(conn: sqlite3.Connection) -> None:
     ledger below is the cross-process guard: normal one-command CLI invocations
     must not rerun DDL, legacy backfills or migration probes on every startup.
     """
-    def apply_column_migration(sql: str) -> None:
-        try:
-            conn.execute(sql)
-        except sqlite3.OperationalError as exc:
-            if 'duplicate column name' not in str(exc).lower():
-                logger.exception('Schema migration failed: %s', sql)
-                raise
-
     migrations = [('001-core-tables', lambda: _create_core_tables(conn))]
     migrations.extend(
-        (migration_id, lambda sql=sql: apply_column_migration(sql))
+        (migration_id, lambda sql=sql: apply_column_migration(conn, sql))
         for migration_id, sql in SCHEMA_MIGRATIONS
     )
     migrations.extend([
@@ -1787,7 +1803,7 @@ def _print_closed_holdings(
             print(f"\n  已平仓统计：无可核验事件账本（共 {len(closed_rows)} 笔）")
 
 
-def cmd_holdings() -> None:
+def cmd_holdings(args: list[str] | None = None) -> None:
     """显示持仓列表：在仓持股 + 已平仓历史（含盈亏%，用于验证评分准确性）"""
     with db_session() as conn:
         # Lazy compatibility migration for legacy rows imported after process
@@ -2308,7 +2324,7 @@ def cmd_retro_add(args: list[str]) -> None:
     print(f"复盘已记录：{code} | 标签:{error_tags} | 实际回报:{actual_return_pct:+.1f}%{inferred_note}")
 
 
-def cmd_retro_pending() -> None:
+def cmd_retro_pending(args: list[str] | None = None) -> None:
     """显示已平仓但尚未复盘的记录。用法：retro-pending"""
     with db_session() as conn:
         _backfill_holding_metadata(conn)
@@ -2767,7 +2783,7 @@ def _evaluate_holding_status(
     return label, status, is_alert
 
 
-def cmd_check_holdings() -> None:
+def cmd_check_holdings(args: list[str] | None = None) -> None:
     """持仓止损检查：对比当前价与15%/20%止损线，主动预警（P3-4）。
     区分盘中现价/收盘价/上一交易日陈旧行情三种口径，非交易时段拿到隔夜收盘价
     时只输出观察提醒、不触发同等级止损预警（见 PITFALLS.md [BUG-006]）。
@@ -3447,7 +3463,7 @@ def cmd_watchlist(args: list[str] | None = None) -> None:
             print(_format_breakdown_line(row['score_breakdown']))
 
 
-def cmd_list() -> None:
+def cmd_list(args: list[str] | None = None) -> None:
     """列出所有缓存内容（含过期）"""
     today = cst_today()
     with db_session() as conn:
@@ -3486,7 +3502,7 @@ def cmd_list() -> None:
         print(f"  {display_name}({code}) [{status}]{score_str}{breakdown_str}{flag_icons} 创建:{format_timestamp_cst(created_at)}")
 
 
-def cmd_cleanup() -> None:
+def cmd_cleanup(args: list[str] | None = None) -> None:
     """清除所有过期的缓存条目"""
     with db_session() as conn:
         stocks = conn.execute(
@@ -3695,15 +3711,6 @@ COMMAND_CLASSIFICATION = {
 }
 
 
-def _invoke(command: str, args: list[str]) -> None:
-    if command in ('watchlist', 'portfolio-risk'):
-        COMMANDS[command](args)
-    elif command in ('list', 'cleanup', 'holdings', 'check-holdings', 'retro-pending'):
-        COMMANDS[command]()
-    else:
-        COMMANDS[command](args)
-
-
 def main(argv: list[str] | None = None) -> int:
     global _READ_ONLY_REQUEST
     args = list(sys.argv[1:] if argv is None else argv)
@@ -3738,7 +3745,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f'[a-stock-cache] 操作数据库: {DB_PATH}', file=sys.stderr)
     try:
         _READ_ONLY_REQUEST = classification == 'R0'
-        _invoke(command, remaining)
+        COMMANDS[command](remaining)
     except SystemExit as exc:
         return int(exc.code or 0)
     except sqlite3.Error as exc:
