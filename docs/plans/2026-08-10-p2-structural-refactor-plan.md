@@ -7,184 +7,253 @@ spec: none
 spec_rationale: 纯工程重构，不含投资规则变更，故不适用 AGENTS.md 的 dated-spec 要求
 execution_authorized: false
 risk_tier: active-layer
-review: AGY r1 (REQUEST_CHANGES → 已按裁决修订)
-baseline_commit: 9db1675
+review: AGY r2 + Codex adversarial (REQUEST_CHANGES → addressed)
+baseline_commit: 9ad3b8e
 ---
 
 # P2 结构性重构计划
 
-> 本计划不构成实施授权。与 `2026-08-08-portable-a-stock-agent-skills-implementation-plan.md` 同例：需用户一次明确的"开始实施"表述，且可按 Phase 分别授权。
+> 本计划不构成实施授权。仓库内 Phase 0-3 可由用户一次明确的“开始实施 P2”授权；Phase 4 涉及创建仓外 Git 仓和删除本仓 tracked 文件，必须另行明确授权。
 
-## 1. 背景
+## 1. 背景与当前基线
 
-P0/P1 修复已于 2026-08-10 落地（`a21e217` 安装测试与 uv sync、`d5256b6` cache.py 死代码清理、`9db1675` schema bootstrap 连接泄漏）。本计划处理第一轮工程审查识别、但当时明确推迟的结构性债务：
+P0/P1 修复和 `v0.1.1` 发布已完成。本计划只处理结构性工程债务，不改变投资规则、数据库 schema、生产 cron、active Skill 入口或外部通知策略：
 
-- `cache.py` 3767 行、102 个顶层定义，一个文件里同时住着 schema 迁移、连接管理、领域规则、40 个 CLI 命令和分发逻辑；
-- CLI 参数为手写解析，40 个命令**无一检查位置参数上限**，`cleanup 600519` 这类误用被静默忽略；
-- `docs/reviews/` 247 个 tracked 文件占 docs 目录约 79%，是 AI 审查执行产物，持续膨胀源码仓。
+- `src/a_stock_agent_runtime/cache.py` 为 3769 行，混合 schema、连接管理、领域规则、40 个 CLI 命令和分发逻辑；
+- 40 个命令使用手写参数解析，位置参数上限不统一，`cleanup 600519` 等误用可被静默忽略；
+- `docs/reviews/` 有 247 个 tracked 文件，未来继续把执行产物提交到源码仓会持续膨胀。
 
-### 1.1 用户决策记录
+开工基线固定为：
 
-四个岔路口，用户在看过实测数据后均选最激进路径。其中两项（拆分与迁移同批、`add-holding` 改语义）制定方曾建议更保守方案并被明确否决；本计划因此以"把已接受的风险做可控"为设计目标，而非降低风险本身。
+| 项目 | 基线 |
+|---|---:|
+| Git commit | `9ad3b8e` |
+| pytest collected | 615 |
+| `tests/**/*.py` 中 `assert` token | 941 |
+| 全仓 `cache.cmd_*()` 测试调用 | 276（其中五个 research 文件 275） |
+| `monkeypatch.setattr(cache, ...)` | 46 |
+| `DB_PATH` monkeypatch | 14 |
 
-| 决策点 | 用户选择 |
+生产数据库是活动状态。计划和测试不得读取、写入、哈希比较或依赖生产数据库内容；生产 writer、cron 和 active client 不属于本计划授权范围。
+
+### 1.1 用户决策与审查修订
+
+| 决策点 | 最终范围 |
 |---|---|
-| CLI 参数 | 全量迁移到 argparse subparsers，275 处 `cache.cmd_*()` 测试调用点重写 |
-| `add-holding` 位置备注 | 改为显式 `--notes`，同批更新 skills |
-| `cache.py` 拆分 | 与 argparse 迁移同一批完成 |
-| `docs/reviews/` | 全部移出到独立 evidence 仓 |
+| CLI 参数 | 全量迁移到 argparse subparsers；保留业务函数直接单测，不再重写 276 处调用 |
+| `add-holding` 备注 | 改为显式 `--notes`，同步修改 Skill、帮助和相关测试 |
+| `cache.py` 拆分 | 与 argparse 属于同一工作批次，但按独立 commit 和可回滚子阶段推进 |
+| `docs/reviews/` | 迁到独立 evidence 仓，但作为 Phase 4 单独授权、校验和回滚 |
 
-### 1.2 决定计划形状的事实
+AGY r2 与 Codex 对抗复核确认并修正了四项关键事实：
 
-真实生产库是活的：`~/.local/share/a-stock-agent/cache.db`，22 MB，**8 条持仓 / 16 条交易事件 / 177 条分析**，2026-08-10 13:22 仍在写入。
+1. 无条件生产 DB 硬拦截会让正常 CLI/cron 默认失败，禁止实施；
+2. `cache.requests` 与 `market_quotes.requests` 是同一模块对象，现有 patch 有效，不得按“空气 patch”删除；
+3. `set-flag --confirm-write ...` 当前返回 3，不是 2；
+4. 让测试改走 `main(argv)`不能解决拆模块后的 monkeypatch 绑定失效。
 
-当前 55 处 `monkeypatch.setattr(cache, ...)` 中，`DB_PATH`(13处)、`_create_core_tables`、`SCHEMA_MIGRATIONS`、`_SCHEMA_INITIALIZED*` 是在 `get_db` / `_bootstrap_database_schema` 内部按模块全局解析的。**一旦这些函数搬到新模块，补丁不会报错，会变成静默空操作，测试转而写入真实持仓账本。** 这是本计划唯一的破坏性失败模式，因此 Phase 0 不可跳过、不可与后续阶段合并。
+## 2. 硬约束
 
-## 2. 硬约束（任何阶段不得违反）
+1. **生产行为不变。** 不新增 `A_STOCK_ALLOW_PRODUCTION_DB` 等逃生阀，不在生产代码中判断 `PYTEST_CURRENT_TEST`，正常 CLI 和 cron 不需要新增环境变量。
+2. **测试强度不降。** collected tests 不低于 615、`assert` token 不低于 941；不得删除原业务断言来换取计数通过。新增参数化测试可以增加基线，不能替代原业务测试。
+3. **W1 门保持严格。** `--confirm-write` 只能位于子命令前。现行契约是：W1 缺少或错放该 flag 返回 3；未知的前置全局 `--*` 返回 2；均不得打开写事务。
+4. **Skill 与 sentinel 保持。** 唯一已授权的 CLI 语义变化是 `add-holding --notes`。受保护输出包括 Research cache sentinel、`check-holdings` 图标、checklist 档位与非零退出码、L3 空状态和 holdings 止损列。
+5. **入口保持。** `a-stock-cache = "a_stock_agent_runtime.cache:main"` 不变，`cache.py` 保留 `main`。
+6. **Patch 必须迁到真实 owner。** 禁止依赖 `cache.__getattr__` 等无法转发模块属性赋值的动态代理；每次提取模块时同步迁移相应 patch，并验证 mock 确实改变被测行为。
+7. **阶段独立。** 每个 Phase 独立 commit；Phase 3a/3b/3c 也分别提交。门禁失败时不进入下一阶段。
+8. **外部状态单独授权。** Phase 4 的仓外创建、复制和本仓 tracked 文件删除不得由 Phase 0-3 的仓库内实施授权推导。
 
-1. **测试数量与断言不得净减少。** 275 处是业务行为测试（写库、算收益、判止损），不是参数解析测试。逐个转换、保留原断言，禁止"删掉重写一批新的"。
-   把关方式：`pytest --collect-only` 的用例数**和** `tests/` 下 `assert` 总数都不得下降。仅数用例数无法发现"用例还在、断言被削弱"，这正是本约束要防的失败模式。
-2. **`--confirm-write` 的前置严格性不得放宽。** 现状：必须位于子命令之前，其他前置 `--` 一律 exit 2。argparse subparsers 的自然行为会允许它出现在子命令之后——这是把唯一的写保护门从"位置严格"放宽为"位置随意"，必须显式禁止并留测试。
-3. **`skills/` 的调用形式与输出 sentinel 不得改变**，唯一例外是本批授权的 `add-holding --notes`。受保护的 sentinel：`ANALYSIS_HIT` / `FUNDAMENTALS_HIT` / `FULL_MISS` / `ANALYSIS_PRICE_STALE`、`check-holdings` 的 `🔴`/`⚠️`、`checklist` 的 `达优/达格/未达/数据缺失` 与非零退出码、`l3-list` 的 `无结构化L3条件`、`holdings` 的 `stop_loss_15`/`stop_loss_20` 列。
-4. **console script 入口不变**：`pyproject.toml` 的 `a-stock-cache = "a_stock_agent_runtime.cache:main"`，`cache.py` 必须保留 `main`。
-5. **每个 Phase 独立 commit**，前一个 Phase 的门禁不过不进入下一个。用户要求"同一批做完"指一个工作批次，不是一个 commit——分阶段提交是让回归可二分定位的唯一手段。
+## 3. Phase 0：测试 DB 隔离与只读访问基线
 
-## 3. Phase 0：安全网（前置，独立提交）
+目标：消除模块搬迁时测试误写生产数据库的路径，同时不污染或封禁生产运行时。
 
-目标：让"补丁静默失效"从静默变成响亮失败。**必须在任何模块搬迁之前完成。**
+### 3.1 测试侧隔离
 
-- **主防线：在 `get_db` 内硬拦截生产库。** 解析出的路径若等于 `paths.cache_db_path()` 的真实默认值，且未显式设置逃生阀 `A_STOCK_ALLOW_PRODUCTION_DB=1`，直接 `raise RuntimeError`。这条防线在连接建立处生效，覆盖直接调用、`main()` 调用和子进程调用三条路径，不依赖任何 fixture 是否被正确写下。
-  不采用"整轮结束比对生产库 sha256"作为主防线：生产库在测试期间可能被 cron 或用户正常写入，该校验会误报；一个会误报的守卫最终会被关掉。可保留为 session 级软告警，但不作为门禁。
-- 新建 `tests/conftest.py`（当前不存在）：autouse function 级 fixture，默认把 `CACHE_DB_PATH` 指向 `tmp_path`，使"忘记隔离"的默认行为是安全的而非危险的。
-- `src/a_stock_agent_runtime/cache.py`：`DB_PATH` 由 import 时绑定改为调用时解析。`paths.py:37` 的注释本就声称环境在调用时解析，代码却在 `paths.py:82-86` 和 `cache.py:97` 于 import 时求值——这是既有的注释与实现矛盾。复用现成的 `paths.cache_db_path()`。
-- 同步把 13 处 `monkeypatch.setattr(cache, 'DB_PATH', ...)` 改为 `monkeypatch.setenv('CACHE_DB_PATH', ...)`；env 方案对后续模块搬迁天然免疫，且已实测会传播到子进程。
-- `src/a_stock_agent_runtime/fetcher.py:855-885`：`_lookup_cached_industry` / `_lookup_cached_name` 惰性 `from ...cache import DB_PATH` 后自开 `sqlite3.connect`，绕过 `get_db`（无 schema bootstrap、无只读模式），且整体裹在 `except Exception: return None` 里——导入一旦失败会静默降级。收窄为具体异常，改用 `db.db_session()`。
+- 新建根 `tests/conftest.py`，用 autouse function fixture 将 `CACHE_DB_PATH` 设置为当次 `tmp_path / "cache.db"`；fixture 记录设置前的外部默认路径，并在测试结束前断言当前解析路径不是该外部路径。
+- `CACHE_DB_PATH` 必须在每个测试调用运行时代码前生效，并自然传播给测试创建的子进程。
+- `cache.py` 不再在 import 时绑定 `DB_PATH`；所有连接和 CLI 路径展示统一在调用时通过 `paths.cache_db_path()` 解析。
+- 将 14 处 `monkeypatch.setattr(cache, "DB_PATH", ...)` 改为 `monkeypatch.setenv("CACHE_DB_PATH", ...)`。
+- 在 `tests/test_side_effect_boundaries.py` 增加测试侧守卫回归：fixture 路径位于 pytest 临时目录，R0/W1/子进程均不能解析到记录的外部默认路径。
 
-**门禁**：全量 `bash scripts/check.sh` 通过；故意删掉某处 `CACHE_DB_PATH` 隔离，确认测试**红**而不是绿。
+不实现以下方案：
 
-## 4. Phase 1：测试改走 `main(argv)`（独立提交）
+- 在 `get_db()` 无条件封禁默认 DB；
+- `A_STOCK_ALLOW_PRODUCTION_DB=1` 逃生阀；
+- 在生产模块中检测 pytest 环境变量；
+- 用活动生产库 SHA256 作为测试门禁。
 
-这是让 argparse 迁移变安全的关键一步，先于 Phase 2。
+### 3.2 显式只读会话
 
-- **前置：在 `tests/helpers.py` 增加 `cli_runner(argv) -> (code, stdout, stderr)`**，统一封装 `cache.main()` 调用与 stdio 捕获。`main()` 已在 `cache.py:3757` 捕获 `SystemExit` 并返回 int，因此不需要额外的退出拦截；helper 的价值是让 275 处转换有统一写法、且 stderr 断言不被漏写。
-- 把 5 个测试文件里 275 处 `cache.cmd_xxx([...])` 逐个转换为 `cli_runner([...])` 或 `cli_runner(['--confirm-write', ...])`，`pytest.raises(SystemExit)` 改为断言返回码。
-- **强制保留原有的具体中文 stderr 文本断言**（如 `'成本价必须为数字'`、`'股数必须大于0'`）。只断言返回码会让任何未预期的崩溃（`AttributeError`/`KeyError`）被误判为通过——退出码 1 无法区分"业务校验拒绝"和"代码崩溃"。每个原本断言消息文本的用例，转换后必须仍断言同一文本。
-- 文件与当前调用数：`tests/research/test_cache.py`(155)、`test_missing_coverage.py`(51)、`test_edge_cases.py`(46)、`test_p0_contracts.py`(17)、`test_concurrency_resilience.py`(6)。
-- 附带收益：现有测试**从不经过写确认门**，转换后每个 W1 用例都必须显式带 `--confirm-write`，安全边界首次被覆盖。
-- 例外：`cmd_close_holding` 内部对 `cmd_sell_holding([...], single_lot=True)` 的调用（`cache.py:2210`）是生产代码路径，不属于本阶段，留到 Phase 2 一并改。
+- 先在现有 DB 层提供 `read_only_db_session()`：使用 SQLite URI `mode=ro`，不创建目录、不 bootstrap schema、不执行 backfill。
+- `fetcher.py` 的 `_lookup_cached_industry` / `_lookup_cached_name` 继续 fail-soft，但改用该显式只读会话；只捕获“数据库不存在、表不存在、连接失败”等预期 SQLite/文件异常，不吞掉导入和编程错误。
+- Phase 3 创建 `db.py` 后再把该 helper 原样迁入；Phase 0 不引用尚不存在的 `db.py`。
 
-**门禁**：用例数与 `assert` 总数均 ≥ 转换前（开工前先记录两个基线数字）；`bash scripts/check.sh` 通过。
-
-## 5. Phase 2：argparse subparsers（独立提交）
-
-- 每个命令一个 subparser。自定义 `ArgumentParser` 子类覆写 `error()`，输出中文并 `sys.exit(1)`，以保持现有退出码与消息契约（`test_edge_cases.py:52-55` 等断言 `'成本价必须为数字'`）。
-- 复用现有 `_parse_cli_finite_float`（`cache.py:693`）作为 `type=` 回调，中文消息一字不改。
-- **全局 `--confirm-write` 不进 subparser**：继续由 `main` 在分发前手工剥离并校验位置，保留"仅允许前置"与 exit 2/3 语义（约束 2）。
-- `add-holding` 改为 `<代码> <成本价> [股数] [--notes 备注]`，删除 `cache.py:1592` 的 `.isdigit()` 启发式；同批更新 `skills/a-stock-monitor/SKILL.md:61,143-144`、`skills/a-stock-monitor/references/data-operations.md:14-15` 和 `cache.py` docstring:31。传播面已全仓 grep 核实为仅此三处（CHANGELOG 中的提及为历史散文；cron 脚本只用 `check-holdings`；`policy_replay.py` 与 runtime 零耦合）。
-- `--help` 契约：模块 docstring 目前是 `--help` 的输出，且被 `tests/test_command_classification.py` 的两个测试钉住（P1 新增）。改为由 argparse 生成 help 后，这两个测试须重写为断言"每个命令与 `--confirm-write` 出现在 `parser.format_help()` 中"——**契约保留，实现改变**。
-- 删除死代码：`check = cmd_check` 别名（`cache.py:3649`，全仓零导入方）。
-- 核实 `requests` 顶层导入（`cache.py:77`，`# noqa: F401`）：真实 HTTP 在 `market_quotes.py`，14 处 `monkeypatch.setattr(cache.requests, 'get', ...)` 可能已在打空气。逐个确认是否仍有断言效力，无效则连同导入一并删除。
-
-**门禁**：`bash scripts/check.sh` 通过；`uv run a-stock-cache --help` 人工核对；用 `skills/` 里每一条已文档化的调用形式做一遍冒烟（含 heredoc 形式的 `set-analysis`）。
-
-## 6. Phase 3：cache.py 拆分（独立提交，可再分为 3a/3b）
-
-目标布局（`cache.py` 保留为 CLI 入口以维持 console script）：
-
-| 模块 | 内容 | 约行数 |
-|---|---|---|
-| `cache.py` | parser 定义、`COMMANDS`、`COMMAND_CLASSIFICATION`、`main` | ~700 |
-| `db.py` | `get_db` / `db_session` / 路径解析 / 只读标志 | ~130 |
-| `schema.py` | `SCHEMA_MIGRATIONS`、建表、backfill、`_bootstrap_database_schema` | ~420 |
-| `domain.py` | 时间/TTL、框架推断、止损系数、纯校验器、止损状态判定 | ~330 |
-| `store.py` | 数据访问 helper（基本面、快照、`get_watchlist_rows`） | ~450 |
-| `commands_*.py` | 按表分组的 `cmd_*`（analysis / holdings / monitor / admin） | ~2500 |
-
-关键处理：
-
-- `_READ_ONLY_REQUEST` 是唯一真正跨桶的全局（`main` 写、`get_db` 读）→ 改为 `db.set_read_only(bool)`。`_SCHEMA_INITIALIZED*` 只在 `get_db` 内读写，随 `db.py` 走，无需穿线。
-- **打破循环依赖**：`checklist.py:12` 顶层 `import cache`，只为 `checklist.py:388` 的 `cache.get_fundamentals`；改为 `from a_stock_agent_runtime import store`。随后可删除 `infer_framework`(`cache.py:222`) 与 `get_stop_loss_pct`(`cache.py:238`) 里为规避循环而写的两处惰性 import。
-- `_backfill_holding_metadata` 既是 ledger 迁移 `025`，又被 4 个 `cmd_*` 当防御性重跑调用（`cache.py:1819/2285/2338/2433`）→ `commands_holdings.py` 需 import `schema.py`，这是本次拆分唯一的"命令层依赖迁移层"边，接受并注释说明。
-- 先拆最安全的三块（止损状态判定 56 行、时间/TTL 36 行、纯校验器 ~150 行），验证通过后再拆 schema 那 399 行。
-
-**门禁**：每个子步骤后 `bash scripts/check.sh` 通过；`tests/test_import_graph.py` 扩展为断言新模块无循环导入，并**显式禁止 `commands_*.py` 反向 `import cache`**（依赖必须严格单向：`cache.py` → `commands_*` → `store`/`schema`/`db`/`domain`）；Phase 0 的生产库硬拦截必须始终生效。
-
-## 7. Phase 4：docs/reviews 迁出（独立提交）
-
-- 247 个 tracked 文件迁至独立 git 仓（建议 `~/a-stock-agent-evidence`），本仓 `docs/reviews/` 只留一个 `README.md` 索引说明去向与查阅方式。
-- 更新四个引用方：`docs/README.md`、`docs/migration/README.md`、`docs/plans/2026-08-08-*.md`、`docs/specs/2026-08-08-*.md`。
-- `AGENTS.md` 增加一条：新增审查证据写仓外，不进源码仓。
-- 顺带修两处已确认的文档错误：`docs/operations.md:51-55` 说 "append the global `--confirm-write` flag"，与前置强制的实现矛盾；`skills/a-stock-monitor/references/backtest.md:22-25` 指向不存在的 `tools/policy_replay.py`（实际在 `skills/a-stock-monitor/scripts/policy_replay.py`）。
-
-**门禁**：`uv run python scripts/validate.py` 通过（它会检查 skills 内引用的相对路径存在）；全仓 grep 无悬空 `docs/reviews/` 链接。
-
-## 8. 验证
-
-每个 Phase 结束后执行：
+### 3.3 Phase 0 门禁
 
 ```bash
-bash scripts/check.sh          # pytest + ruff + validate + qa smoke + cron smoke
+PYTHONDONTWRITEBYTECODE=1 uv run pytest \
+  tests/test_paths.py \
+  tests/test_cli_contract.py \
+  tests/test_side_effect_boundaries.py \
+  tests/research/test_fetcher.py -q
+bash scripts/check.sh
 ```
 
-Phase 特有的额外验证：
+额外断言：正常非 pytest 环境解析默认路径时不会因为测试守卫抛错；测试和测试子进程解析出的路径均为临时路径。
+
+## 4. Phase 1：冻结 CLI 与 W1 契约
+
+目标：在引入 argparse 前，用少量入口契约测试固定现行行为；保留 276 处业务函数直接调用。
+
+- 不新增 `cli_runner`，不把 `cache.cmd_*()` 业务单测批量改成 `main(argv)`。
+- 扩展 `tests/test_cli_contract.py`：从 `COMMAND_CLASSIFICATION` 参数化覆盖全部 W1 命令，断言缺少前置确认时返回 3、输出中文提示且不打开数据库。
+- 固定 `--confirm-write` 位置契约：
+  - `a-stock-cache set-flag --confirm-write ...` → 3；
+  - `a-stock-cache --bogus set-flag ...` → 2；
+  - 只有 `a-stock-cache --confirm-write set-flag ...` 才进入子命令参数验证。
+- 为 40 个命令建立 parser 输入矩阵：最短合法 argv、最长合法 argv、额外位置参数、未知 option。Phase 1 记录当前预期，Phase 2 复用同一矩阵验证 argparse。
+- 原来断言具体中文错误文本的用例继续直接调用业务函数并保留原断言。
+
+**门禁**：focused CLI tests 与 `bash scripts/check.sh` 全部通过；记录更新后的 collected/assert 基线。
+
+## 5. Phase 2：argparse subparsers
+
+- 每个命令一个 subparser。自定义 `ArgumentParser.error()` 只负责 argparse 自身错误；现有业务校验函数继续输出原中文文本和退出码。
+- `main()` 在 argparse 分发前手工处理全局 `--confirm-write`，严格保持 Phase 1 固定的 2/3 退出码契约。
+- 每个 subparser 明确位置参数上限；额外参数和未知 option 必须失败，不再静默忽略。
+- `add-holding` 改为 `<代码> <成本价> [股数] [--notes 备注]`，删除 `.isdigit()` 推断备注的语义。同步更新：
+  - `cache.py` help/docstring；
+  - `skills/a-stock-monitor/SKILL.md`；
+  - `skills/a-stock-monitor/references/data-operations.md`；
+  - `tests/research/test_edge_cases.py` 的位置备注测试；
+  - 全仓检索发现的其他非历史调用。
+- `--help` 改由 argparse 生成，测试必须断言全部命令、全局确认门和每个子命令 help 可发现。
+- 不在本阶段清理 `cache.requests` 或 `check = cmd_check`；它们与 argparse 验收无关，留待真实 owner 迁移时处理。
+
+**门禁**：
 
 ```bash
-# Phase 0：确认硬拦截真的会响
-uv run python -c "from a_stock_agent_runtime import db; db.get_db()"   # 期望 RuntimeError
-uv run pytest tests/research/test_cache.py -q                          # 期望绿
-# 再手工删掉某处 CACHE_DB_PATH 隔离，期望红而不是静默写真实库
-
-# Phase 1/2：测试规模与断言强度都不得缩水
-uv run pytest --collect-only -q | tail -1                     # 用例数，与转换前比对
-grep -rc "assert " tests/ | awk -F: '{s+=$2} END {print s}'   # 断言数，与转换前比对
-
-# Phase 2：CLI 契约冒烟（临时库，不碰真实状态）
-export CACHE_DB_PATH=$(mktemp -d)/smoke.db
+uv run pytest tests/test_cli_contract.py tests/test_command_classification.py \
+  tests/research/test_edge_cases.py -q
 uv run a-stock-cache --help
-uv run a-stock-cache set-flag 000001 yellow x ; echo "期望 3，实际 $?"
-uv run a-stock-cache set-flag --confirm-write 000001 yellow x ; echo "期望 2（门必须前置），实际 $?"
-uv run a-stock-cache bogus ; echo "期望 1，实际 $?"
-
-# Phase 3：无循环导入
-uv run python -c "import a_stock_agent_runtime.cache, a_stock_agent_runtime.checklist"
-
-# 全程：真实持仓库未被触碰（软校验，生产写入会造成误报，仅参考不作门禁）
-sha256sum ~/.local/share/a-stock-agent/cache.db
+bash scripts/check.sh
 ```
 
-## 9. 一处必须记录的权衡更正
+此外，用 `skills/` 中每一种文档化调用形式在临时数据库和通知禁用环境下冒烟，包括 `set-analysis` heredoc 与 `add-holding --notes`。
 
-制定方在向用户呈报时，曾把"测试改走 `main(argv)` 后写确认门首次被覆盖"作为接受全量 argparse 迁移的理由之一。AGY 复审指出、制定方确认：**该安全收益完全由 Phase 1 提供，与 argparse 无关。** Phase 1 单独做完即可拿到全部覆盖收益。
+## 6. Phase 3：cache.py 分步拆分
 
-因此 Phase 2 的实际依据只剩用户偏好，其可量化收益为：40 个命令统一的参数上限校验、每子命令自带 `--help`、删除约 150 行手写解析；成本为 275 处测试改写风险 + `add-holding` 语义变更传播到 live skill。此前已实测推翻"可净删几百行"的说法（实际仅 4 处手写循环，40 个命令中仅约 7 个带 flag，115 个 `sys.exit(1)` 绝大多数是业务校验而非参数解析）。
+目标依赖方向：
 
-用户已在知情下选择全量迁移，计划按此执行；此处仅确保该权衡被明确记录，而非隐含在"安全收益"的表述里。
+```text
+cache.py → commands_* → store / schema / db / domain
+checklist.py → store / domain
+```
 
-## 10. AGY 复审记录（r1，2026-08-10）
+禁止 `commands_*.py` 反向 import `cache`。跨模块 helper 使用模块限定调用，例如 `import domain; domain.utc_now()`，避免 `from domain import utc_now` 的早绑定使 monkeypatch 静默失效。
 
-Verdict：`REQUEST_CHANGES`，4 个 blocking。只读校验通过（计划文件 sha256 前后一致）。裁决如下，原始产物未入本仓（依 Phase 4 决策，评审证据不再写入源码仓）。
+### 6.1 Phase 3a：纯叶子领域逻辑
 
-| # | AGY 主张 | 裁决 | 依据 |
-|---|---|---|---|
-| B1a | session 级 sha256 会被生产库并发写入误报 | **采纳** | 会误报的守卫最终会被关掉；改为 `get_db` 内硬拦截 |
-| B1b | fixture 环境变量不传播到子进程 | **驳回** | 实测 `monkeypatch.setenv` 正常传播；`setattr`→`setenv` 恰是子进程隔离的修复手段 |
-| B2 | 断言改返回码会丢失中文 stderr 断言 | **采纳** | 计划真实疏漏，已加硬性保留要求 |
-| B3 | `sys.exit(1)` 会击穿 pytest 进程 | **驳回** | `cache.py:3757` 已 `except SystemExit: return int(...)`；实测该模式 pytest 全绿 |
-| B4 | `_READ_ONLY_REQUEST` 跨用例污染，应默认重置为 `True` | **驳回，其修复有害** | `main()` 每次按分级赋值（`:3755`）、`finally` 归位（`:3763`）；改默认 `True` 会让直接 `get_db()` 的 fixture 变只读，破坏测试数据准备 |
-| N1 | 全量 argparse 性价比应回报用户 | 采纳 | 见第 9 节 |
-| N2 | `--collect-only` 无法发现断言被削弱 | 采纳 | 已加 `assert` 总数双计数 |
-| N3 | `add-holding` 变更可能有未列出的传播面 | 已验证无需处置 | 全仓 grep 确认仅三处 |
-| N4 | 禁止 `commands_*.py` 反向 import cache | 采纳 | 已加入 Phase 3 门禁 |
+- 提取 `domain.py`：时间/TTL、纯校验器、框架推断、止损系数和止损状态判定。
+- 同步把 `utc_now`、`is_expired`、`_is_a_share_trading_hours`、`datetime` 等 patch 改到 `domain` 或实际使用模块。
+- 每类 patch 至少保留一项“改变 mock 返回值会改变命令结果”的回归断言。
 
-模式记录：两轮 AGY 复审（P0/P1 代码、本计划）一致显示，其在"这段代码实际怎么跑"上不可靠（上轮错判 SQLite DDL 事务语义，本轮错判 pytest/monkeypatch 运行时行为，均可用一次实测证伪），在"这个设计缺了什么"上有价值。后续送审应继续把 blocking 当作待验证假设逐条实测。
+### 6.2 Phase 3b：DB、schema 与 store
 
-## 11. 风险登记（用户已知悉并接受）
+- 提取 `db.py`：动态路径、`db_session`、`read_only_db_session`、schema 初始化状态和 `read_only_scope()`。
+- 提取 `schema.py`：迁移清单、建表、backfill 和 bootstrap。
+- 提取 `store.py`：基本面、快照、watchlist 等数据访问 helper。
+- 将 `_SCHEMA_INITIALIZED*`、`SCHEMA_MIGRATIONS`、`db_session`、行情读取等 patch 改到真实 owner。
+- `checklist.py` 从顶层 `import cache` 改为依赖 `store`/`domain`，消除循环依赖。
 
-| 风险 | 缓解 |
+### 6.3 Phase 3c：commands 与入口收口
+
+- 按领域提取 `commands_analysis.py`、`commands_holdings.py`、`commands_monitor.py`、`commands_admin.py`；不以预计行数作为验收条件。
+- `cache.py` 只保留 parser、`COMMANDS`、`COMMAND_CLASSIFICATION`、兼容性所必需的显式导入和 `main()`。
+- `_READ_ONLY_REQUEST` 改为 `with db.read_only_scope(classification == "R0")`，由 context manager 保证异常路径复位。
+- `_backfill_holding_metadata` 的命令层调用若仍必要，显式记录 `commands_holdings → schema` 这一条例外依赖并用只读回归覆盖；若已由 ledger 保证，则在有测试证据后删除防御性重跑，不能直接假定。
+- 只有确认全仓和受支持外部入口无消费者后，才删除 `check = cmd_check`；`cache.requests` 在相关测试改 patch `market_quotes.requests` 后再删除。
+
+### 6.4 Phase 3 门禁
+
+每个子阶段分别运行 focused tests 和 `bash scripts/check.sh`。扩展 `tests/test_import_graph.py`，断言：
+
+- 新模块可同时导入且无循环；
+- `commands_*.py` 不 import `cache`；
+- owner-module monkeypatch 确实穿透到命令行为；
+- Phase 0 的临时 DB 隔离与显式只读会话仍有效。
+
+## 7. Phase 4：Evidence 仓迁移（单独授权）
+
+Phase 4 不随 Phase 0-3 自动执行。授权范围必须明确包含：创建 `~/a-stock-agent-evidence`、复制并提交证据、更新本仓引用、删除本仓 247 个 tracked 文件。
+
+执行顺序：
+
+1. 只读盘点 `git ls-files docs/reviews`，生成相对路径、大小和 SHA256 manifest；
+2. 将文件复制到独立 evidence 仓，提交后记录 destination commit；
+3. 对照 manifest 验证数量、路径和 SHA256 完全一致；验证失败不得删除本仓文件；
+4. 本仓 `docs/reviews/README.md` 仅保留 tombstone：源仓最后包含证据的 commit、外部仓位置、destination commit、manifest 路径和恢复命令；不手写 247 行重复索引；
+5. 用 `rg -n "docs/reviews/"` 更新当前树中的全部引用，不依赖固定“四个文件”的旧清单；
+6. 添加 `.gitignore` 规则，忽略未来 `docs/reviews/*`，但保留 `docs/reviews/README.md`；
+7. 最后才删除本仓已验证的 evidence 文件并提交。
+
+回滚：删除提交前可直接停止；删除提交后可从记录的 source commit 恢复 `docs/reviews/`，或从已验证的 evidence commit 按 manifest 复制回来。
+
+Phase 4 不顺带修改 `docs/operations.md` 或 backtest 路径；这些已知文档问题另作小型仓库内修复，避免和跨仓迁移绑定。
+
+**门禁**：外部仓 working tree clean；manifest 校验通过；本仓只剩预期 tombstone；全仓当前文档无悬空 `docs/reviews/` 引用；`bash scripts/check.sh` 通过。
+
+## 8. 验证基线与命令
+
+开工前和每个 Phase 后记录：
+
+```bash
+git rev-parse --short HEAD
+PYTHONDONTWRITEBYTECODE=1 uv run pytest --collect-only -q -p no:cacheprovider
+rg -o '\bassert\b' tests -g '*.py' | wc -l
+rg -n 'monkeypatch\.setattr\(cache,' tests
+git diff --check
+bash scripts/check.sh
+```
+
+CLI 契约冒烟必须使用临时数据库：
+
+```bash
+export CACHE_DB_PATH="$(mktemp -d)/smoke.db"
+uv run a-stock-cache --help
+uv run a-stock-cache set-flag 000001 yellow x                 # 期望 3
+uv run a-stock-cache set-flag --confirm-write 000001 yellow x # 期望 3
+uv run a-stock-cache --bogus set-flag 000001 yellow x         # 期望 2
+uv run a-stock-cache bogus                                    # 期望 1
+```
+
+测试和重构门禁不得访问或哈希真实生产数据库。
+
+## 9. AGY r2 与 Codex 对抗裁决
+
+| 主张 | 裁决 | 计划处置 |
+|---|---|---|
+| 无条件生产库硬拦截会破坏正常 CLI | 采纳 | 删除硬拦截和逃生阀，改为测试侧隔离 |
+| 生产代码检查 `PYTEST_CURRENT_TEST` | 驳回 | pytest 细节只留在 `tests/conftest.py` |
+| 276 处业务测试应全部改走 `main(argv)` | 驳回 | 保留直接单测，以参数化 CLI 契约覆盖入口 |
+| `cache.requests` patch 打在空气 | 实测驳回 | 同一模块对象，Phase 2 不删除 |
+| Phase 3 会使 46 处 patch 静默失效 | 采纳 | 分 owner 迁移、模块限定调用、行为穿透测试 |
+| 用 `cache.__getattr__` 代理 patch | 驳回 | 不能转发对已有模块属性的 setattr |
+| 错放 `--confirm-write` 返回 2 | 实测驳回 | 保持现行返回 3；未知前置 flag 才返回 2 |
+| Evidence 不应迁出 | 不采纳 | 用户已选择迁出，但改为单独授权和 manifest 门禁 |
+| README 手写 247 项 hash 索引 | 驳回 | 使用机器生成 manifest + 小型 tombstone |
+
+## 10. 风险登记与 Go/No-Go
+
+| 风险 | 必须满足的 Go 条件 |
 |---|---|
-| 拆分 + argparse 同批，回归难定位 | 分 Phase 独立提交，可 `git bisect` 到阶段 |
-| 275 处测试重写导致覆盖静默下降 | 逐个转换而非删除重写；用例数与 `assert` 数双计数把关 |
-| 转换后用例还在但断言被削弱 | 原断言具体中文文本的用例，转换后必须仍断言同一文本 |
-| `add-holding` 语义变更打断 live skill | 同批更新 skills 全部三处文档化调用；`scripts/validate.py` 把关引用完整性 |
-| 测试误写真实持仓账本 | Phase 0 在 `get_db` 硬拦截生产库路径（覆盖直接调用/`main()`/子进程三条路径），外加默认 tmp 库的 autouse fixture |
-| argparse 放宽 `--confirm-write` 位置 | 该 flag 不进 subparser，由 `main` 手工把守并留专项测试 |
+| 测试误写生产数据库 | 无生产守卫/逃生阀；根 fixture 与子进程均解析到临时 DB |
+| fetcher 读取触发 schema 写入 | 使用显式只读会话，测试证明不 bootstrap/backfill |
+| argparse 改变错误码或消息 | Phase 1 契约矩阵原样通过；错放确认返回 3 |
+| `add-holding --notes` 打断调用 | Skill、help、测试及全仓非历史调用同步更新并冒烟 |
+| 拆模块后 mock 失效 | 46 处 patch 完成 owner 映射；穿透测试通过 |
+| 循环依赖或反向依赖 | import graph 门禁通过，commands 不 import cache |
+| Evidence 删除后不可追溯 | 独立授权、外仓 commit、manifest 全匹配、恢复命令验证 |
+| 回归难定位 | Phase 0/1/2/3a/3b/3c/4 独立 commit，逐阶段全门禁 |
+
+只有上述条件全部写入实施 diff、focused tests 与阶段证据后，相关 Phase 才是 Go。Phase 0-3 完成不自动触发 Phase 4。
