@@ -22,7 +22,7 @@ manifest and recovery command.
 
 M0-M6 fixture and shadow validation is complete. M7 production cutover
 completed on 2026-08-09 with release tag `v0.1.0`; the redacted parent
-disposition is `PASS`. Runtime `v0.1.1` was deployed on 2026-08-11 without a
+disposition is `PASS`. Runtime `v0.1.2` was deployed on 2026-08-11 without a
 database schema, configuration or crontab change. Rollback manifests remain
 outside the repository. M8 completed on 2026-08-11 when all nine active
 `a-stock-*` client entries were verified against the canonical repository and

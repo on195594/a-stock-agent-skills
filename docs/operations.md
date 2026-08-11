@@ -86,10 +86,12 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.1` (`0.1.1-788d1ae8692c`), deployed on
+The current runtime is `v0.1.2` (`0.1.2-52aa56191174`), deployed on
 2026-08-11 with `a-stock-lib==0.5.0`. The deployment reused the versioned
-installer and generated an external rollback manifest; it did not change the
-database schema, configuration or crontab.
+installer and generated external rollback manifest
+`rollback-1786444512157914880.json`; the previous runtime remains installed.
+Configuration and crontab SHA256 fingerprints were unchanged, and no database
+schema migration was performed.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in

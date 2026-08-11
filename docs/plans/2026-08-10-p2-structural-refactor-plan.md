@@ -9,6 +9,8 @@ spec_rationale: 纯工程重构，不含投资规则变更，故不适用 AGENTS
 execution_authorized: phase_0_4
 risk_tier: active-layer
 review: AGY r2 + Codex adversarial (REQUEST_CHANGES → addressed)
+release: v0.1.2
+deployment_runtime: 0.1.2-52aa56191174
 baseline_commit: 9ad3b8e
 implementation_head: 7b6bb62
 phase_4_source_snapshot: c493aa8dc4f2649c6241587f55be94f0a11011fb
@@ -37,6 +39,8 @@ Phase 4 完成记录：
 - manifest：247 项，SHA256 `764454a8e079e416d9e4a95b547a8bf9fb21037c3a61b45f8262db0f0ee05072`；
 - Phase 4 门禁：双仓 working tree/索引符合预期，manifest 复核通过，`bash scripts/check.sh` 为 627 tests 全部通过；
 - 恢复与定位说明：`docs/reviews/README.md`。
+
+发布记录：reviewer 发现的跨命令 helper 早绑定问题已在 `8252baa` 修复并经 AGY 复审 `PASS`；release commit `52aa561` 标记为 `v0.1.2`，版本化 runtime `0.1.2-52aa56191174` 已于 2026-08-11 部署。最终门禁为 628 tests，生产只读 smoke 通过，配置与 crontab 指纹不变，未执行数据库 schema 迁移。
 
 ## 1. 背景与当前基线
 

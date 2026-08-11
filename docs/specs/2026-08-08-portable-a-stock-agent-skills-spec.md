@@ -91,7 +91,7 @@ risk_tier: active-layer
 ### 4.5 已落地状态（2026-08-11）
 
 - M0-M6 已完成：canonical runtime、三个 Skill、installer、fixture 和三端 shadow 验证均已提交。
-- M7 已完成：生产 DB 通过 SQLite Online Backup API 迁移，`integrity=ok`；Hermes 已作为生产主入口；三端 Skill 入口当前指向同一 canonical release `v0.1.1`。
+- M7 已完成：生产 DB 通过 SQLite Online Backup API 迁移，`integrity=ok`；Hermes 已作为生产主入口；三端 Skill 入口当前指向同一 canonical release `v0.1.2`。
 - 生产配置位于仓库外且权限为 `0600`；cron 只保留一条 canonical 持仓检查任务；受控 Telegram 验证已通过。
 - M8 已完成：三端共九个 `a-stock-*` active Skill 均指向 canonical 仓库；原 Claude 三个完整 Skill 和 Hermes 误建副本均保留在仓库外归档；Claude、Codex、Hermes 继续可用。
 
