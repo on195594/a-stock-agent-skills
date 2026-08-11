@@ -86,6 +86,11 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The `v0.1.0` cutover record, redacted DB invariants, client links, cron
-before/after snapshots and review disposition are in
+The current runtime is `v0.1.1` (`0.1.1-788d1ae8692c`), deployed on
+2026-08-11 with `a-stock-lib==0.5.0`. The deployment reused the versioned
+installer and generated an external rollback manifest; it did not change the
+database schema, configuration or crontab.
+
+The original `v0.1.0` cutover record, redacted DB invariants, client links,
+cron before/after snapshots and review disposition are in
 [`migration/production-cutover/20260809-115052/`](migration/production-cutover/20260809-115052/).

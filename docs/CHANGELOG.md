@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1 - 2026-08-11
+
 ### Added
 
 - `a-stock-research`: added product-cycle and thematic-catalyst routing that separates event narratives, order progress and financial realization, with explicit counter-evidence and reproducible conditional valuation boundaries.
@@ -11,7 +13,7 @@
 - Runtime R0 commands no longer invoke the holdings metadata backfill on physically read-only database connections.
 - Audit remediation (2026-08-09): R0 database access is physically read-only; unknown/stale quote timestamps cannot trigger stop-loss or portfolio-risk actions; installer releases are wheel-backed and preflighted with collision-free backups; migration and cron failures now fail closed.
 - Skill portability: research QA routing now uses host discovery without client-specific commands, QA scope matches its research-only rubric, and checklist output is client-neutral.
-- Maintenance: removed stale compatibility exports, broken legacy runners, and the unmaintained mypy gate; the next repository release is `0.1.1`.
+- Maintenance: removed stale compatibility exports, broken legacy runners, and the unmaintained mypy gate.
 - `a-stock-research`: removed the conflicting total-score action table; the dual-track matrix is now the sole action outlet, and tranche fractions are scoped to a pre-approved single-name risk cap.
 - `a-stock-research`: current PB is computed from the validated price and compatible-period BPS; inconsistent PB/BPS reports fail closed.
 - C resource framework: added forward/normalised valuation conflict handling, comparable cost evidence for top reserve-competitiveness scores, and adjacent-cycle scenario handling.
