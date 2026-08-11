@@ -17,3 +17,5 @@ artifacts/
 .agents/
 .hermes/
 ai-collab/
+docs/reviews/*
+!docs/reviews/README.md

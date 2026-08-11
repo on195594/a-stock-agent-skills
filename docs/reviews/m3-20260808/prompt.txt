@@ -1,1 +1,0 @@
-Skill frontmatter, relative references, QA standalone smoke, and validator.

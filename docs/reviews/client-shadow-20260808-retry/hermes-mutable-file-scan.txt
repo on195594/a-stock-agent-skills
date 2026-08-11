@@ -1,3 +1,0 @@
-/tmp/a-stock-shadow-retry-hermes.LlwmCD/.hermes/state.db-shm
-/tmp/a-stock-shadow-retry-hermes.LlwmCD/.hermes/state.db-wal
-/tmp/a-stock-shadow-retry-hermes.LlwmCD/.hermes/state.db

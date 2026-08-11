@@ -1,8 +1,0 @@
-`ExitPlanMode` isn't actually enabled in this session, so I can't route through the formal plan-approval step. Since producing the answer required only a read-only file read (no network, no DB writes, no notifications — all consistent with your constraints and with plan mode's read-only restriction), here's the result:
-
-```json
-{"framework":"A","hard_score":60,"red_lines":[],"data_gaps":[],"fail_closed":false}
-```
-ExitPlanMode isn't available in this session, so I'll just deliver the read-only result directly. This required no network calls, no cache/database writes, and no notifications — only reading the local fixture.
-
-{"framework":"A","hard_score":60,"red_lines":[],"data_gaps":[],"fail_closed":false}

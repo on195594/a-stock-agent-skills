@@ -1,1 +1,0 @@
-Final full verification with explicit a-stock-lib source and no production writes.

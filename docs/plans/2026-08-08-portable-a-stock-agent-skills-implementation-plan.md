@@ -48,6 +48,7 @@ export SRC_MONITOR=/home/lin/.claude/skills/a-stock-monitor
 export SRC_QA=/home/lin/.claude/skills/a-stock-qa
 export A_STOCK_LIB_SOURCE=/home/lin/a-stock-lib
 export TRACKER=/home/lin/a-stock-tracker
+export EVIDENCE_REPO=/home/lin/a-stock-agent-evidence
 export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 ```
 
@@ -57,7 +58,7 @@ export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 - 不复制 `.env`、DB、WAL/SHM、logs、locks、`.claude`、memory、AI review scratch。
 - 每阶段实现后顺序为：测试 → diff/status → Codex 只读审查 → 父级复核 → 最小修复 → 重跑相关测试 → commit。
 - Reviewer 自述不能替代本计划列出的命令和退出码。
-- 每阶段 evidence 保存到 `docs/reviews/m<stage>-<run-id>/`，至少包含 review prompt、stdout、stderr、exit code、before/after source hash 和 drift 状态；凭证、DB 与运行状态文件不得进入 evidence。
+- 每阶段 evidence 保存到 `$EVIDENCE_REPO/docs/reviews/m<stage>-<run-id>/`，至少包含 review prompt、stdout、stderr、exit code、before/after source hash 和 drift 状态；凭证、DB 与运行状态文件不得进入 evidence。
 - M0-M6 共用一个持续 Goal；阶段 review gate 是 Goal 内质量检查，不是新的用户审批点。
 - Goal 内允许仓库修改、依赖同步、临时环境、测试、可回滚 installer 验证，以及隔离的三端 shadow 安装（非空临时 target 先备份）；不逐阶段或逐客户端重复请求批准。
 - 生产 DB、配置、cron、Telegram 和 active Skill 切换只在 M7 一次性 cutover 批准后执行；M8 仅做 canonical 指向和旧 Skill 归档核验。
@@ -85,16 +86,16 @@ export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 **读取：**
 
 - `$SPEC`
-- `$SUITE/docs/reviews/20260808-001550-agy-spec-r1/`
-- `$SUITE/docs/reviews/20260808-002319-agy-spec-r2/`
+- `$EVIDENCE_REPO/docs/reviews/20260808-001550-agy-spec-r1/`
+- `$EVIDENCE_REPO/docs/reviews/20260808-002319-agy-spec-r2/`
 
 **命令：**
 
 ```bash
 sha256sum "$SPEC"
-find "$SUITE/docs/reviews/20260808-001550-agy-spec-r1" -maxdepth 1 -type f -printf '%f\n' | sort
-find "$SUITE/docs/reviews/20260808-002319-agy-spec-r2" -maxdepth 1 -type f -printf '%f\n' | sort
-sed -n '1,100p' "$SUITE/docs/reviews/20260808-002319-agy-spec-r2/agy_stdout.txt"
+find "$EVIDENCE_REPO/docs/reviews/20260808-001550-agy-spec-r1" -maxdepth 1 -type f -printf '%f\n' | sort
+find "$EVIDENCE_REPO/docs/reviews/20260808-002319-agy-spec-r2" -maxdepth 1 -type f -printf '%f\n' | sort
+sed -n '1,100p' "$EVIDENCE_REPO/docs/reviews/20260808-002319-agy-spec-r2/agy_stdout.txt"
 ```
 
 **通过：**
@@ -299,7 +300,7 @@ codex review --commit HEAD
 
 父级复核 findings 后，只修 M1 extraction/provenance blocker；不提前重构 runtime。
 
-**M1 回滚：** 删除新仓库中除 `docs/specs`、`docs/reviews` 外的未发布文件，或在已提交时 `git revert HEAD`；不得修改源仓库。
+**M1 回滚：** 删除新仓库中除 `docs/specs` 外的未发布文件，或在已提交时 `git revert HEAD`；不得修改源仓库或外部 evidence 仓。
 
 ---
 
@@ -850,7 +851,7 @@ git commit -m 'feat: externalize state and add safe migration tooling'
 - `tests/fixtures/monitor/holdings-l3.json`
 - `tests/fixtures/qa/{compliant,non_compliant,unknown_rubric}.md`
 - `tests/golden/*.json`
-- `docs/reviews/client-shadow-<run-id>/`
+- `$EVIDENCE_REPO/docs/reviews/client-shadow-<run-id>/`
 
 每端统一注入：
 
@@ -876,7 +877,7 @@ Fixture smoke 不联网、不使用生产凭证；模型只读取 evidence packe
 
 ```bash
 RUN_ID=$(date +%Y%m%d-%H%M%S)
-EVIDENCE="$SUITE/docs/reviews/client-shadow-$RUN_ID"
+EVIDENCE="$EVIDENCE_REPO/docs/reviews/client-shadow-$RUN_ID"
 mkdir -p "$EVIDENCE"
 for name in a-stock-research a-stock-monitor a-stock-qa; do
   for client in claude codex hermes; do
@@ -978,7 +979,7 @@ HERMES_HOME="$SHADOW_ROOT/.hermes" hermes chat -q -Q -t file,skills \
 不比较完整自然语言。
 
 ```bash
-uv run python scripts/compare_shadow_results.py docs/reviews/client-shadow-<run-id>
+uv run python scripts/compare_shadow_results.py "$EVIDENCE_REPO/docs/reviews/client-shadow-<run-id>"
 find "$A_STOCK_STATE_DIR" -maxdepth 2 -type f -printf '%P %s\n' | sort
 find "$SHADOW_ROOT" -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' \
   -o -name '.env' -o -path '*/logs/*' -o -path '*/locks/*' \) -print

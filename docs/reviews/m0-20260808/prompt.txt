@@ -1,1 +1,0 @@
-Record Spec hash, source commits, and baseline without changing external state.

@@ -1,2 +1,0 @@
-{"source": "/home/lin/a-stock-agent-skills", "release": "0.1.0-9777532c341f", "clients": ["claude", "codex", "hermes"], "mode": "symlink"}
-installed release 0.1.0-9777532c341f; rollback manifest: /tmp/a-stock-shadow-retry-hermes.LlwmCD/.local/share/a-stock-agent/rollback-1786203720.json

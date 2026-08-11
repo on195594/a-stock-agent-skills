@@ -1,9 +1,0 @@
-.agents/skills/a-stock-monitor/SKILL.md
-.agents/skills/a-stock-qa/SKILL.md
-.agents/skills/a-stock-research/SKILL.md
-.claude/skills/a-stock-monitor/SKILL.md
-.claude/skills/a-stock-qa/SKILL.md
-.claude/skills/a-stock-research/SKILL.md
-.hermes/skills/research/a-stock-monitor/SKILL.md
-.hermes/skills/research/a-stock-qa/SKILL.md
-.hermes/skills/research/a-stock-research/SKILL.md

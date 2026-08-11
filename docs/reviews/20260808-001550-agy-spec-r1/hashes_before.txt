@@ -1,6 +1,0 @@
-83188137626dff4e23607d45c979f64148eed8480dc52deaec78c655686f3167  /home/lin/a-stock-agent-skills/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md
-/home/lin/.claude/skills/a-stock-research STATUS=CLEAN TREE_HASH=6e6ce7df94c10a6ba8eef918c54addaa5cc016d34afb13848cceb1171ca6867d
-/home/lin/.claude/skills/a-stock-monitor STATUS=CLEAN TREE_HASH=9ec9d9dbe3ab402fcd8bf1ff7414bc1ef9e1c79236163ce89ddcc7cf31e99bcc
-/home/lin/.claude/skills/a-stock-qa STATUS=CLEAN TREE_HASH=f9f9189056d2efebcc6a25c4e5ef2122ac12c7a18902198c5a85483552075186
-/home/lin/a-stock-lib STATUS=CLEAN TREE_HASH=6f783f23c18d9ec6130851fe8f101cfb2beb12c705ec8b0e25c80e661d3d0df1
-/home/lin/a-stock-tracker STATUS=CLEAN TREE_HASH=c836706a86cd9052847c5f400589dc9bf475286b9cfdd49495fd63719268da9f

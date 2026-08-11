@@ -1,3 +1,0 @@
-Temporary root `/tmp/a-stock-shadow-claude.A96ejD` was removed after all four
-read-only invocations and invariant capture. No production or user-level Skill
-path was changed.

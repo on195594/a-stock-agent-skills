@@ -1,1 +1,0 @@
-Three-client isolated shadow installation and deterministic CLI/invariant checks.

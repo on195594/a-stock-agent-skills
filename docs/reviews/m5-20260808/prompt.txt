@@ -1,1 +1,0 @@
-SQLite Online Backup fixture, cron candidate, and side-effect boundaries.

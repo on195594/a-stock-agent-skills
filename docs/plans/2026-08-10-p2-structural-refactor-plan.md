@@ -1,22 +1,25 @@
 ---
 title: P2 结构性重构计划（CLI argparse 化 · cache.py 拆分 · 评审证据迁出）
-status: phase_0_3_complete_phase_4_awaiting_authorization
+status: completed
 created: 2026-08-10
 updated: 2026-08-11
+closed: 2026-08-11
 spec: none
 spec_rationale: 纯工程重构，不含投资规则变更，故不适用 AGENTS.md 的 dated-spec 要求
-execution_authorized: phase_0_3
+execution_authorized: phase_0_4
 risk_tier: active-layer
 review: AGY r2 + Codex adversarial (REQUEST_CHANGES → addressed)
 baseline_commit: 9ad3b8e
 implementation_head: 7b6bb62
+phase_4_source_snapshot: c493aa8dc4f2649c6241587f55be94f0a11011fb
+phase_4_evidence_commit: 76d643b55c02c05f263a7c910c7c3cb6a843040f
 ---
 
 # P2 结构性重构计划
 
 > 本计划不构成实施授权。仓库内 Phase 0-3 可由用户一次明确的“开始实施 P2”授权；Phase 4 涉及创建仓外 Git 仓和删除本仓 tracked 文件，必须另行明确授权。
 
-> 2026-08-11 执行记录：用户已授权并完成 Phase 0-3；Phase 4 尚未获得单独授权，因此保持未执行。最终门禁为 627 tests、971 个 `assert` token，`bash scripts/check.sh` 全部通过。
+> 2026-08-11 执行记录：用户分别授权并完成 Phase 0-3 与 Phase 4。Phase 4 将 247 个证据文件迁至 `/home/lin/a-stock-agent-evidence` 的提交 `76d643b`；逐文件路径、大小和 SHA256 与 manifest 完全一致后，源仓仅保留 tombstone。Phase 0-3 最终门禁为 627 tests、971 个 `assert` token，`bash scripts/check.sh` 全部通过；Phase 4 收尾门禁见下方完成记录。
 
 Phase 0-3 实施提交：
 
@@ -26,6 +29,14 @@ Phase 0-3 实施提交：
 - `3420a84` — Phase 3a：领域规则拆分；
 - `dd29f7e` — Phase 3b：DB/schema/store 拆分；
 - `7b6bb62` — Phase 3c：commands 拆分与入口收口。
+
+Phase 4 完成记录：
+
+- 最后完整包含源证据的提交：`c493aa8dc4f2649c6241587f55be94f0a11011fb`；
+- 外部 evidence 提交：`76d643b55c02c05f263a7c910c7c3cb6a843040f`；
+- manifest：247 项，SHA256 `764454a8e079e416d9e4a95b547a8bf9fb21037c3a61b45f8262db0f0ee05072`；
+- Phase 4 门禁：双仓 working tree/索引符合预期，manifest 复核通过，`bash scripts/check.sh` 为 627 tests 全部通过；
+- 恢复与定位说明：`docs/reviews/README.md`。
 
 ## 1. 背景与当前基线
 

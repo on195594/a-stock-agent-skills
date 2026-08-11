@@ -1,5 +1,0 @@
-UNDETERMINED
-
-Deterministic findings:
-- The fixture and `a-stock-qa` research rubric could not be read without executing a filesystem command, which the request explicitly prohibits.
-- No runtime commands, network calls, or writes were performed.

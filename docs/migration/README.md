@@ -13,8 +13,10 @@ production database copies, WAL/SHM files or runtime logs.
 - [`client-shadow-invocation.md`](client-shadow-invocation.md) — isolated discovery recipes for all three clients.
 - [`production-cutover/20260809-115052/`](production-cutover/20260809-115052/) — M7 DB, installer, cron, Hermes and notification evidence.
 
-The per-milestone review packets live under `docs/reviews/`. They are retained
-for auditability; they are not temporary build output.
+The per-milestone review packets live in the external Git repository
+`/home/lin/a-stock-agent-evidence`. The repository-local
+[`docs/reviews/README.md`](../reviews/README.md) records its verified commit,
+manifest and recovery command.
 
 ## Current state
 
