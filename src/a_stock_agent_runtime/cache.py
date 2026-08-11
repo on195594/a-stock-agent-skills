@@ -81,10 +81,9 @@ from datetime import date, datetime, timedelta, time as dtime, timezone
 from contextlib import contextmanager
 from a_stock_agent_runtime import framework_metadata
 from a_stock_agent_runtime import market_quotes
-from a_stock_agent_runtime.paths import DEFAULT_CACHE_DB_PATH
+from a_stock_agent_runtime import paths
 from a_stock_agent_runtime.schema_ledger import bootstrap_schema, schema_process_lock
 from a_stock_agent_runtime.position_ledger import LifecycleReturn, calculate_lifecycle_return
-from a_stock_agent_runtime.paths import ensure_db_parent
 from a_stock_lib.contracts import (
     FrameworkKey,
     parse_cycle_stage_tag,
@@ -93,11 +92,6 @@ from a_stock_lib.contracts import (
 )
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = os.environ.get(
-    'CACHE_DB_PATH',
-    str(DEFAULT_CACHE_DB_PATH),
-)
 
 # ② 行业 → TTL 映射（关键词匹配，越靠前优先级越高）
 INDUSTRY_TTL_MAP = [
@@ -648,22 +642,24 @@ def _bootstrap_database_schema(conn: sqlite3.Connection) -> None:
 
 def get_db(timeout: float = 30.0) -> sqlite3.Connection:
     global _SCHEMA_INITIALIZED, _SCHEMA_INITIALIZED_PATH
+    database_path = str(paths.cache_db_path())
     if _READ_ONLY_REQUEST:
-        path = os.path.abspath(os.path.expanduser(DB_PATH))
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=timeout)
+        conn = sqlite3.connect(
+            f"file:{os.path.abspath(database_path)}?mode=ro", uri=True, timeout=timeout,
+        )
         conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
         return conn
-    ensure_db_parent(DB_PATH)
-    conn = sqlite3.connect(DB_PATH, timeout=timeout)
+    paths.ensure_db_parent(database_path)
+    conn = sqlite3.connect(database_path, timeout=timeout)
     conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
-    if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != DB_PATH:
+    if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != database_path:
         try:
             with _SCHEMA_LOCK:
-                if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != DB_PATH:
-                    with schema_process_lock(DB_PATH):
+                if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != database_path:
+                    with schema_process_lock(database_path):
                         _bootstrap_database_schema(conn)
                         _SCHEMA_INITIALIZED = True
-                        _SCHEMA_INITIALIZED_PATH = DB_PATH
+                        _SCHEMA_INITIALIZED_PATH = database_path
         except BaseException:
             # The caller never received this connection, so nothing else can close
             # it.  A failed bootstrap leaves the ledger INSERT transaction open;
@@ -678,6 +674,20 @@ def get_db(timeout: float = 30.0) -> sqlite3.Connection:
 def db_session(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
     conn = get_db(timeout)
     try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def read_only_db_session(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
+    """Open the configured database without creating or migrating it."""
+    database_path = paths.cache_db_path().resolve()
+    conn = sqlite3.connect(
+        f"file:{database_path}?mode=ro", uri=True, timeout=timeout,
+    )
+    try:
+        conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
         yield conn
     finally:
         conn.close()
@@ -3749,10 +3759,11 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 3
-    if classification == 'R0' and not os.path.exists(DB_PATH):
-        print(f'状态数据库不存在：{DB_PATH}', file=sys.stderr)
+    database_path = paths.cache_db_path()
+    if classification == 'R0' and not database_path.exists():
+        print(f'状态数据库不存在：{database_path}', file=sys.stderr)
         return 0
-    print(f'[a-stock-cache] 操作数据库: {DB_PATH}', file=sys.stderr)
+    print(f'[a-stock-cache] 操作数据库: {database_path}', file=sys.stderr)
     try:
         _READ_ONLY_REQUEST = classification == 'R0'
         COMMANDS[command](remaining)

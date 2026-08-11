@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache
 from tests.helpers import set_valid_fundamentals
 from a_stock_agent_runtime import checklist
 import dataclasses
@@ -13,7 +12,7 @@ from a_stock_agent_runtime import framework_metadata
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_checklist_cache.db"
-    monkeypatch.setattr(cache, 'DB_PATH', str(db_file))
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     yield str(db_file)
 
 

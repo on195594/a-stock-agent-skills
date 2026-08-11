@@ -29,7 +29,7 @@ VALID_CYCLE_STAGE_TAG = '周期位置[阶段=上行期；依据="煤价中枢回
 def isolated_db(tmp_path, monkeypatch):
     """每个测试用独立临时数据库，不影响生产 cache.db"""
     db_file = tmp_path / "test_cache.db"
-    monkeypatch.setattr(cache, 'DB_PATH', str(db_file))
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     monkeypatch.setattr(cache, 'get_latest_quote_snapshot', lambda *args, **kwargs: {
         'price': 10.0, 'quote_as_of': f'{cache.cst_today()}T10:00:00', 'source': 'sina',
     })
@@ -741,7 +741,7 @@ def test_set_analysis_no_framework_rejected(monkeypatch, capsys):
 def test_holdings_migration_adds_id_column(tmp_path, monkeypatch):
     """模拟旧版 holdings 表（无 id 列），get_db 应自动迁移"""
     db_path = str(tmp_path / "old_schema.db")
-    monkeypatch.setattr(cache, 'DB_PATH', db_path)
+    monkeypatch.setenv('CACHE_DB_PATH', db_path)
 
     # 手动创建旧版表结构（code TEXT PRIMARY KEY，无 id 列）
     conn = sqlite3.connect(db_path)

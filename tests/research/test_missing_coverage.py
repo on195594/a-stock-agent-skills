@@ -24,7 +24,7 @@ from a_stock_agent_runtime import fetcher
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_extra.db"
-    monkeypatch.setattr(cache, 'DB_PATH', str(db_file))
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     yield str(db_file)
 
 
@@ -699,7 +699,7 @@ class TestCloseHoldingCustomDate:
 def test_get_db_concurrent_migration_preserves_data(tmp_path, monkeypatch):
     """Two threads running get_db() on old-schema DB must not lose holding data."""
     db_path = str(tmp_path / 'concurrent.db')
-    monkeypatch.setattr(cache, 'DB_PATH', db_path)
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_path))
 
     # Prepare old-style holdings table (no id column = pre-migration schema)
     conn0 = sqlite3.connect(db_path)

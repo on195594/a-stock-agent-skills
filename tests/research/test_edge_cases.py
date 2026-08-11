@@ -27,7 +27,7 @@ from a_stock_agent_runtime import fetcher
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_edge.db"
-    monkeypatch.setattr(cache, 'DB_PATH', str(db_file))
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     yield str(db_file)
 
 

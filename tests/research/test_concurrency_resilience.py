@@ -19,7 +19,7 @@ from tests.helpers import valid_fundamentals_payload
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / 'concurrency-resilience.db'
-    monkeypatch.setattr(cache, 'DB_PATH', str(db_file))
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     yield db_file
 
 

@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / 'p0.db'
-    monkeypatch.setattr(cache, 'DB_PATH', str(db_file))
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     monkeypatch.setattr(cache, 'utc_now', lambda: NOW)
     yield str(db_file)
 
@@ -128,7 +128,7 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
         with cache.db_session():
             pass
 
-    probe = sqlite3.connect(cache.DB_PATH)
+    probe = sqlite3.connect(cache.paths.cache_db_path())
     try:
         columns = {row[1] for row in probe.execute('PRAGMA table_info(stock_fundamentals)')}
         recorded = probe.execute(

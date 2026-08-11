@@ -21,7 +21,7 @@ from a_stock_lib.fetcher_utils import detect_split_ratio
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_fetcher_cache.db"
-    monkeypatch.setattr(cache, 'DB_PATH', str(db_file))
+    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     # fetcher 内部也引用 list_codes，需要同步 patch
     monkeypatch.setattr(fetcher, 'list_codes', lambda: ['600519', '000001'])
     fetcher._fetch_tushare_industry_map.cache_clear()

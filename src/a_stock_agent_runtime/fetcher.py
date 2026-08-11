@@ -12,7 +12,6 @@ import sys
 import logging
 import multiprocessing as mp
 from queue import Empty
-from contextlib import closing
 from typing import Any, Callable
 from functools import lru_cache
 from datetime import datetime, date, timedelta, timezone
@@ -28,6 +27,7 @@ from a_stock_agent_runtime.cache import (
     get_market_indicator_snapshot,
     list_codes,
     record_quote_snapshot,
+    read_only_db_session,
     set_fundamentals,
     set_market_indicator_snapshot,
     update_qualitative_only_security,
@@ -857,15 +857,14 @@ def _lookup_cached_industry(code: str) -> str | None:
     新浪行情本身不返回行业字段，复用哪怕过期的历史值好过显示"未知"。"""
     try:
         import sqlite3
-        from a_stock_agent_runtime.cache import DB_PATH
-        with closing(sqlite3.connect(DB_PATH)) as conn:
+        with read_only_db_session() as conn:
             row = conn.execute(
                 "SELECT industry FROM stock_fundamentals "
                 "WHERE code=? AND industry IS NOT NULL AND industry NOT LIKE '未知%'",
                 (code,),
             ).fetchone()
         return row[0] if row else None
-    except Exception:
+    except (OSError, sqlite3.Error):
         return None
 
 
@@ -873,13 +872,12 @@ def _lookup_cached_name(code: str) -> str | None:
     """Return the last cached stock name without applying fundamentals TTL."""
     try:
         import sqlite3
-        from a_stock_agent_runtime.cache import DB_PATH
-        with closing(sqlite3.connect(DB_PATH)) as conn:
+        with read_only_db_session() as conn:
             row = conn.execute(
                 'SELECT name FROM stock_fundamentals WHERE code=?', (code,)
             ).fetchone()
         return row[0] if row and row[0] else None
-    except Exception:
+    except (OSError, sqlite3.Error):
         return None
 
 
