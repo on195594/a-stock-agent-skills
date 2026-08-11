@@ -1,8 +1,8 @@
 # Operations runbook
 
-This runbook covers the installed runtime after the M7 cutover. It does not
-authorize Claude retirement (M8), investment decisions or unattended W1
-writes.
+This runbook covers the installed runtime after the M7 cutover. Claude, Codex
+and Hermes remain supported clients. Nothing here authorizes investment
+decisions or unattended W1 writes.
 
 ## Configuration and state
 

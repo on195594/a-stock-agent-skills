@@ -16,8 +16,8 @@ The `v0.1.1` runtime release is deployed. The original M7 production cutover
 completed on 2026-08-09; the 2026-08-11 maintenance deployment upgraded the
 versioned runtime and `a-stock-lib` to 0.5.0 without changing the database
 schema, configuration or cron. Hermes is the production entry and the three
-client Skill links point to the same canonical source. Claude retirement (M8)
-has not been authorized or performed.
+client Skill links point to the same canonical source. Claude, Codex and
+Hermes remain supported clients; M8 does not retire Claude.
 
 Cutover evidence and the rollback manifest are indexed in
 [`docs/migration/`](docs/migration/README.md). The implementation plan remains

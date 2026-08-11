@@ -1,9 +1,9 @@
 ---
 title: 可移植 A 股 Agent Skills Suite 实施计划
-status: in_progress
+status: completed
 created: 2026-08-08
-updated: 2026-08-10
-current_milestone: M8_pending_confirmation
+updated: 2026-08-11
+current_milestone: M8_completed
 release: v0.1.1
 spec: ../specs/2026-08-08-portable-a-stock-agent-skills-spec.md
 spec_alignment: reviewed
@@ -13,9 +13,9 @@ risk_tier: active-layer
 
 # 可移植 A 股 Agent Skills Suite 实施计划
 
-> 本计划精确到文件、命令、验证和回滚，但不构成实施授权。用户一次明确要求“按 Spec 开始实施”即授权一个持续 Goal 执行 M0-M6；M7 生产切换仍需一次单独明确批准，M8 仅在未被 M7 带条件授权覆盖时单独确认。
+> 本计划精确到文件、命令、验证和回滚，但不构成实施授权。用户一次明确要求“按 Spec 开始实施”即授权一个持续 Goal 执行 M0-M6；M7 生产切换仍需一次单独明确批准。用户于 2026-08-11 澄清 M8 不停用 Claude，只要求九个 active Skill 切到 canonical 仓库并归档旧副本。
 
-> 执行记录（2026-08-09）：M0-M6 已完成并提交；Claude 登录恢复后，按修正后的参数顺序在临时 shadow 完成 research/stale/monitor/QA 四个 smoke，全部 exit 0。Codex、Hermes、Claude 三端四组确定性 invariant 比较全部通过；Claude auth 的 mtime/hash 未变，临时 shadow 已清理。AGY 对 M0-M6 的分段复审发现 renderer 未配置时的哨兵值和 QA compliant 夹具证据不足，已分别改为显式 `None` 并补齐合规夹具，三端 QA 复跑均为 `COMPLIANT`。M7 已按用户一次性 cutover 请求完成：生产 DB 通过 Online Backup API 迁移并完成 integrity/schema/关键计数/holdings 摘要核验；runtime.env 设为 0600；三端切到 release `0.1.0-48a82c85b367`，本地 tag 为 `v0.1.0`；Hermes 候选 smoke、CLI/cron 禁通知 smoke、受控 Telegram 验证（HTTP 200）全部通过；cron after 仅替换持仓检查任务，rollback manifest 保留。详见 `docs/reviews/client-shadow-20260808-claude/`、`docs/reviews/client-shadow-20260808-retry/`、`docs/reviews/agy-m0m6-fix-20260809/` 与 `docs/migration/production-cutover/20260809-115052/`。M8 Claude 停用仍未授权。
+> 执行记录（2026-08-09 至 2026-08-11）：M0-M6 已完成并提交；Claude 登录恢复后，按修正后的参数顺序在临时 shadow 完成 research/stale/monitor/QA 四个 smoke，全部 exit 0。Codex、Hermes、Claude 三端四组确定性 invariant 比较全部通过；Claude auth 的 mtime/hash 未变，临时 shadow 已清理。AGY 对 M0-M6 的分段复审发现 renderer 未配置时的哨兵值和 QA compliant 夹具证据不足，已分别改为显式 `None` 并补齐合规夹具，三端 QA 复跑均为 `COMPLIANT`。M7 已按用户一次性 cutover 请求完成：生产 DB 通过 Online Backup API 迁移并完成 integrity/schema/关键计数/holdings 摘要核验；runtime.env 设为 0600；三端切到 canonical release，Hermes 候选 smoke、CLI/cron 禁通知 smoke、受控 Telegram 验证（HTTP 200）全部通过；cron after 仅替换持仓检查任务，rollback manifest 保留。2026-08-11 部署 `v0.1.1` 后，九个 active `a-stock-*` symlink 均验证指向本仓库；原 Claude 三个完整 Skill 与 Hermes 误建副本已在仓库外归档。M8 按用户澄清后的完成条件收口，Claude、Codex、Hermes 均保留。
 
 ## 0. Minimum landing change
 
@@ -59,7 +59,7 @@ export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 - 每阶段 evidence 保存到 `docs/reviews/m<stage>-<run-id>/`，至少包含 review prompt、stdout、stderr、exit code、before/after source hash 和 drift 状态；凭证、DB 与运行状态文件不得进入 evidence。
 - M0-M6 共用一个持续 Goal；阶段 review gate 是 Goal 内质量检查，不是新的用户审批点。
 - Goal 内允许仓库修改、依赖同步、临时环境、测试、可回滚 installer 验证，以及隔离的三端 shadow 安装（非空临时 target 先备份）；不逐阶段或逐客户端重复请求批准。
-- 生产 DB、配置、cron、Telegram 和 Hermes 主入口切换只在 M7 一次性 cutover 批准后执行；Claude 停用按 M8 边界处理。
+- 生产 DB、配置、cron、Telegram 和 active Skill 切换只在 M7 一次性 cutover 批准后执行；M8 仅做 canonical 指向和旧 Skill 归档核验。
 
 ## 2. 阶段账本
 
@@ -73,7 +73,7 @@ export SPEC="$SUITE/docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md"
 | M5 | 状态外置和迁移工具 | completed | M0-M6 持续 Goal；仅 fixture |
 | M6 | 三端 shadow | completed | M0-M6 持续 Goal；三端四个 fixture smoke 与 invariant 比较完成 |
 | M7 | 生产 DB、配置、cron、Telegram、Hermes 切换 | completed | 2026-08-09 cutover evidence；rollback manifest 保留 |
-| M8 | 稳定、回滚演练、Claude 停用 | not_started | 未被 M7 带条件授权覆盖时单独确认 |
+| M8 | Canonical 收口、旧 Skill 归档、保留三端 | completed | 2026-08-11 用户澄清完成条件；九个入口与归档已核验 |
 
 ---
 
@@ -1139,39 +1139,24 @@ Hermes 父级逐项核验后才宣布切换完成。
 
 ---
 
-# M8：稳定、回滚演练和 Claude 停用
+# M8：Canonical 收口与旧 Skill 归档
 
-## Task M8.1：稳定期验收
+## Task M8.1：Active 入口核验
 
-至少覆盖：
+Claude、Codex、Hermes 的 `a-stock-research`、`a-stock-monitor`、`a-stock-qa`
+共九个 active 入口均为 symlink，解析目标均为本仓库 `skills/` 下对应目录。
 
-- Hermes research 正常和 fail-closed；
-- Monitor holdings/L3/portfolio-risk；
-- QA compliant/non-compliant/SKIP；
-- cron 首次预期执行；
-- Telegram 只在真实条件或受控测试下发送；
-- Claude/Codex 仍可在隔离状态发现 Skill；
-- source/installation hashes 无漂移。
+## Task M8.2：旧 Skill 归档核验
 
-## Task M8.2：回滚演练
+原 Claude 三个完整 Skill 已由 installer 归档到
+`~/.local/share/a-stock-agent/backups/`，精确路径记录在仓库外 rollback
+manifest；Hermes 误建的旧 Research 副本位于 `~/.hermes/archive/skills/`。
+归档只保留，不删除、不重新激活。
 
-在隔离 target/state 中执行 installer rollback 和 DB fixture rollback，不操作生产 DB。验证回滚 manifest 可用后记录结果。
+## Task M8.3：保留三个客户端
 
-## Task M8.3：停用 Claude 入口
-
-默认必须单独获得用户确认；若 M7 审批已明确包含“约定稳定期通过后停用 Claude”及其判定条件，则沿用该授权，不重复询问。只停用：
-
-- Claude 作为 A 股生产交互入口；
-- Claude 相关 A 股自动调用。
-
-不删除：
-
-- 旧 Git 仓库；
-- 旧 DB 快照；
-- Claude Code 的只读兼容 Skill（除非用户另行要求）；
-- 迁移 evidence。
-
-停用后验证进程、cron 和日志中不再调用 Claude CLI。
+Claude、Codex、Hermes 均继续发现和使用 canonical Skill。M8 不停用 Claude，
+也不删除旧 Git 仓库、旧 DB 快照、rollback manifest 或迁移 evidence。
 
 ---
 
@@ -1215,11 +1200,11 @@ Hermes 父级逐项核验后才宣布切换完成。
 - Cron/Telegram boundary：candidate-first，notify disabled 默认。
 - Golden-master：比较结构与安全不变量，不比较全文。
 - Independent review：每阶段 Codex review，父级复核；均属于持续 Goal 内质量检查。
-- No promotion：M7 已由用户一次性 cutover 请求授权并完成；本计划不授权 M8 Claude 停用。
+- No promotion：M7 已由用户一次性 cutover 请求授权并完成；M8 按 2026-08-11 用户澄清完成，不包含任何客户端停用。
 - No placeholders：`<run-id>` 等仅是实施时由 `date` 生成的运行标识，不是未定义设计决策。
 
 # 5. 下一授权点
 
 用户一次明确要求“按 Spec 开始实施”即批准一个持续 Goal 执行 **M0-M6**：冻结证据、canonical 仓库、runtime、三个 Skill、installer、fixture 状态工具和隔离的三端 shadow；阶段验收后自动进入下一阶段，不重复请求项目批准。
 
-M7 必须一次单独明确授权。M8 默认在稳定期验收后单独确认；若 M7 已明确包含带判定条件的 Claude 停用授权，则不重复请求。
+M7 的生产动作已按单独授权完成。M8 已按用户澄清后的 canonical 指向与归档条件完成；本计划无后续授权点。

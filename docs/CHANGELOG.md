@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- M8 completion now means all Claude, Codex and Hermes `a-stock-*` entries use the canonical repository and superseded Skill copies remain archived; Claude is not retired.
+
 ## 0.1.1 - 2026-08-11
 
 ### Added

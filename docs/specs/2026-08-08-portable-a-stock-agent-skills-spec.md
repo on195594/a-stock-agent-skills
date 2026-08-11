@@ -2,7 +2,7 @@
 title: 可移植 A 股 Agent Skills Suite 迁移规范
 status: accepted
 created: 2026-08-08
-updated: 2026-08-09
+updated: 2026-08-11
 owner: lin / Hermes
 risk_tier: active-layer
 ---
@@ -15,16 +15,18 @@ risk_tier: active-layer
 
 > 停用 Claude 前，将现有 `a-stock-research`、`a-stock-monitor`、`a-stock-qa` 从 Claude 专属目录迁移为彻底独立、同时兼容 Codex、Claude Code 和 Hermes 的 Skills；不限制实施时间，要求完整方案。
 
+用户澄清（2026-08-11）：Claude 不需要停用。完成条件是 Claude、Codex、Hermes 的全部 `a-stock-*` active Skill 均切换到 `/home/lin/a-stock-agent-skills`，旧 Skill 副本只归档备份。
+
 可执行合同：
 
-> 建立 `/home/lin/a-stock-agent-skills` 作为唯一 canonical 仓库，将三项能力迁移为符合 Agent Skills 开放规范的独立 Skill；将 Research/Monitor 的共享可执行逻辑收敛到仓库内单一 Python runtime，通过稳定 CLI 供三个 Agent 客户端调用，QA 保持纯文本能力；将数据库、日志、锁、凭证和运行产物外置；解除所有 `.claude` 路径、当前工作目录和 sibling Skill 路径依赖；完成确定性测试、三端兼容性验证、生产状态迁移、Hermes 切换和可验证回滚后，才停用 Claude 入口。
+> 建立 `/home/lin/a-stock-agent-skills` 作为唯一 canonical 仓库，将三项能力迁移为符合 Agent Skills 开放规范的独立 Skill；将 Research/Monitor 的共享可执行逻辑收敛到仓库内单一 Python runtime，通过稳定 CLI 供三个 Agent 客户端调用，QA 保持纯文本能力；将数据库、日志、锁、凭证和运行产物外置；解除所有 `.claude` 路径、当前工作目录和 sibling Skill 路径依赖；完成确定性测试、三端兼容性验证、生产状态迁移、九个 active Skill 入口切换、旧 Skill 归档和可验证回滚后收口，三个客户端继续保留。
 
 明确含义：
 
 - “独立”指独立于 Claude、Codex、Hermes 的安装目录和工具命名，不指复制第三方依赖或复制共享运行时代码。
 - 三个 Skill 是独立的用户能力入口，并作为一个 Suite 发布；Research 和 Monitor 依赖同一个版本化 runtime，纯文本 QA 不依赖 Python runtime。
 - `a-stock-lib` 继续是独立共享 Python 包；`a-stock-tracker` 继续是生产数据项目。
-- 本规范批准后仍不等于批准修改生产数据库、cron、Hermes active skills 或停用 Claude。
+- 本规范批准后仍不等于批准修改生产数据库、cron 或 active Skill；这些生产动作保持独立授权边界。
 
 ## 2. 目标
 
@@ -84,12 +86,12 @@ risk_tier: active-layer
 - 持仓、交易事件、分析缓存、L3/Tier 状态属于生产数据。
 - 当前存在工作日持仓检查 cron 和 tracker 数据任务。
 
-### 4.5 已落地状态（2026-08-09）
+### 4.5 已落地状态（2026-08-11）
 
 - M0-M6 已完成：canonical runtime、三个 Skill、installer、fixture 和三端 shadow 验证均已提交。
-- M7 已完成：生产 DB 通过 SQLite Online Backup API 迁移，`integrity=ok`；Hermes 已作为生产主入口；三端 Skill 入口指向同一 canonical release `v0.1.0`。
+- M7 已完成：生产 DB 通过 SQLite Online Backup API 迁移，`integrity=ok`；Hermes 已作为生产主入口；三端 Skill 入口当前指向同一 canonical release `v0.1.1`。
 - 生产配置位于仓库外且权限为 `0600`；cron 只保留一条 canonical 持仓检查任务；受控 Telegram 验证已通过。
-- M8 尚未开始：稳定期时长和判定条件未约定，Claude 入口仍保留，旧仓库和回滚证据不得删除。
+- M8 已完成：三端共九个 `a-stock-*` active Skill 均指向 canonical 仓库；原 Claude 三个完整 Skill 和 Hermes 误建副本均保留在仓库外归档；Claude、Codex、Hermes 继续可用。
 
 当前事实证据见 `docs/migration/production-cutover/20260809-115052/`；本节不替代生产状态文件或凭证存储。
 
@@ -506,9 +508,9 @@ Hermes 额外完成生产候选 smoke；Claude Code 和 Codex 的验证使用隔
 - 用户批准开始实施时创建一个持续 Goal，默认覆盖 M0-M6：仓库内修改、测试、依赖同步、临时环境、可回滚 Installer 验证，以及在先备份后对三个客户端 Skill 入口进行 shadow 安装；不得为每个里程碑重复请求用户批准。
 - 同一 Goal 使用会话内计划记录阶段状态；不为每阶段创建新的 Goal。上下文压缩、自动续跑和非阻塞测试失败不终止 Goal。
 - Goal 内允许安全、可逆且属于确认范围的修复和重验；平台自身的文件系统、网络或命令权限提示不视为新的项目审批，但必须遵守平台要求。
-- 只有以下边界需要暂停并请求一次明确授权：生产 DB/配置/cron/Telegram/Hermes 主入口切换（M7）；Claude 入口停用（M8）；发现必须改变投资规则、数据库 schema、自动交易或其他已确认非目标。
+- 只有以下边界需要暂停并请求一次明确授权：生产 DB/配置/cron/Telegram/active Skill 切换（M7）；发现必须改变投资规则、数据库 schema、自动交易或其他已确认非目标。
 - M7 的生产动作应合并为一次 cutover 审批，明确列出备份、暂停 writer、DB 迁移、active Skill 切换、cron 切换、smoke 和失败回滚，不把这些步骤拆成多次批准。
-- M8 默认保留一次独立停用确认；若用户在 M7 审批时已经明确授权“稳定期通过后停用 Claude”并给出稳定期条件，则可沿用该授权，不重复询问。
+- M8 只核验九个 active Skill 的 canonical 指向和旧 Skill 归档，不停用任何客户端。
 
 ## 12. 验收标准
 
@@ -578,11 +580,11 @@ Hermes 额外完成生产候选 smoke；Claude Code 和 Codex 的验证使用隔
 
 验证：DB/cron/Telegram/进程证据；用户单独批准后执行。
 
-### M8：稳定与退役
+### M8：Canonical 收口与旧 Skill 归档
 
-结果：在约定稳定期内无阻塞回归后停用 Claude 入口；旧仓库改为只读归档。
+结果：Claude、Codex、Hermes 的九个 active Skill 入口统一指向 canonical 仓库；被替代的旧 Skill 仅归档备份，Claude 保持可用。
 
-验证：Hermes 全功能验收、回滚演练、旧入口禁用状态。删除旧仓库不属于本里程碑，需另行批准。
+验证：九个 symlink 目标一致、三个原 Claude Skill 完整归档、Hermes 误建副本归档、installer rollback manifest 可读。删除任何归档不属于本里程碑，需另行批准。
 
 ## 14. 回滚
 
@@ -667,6 +669,6 @@ Hermes 额外完成生产候选 smoke；Claude Code 和 Codex 的验证使用隔
 - Canonical 仓库创建及源码迁移：completed
 - 三端 shadow Skill 安装：包含在 M0-M6 Goal 授权中，执行前自动备份
 - M7 production cutover：completed 2026-08-09（一次审批合并生产 DB、配置、active Skill、cron、Hermes smoke 和回滚步骤；证据见 `docs/migration/production-cutover/20260809-115052/`）
-- M8 Claude 停用：pending（稳定期时长和判定条件尚未约定；默认在 Hermes 验收后单独确认）
+- M8 canonical 收口与旧 Skill 归档：completed 2026-08-11；Claude、Codex、Hermes 均保留
 
-本文件的生成仅批准保存规范文档，不自动启动实施 Goal。用户后续一次明确要求“按 Spec 开始实施”即授权 M0-M6 Goal；该授权不包含生产 DB/配置/cron/Telegram 切换或 Claude 停用。
+本文件的生成仅批准保存规范文档，不自动启动实施 Goal。用户后续一次明确要求“按 Spec 开始实施”即授权 M0-M6 Goal；该授权不包含生产 DB/配置/cron/Telegram 或 active Skill 切换。
