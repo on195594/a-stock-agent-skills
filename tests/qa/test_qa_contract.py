@@ -50,7 +50,8 @@ def test_research_routing_and_checklist_rubric_match_research_skill() -> None:
     assert "B/D/E 框架不需要 checklist" not in rubric
     assert "不得套用 B 框架" in bank
     assert "保险/券商/证券" in research
-    assert "静态PE（缓存字段 `pe_ttm`，不能作为真正 PE_TTM 用于 PEG）" in research
+    assert "静态PE（`pe_static`" in research
+    assert "`pe_ttm` 仅为 deprecated 兼容别名" in research
 
 
 def test_investment_review_repairs_are_part_of_the_research_and_qa_contract() -> None:
@@ -94,3 +95,41 @@ def test_second_investment_review_fail_closed_contract() -> None:
     assert "关键估值能力与最新财报核验" in rubric
     assert "银行核心数据完整性" in rubric
     assert "QA PASS 仅代表报告文本符合流程规则" in qa_skill
+
+
+def test_wuxi_retro_repairs_are_pinned_in_research_and_qa_contracts() -> None:
+    qa_skill = (ROOT / "skills/a-stock-qa/SKILL.md").read_text(encoding="utf-8")
+    rubric = (ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md").read_text(
+        encoding="utf-8"
+    )
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+    framework_a = (
+        ROOT / "skills/a-stock-research/references/frameworks/A.md"
+    ).read_text(encoding="utf-8")
+
+    fetch_pos = research.index("a-stock-fetch fetch <股票代码>")
+    check_pos = research.index("a-stock-cache check <股票代码>")
+    assert fetch_pos < check_pos
+    assert "禁止并行" in research
+    assert "pe_static" in research and "pe_percentile_5y" in research
+    for reference in (
+        "references/frameworks/A.md",
+        "references/frameworks/B.md",
+        "references/frameworks/C.md",
+        "references/frameworks/D.md",
+        "references/frameworks/E.md",
+        "references/frameworks/F.md",
+        "references/frameworks/step8-graham.md",
+        "references/catalyst-cycle-analysis.md",
+    ):
+        assert f"]({reference})" in research
+
+    assert "INVALID_RUN" in qa_skill
+    assert "INVALID_RUN →" in research
+    assert "任意 Critical/Important" in qa_skill
+    assert "Advisory" in qa_skill and "不得影响 verdict" in qa_skill
+    assert "](references/rubrics/a-stock-research.md)" in qa_skill
+    assert "外部集中风险" in framework_a
+    assert "置信度受限" in research
+    assert "外部集中风险覆盖" in rubric
+    assert "pe_percentile_5y" in rubric

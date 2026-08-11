@@ -69,9 +69,60 @@ def test_current_pb_uses_the_same_report_period_bps_as_pb_history(monkeypatch):
     fetcher._fetch_pb_pe_data('601899', 35.15, results, null_reasons)
 
     assert results['pb'] == 5.08
+    assert results['pe_static'] == 18.03
     assert results['pe_ttm'] == 18.03
+    assert fetcher.FIELDS['pe_ttm'][1] == 'compatibility'
     assert fetcher.FIELDS['pb'][1] == 'computed'
     assert 'pb' not in null_reasons
+
+
+def test_preloaded_price_history_is_trimmed_to_requested_percentile_window():
+    """A 5-year request must not silently score the full preloaded 10-year frame."""
+    import pandas as pd
+
+    fin_df = _make_fin_df_with_period(2014, eps=1.0, bps=10.0)
+    dates = pd.date_range('2016-01-01', '2026-01-01', freq='D')
+    price_df = pd.DataFrame({
+        'date': dates.astype('datetime64[us]'),
+        '收盘': [10.0 if day < pd.Timestamp('2021-01-01') else 30.0 for day in dates],
+    })
+
+    full = fetcher.compute_pe_percentile(
+        'test', 20.0, fin_df, years=10, price_df=price_df
+    )
+    recent = fetcher.compute_pe_percentile(
+        'test', 20.0, fin_df, years=5, price_df=price_df
+    )
+
+    assert full is not None and 45.0 <= full <= 55.0
+    assert recent == 0.0
+
+
+def test_fetch_percentiles_persists_five_and_ten_year_pe(monkeypatch):
+    import pandas as pd
+
+    price_df = pd.DataFrame({
+        'date': pd.to_datetime(['2016-01-04', '2026-01-02']).astype('datetime64[us]'),
+        '收盘': [10.0, 20.0],
+    })
+    calls = []
+    monkeypatch.setattr(fetcher, '_load_price_df', lambda code, years: price_df)
+    monkeypatch.setattr(
+        fetcher,
+        'compute_pe_percentile',
+        lambda code, pe, fin_df, years, **kwargs: calls.append(years) or float(years),
+    )
+    monkeypatch.setattr(fetcher, 'compute_pb_percentile', lambda *args, **kwargs: 20.0)
+    results = {'pe_static': 18.0, 'pe_ttm': 18.0, 'pb': 2.0}
+    null_reasons = {}
+
+    fetcher._fetch_percentiles('600000', object(), results, null_reasons)
+
+    assert calls == [5, 10]
+    assert results['pe_percentile_5y'] == 5.0
+    assert results['pe_percentile_10y'] == 10.0
+    assert results['_pe_percentile_windows']['5']['sample_end'] == '2026-01-02'
+    assert results['_pe_percentile_windows']['10']['sample_start'] == '2016-01-04'
 
 
 def test_trading_dates_prefer_tushare(monkeypatch):

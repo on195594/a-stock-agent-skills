@@ -55,7 +55,8 @@ DATA_SOURCE = os.environ.get('FETCHER_DATA_SOURCE', 'tushare').strip().lower() o
 #   computed  = 从历史数据自行构造
 #   web       = 需要 WebSearch 补充（fetcher 不负责）
 FIELDS = {
-    'pe_ttm':             ('PE_静态（年报EPS，非TTM）',  'structured'),
+    'pe_static':          ('PE_静态（年报EPS，非TTM）',  'computed'),
+    'pe_ttm':             ('PE_静态兼容别名（deprecated）', 'compatibility'),
     'pb':                 ('PB（当前价/同期BPS）',        'computed'),
     'roe_3y_avg':         ('ROE近3年均值(%)',            'structured'),
     'net_profit_growth':  ('净利润增速近3年均值(%)',      'structured'),
@@ -63,6 +64,7 @@ FIELDS = {
     'dividend_yield':     ('股息率(%)',                   'structured'),
     'dps':                ('每股分红(元)',                'structured'),
     'dps_ttm':            ('每股分红TTM(元)',              'structured'),
+    'pe_percentile_5y':   ('PE历史5年分位(%)',            'computed'),
     'pe_percentile_10y':  ('PE历史10年分位(%)',           'computed'),
     'pb_percentile_10y':  ('PB历史10年分位(%)',           'computed'),
     'float_to_total_ratio': ('流通/总市值比(%)',           'structured'),
@@ -718,6 +720,7 @@ def compute_pe_percentile(code: str, current_pe: float | None,
         price_df = _load_price_df(code, years)
     if isinstance(price_df, str) or price_df is None:
         return 'API_ERROR'
+    price_df = _trim_price_window(price_df, years)
 
     eps_records = []
     for _, row in fin_df.iterrows():
@@ -760,6 +763,7 @@ def compute_pb_percentile(code: str, current_pb: float | None,
         price_df = _load_price_df(code, years)
     if isinstance(price_df, str) or price_df is None:
         return 'API_ERROR'
+    price_df = _trim_price_window(price_df, years)
 
     bps_records = []
     for _, row in fin_df.iterrows():
@@ -783,6 +787,16 @@ def compute_pb_percentile(code: str, current_pb: float | None,
     if len(valid_pb) < 100:
         return None
     return round(float((valid_pb < current_pb).mean() * 100), 1)
+
+
+def _trim_price_window(price_df: Any, years: int) -> Any:
+    """Trim caller-supplied history to the requested trailing window."""
+    import pandas as pd
+
+    if getattr(price_df, 'empty', True) or 'date' not in price_df.columns:
+        return price_df
+    cutoff = price_df['date'].max() - pd.DateOffset(years=years)
+    return price_df[price_df['date'] >= cutoff].reset_index(drop=True)
 
 
 # ─── 字段提取纯函数（供 cmd_fetch 调用，也是单元测试入口）──────────────────
@@ -967,11 +981,13 @@ def _fetch_pb_pe_data(code: str, current_price: float | None,
     # 静态PE（非TTM）：当前价 ÷ 最近完整年报EPS。季报后实际PE偏高，分析时注意口径
     eps = results.get('eps')
     if current_price and eps and eps > 0:
-        results['pe_ttm'] = round(current_price / eps, 2)
-        logger.info(f"  ✅ PE_静态={results['pe_ttm']}（{current_price}/{eps}）")
+        results['pe_static'] = round(current_price / eps, 2)
+        results['pe_ttm'] = results['pe_static']
+        logger.info(f"  ✅ PE_静态={results['pe_static']}（{current_price}/{eps}）")
     else:
+        null_reasons['pe_static'] = f'EPS不可用（eps={eps}）或价格不可用'
         null_reasons['pe_ttm'] = f'EPS不可用（eps={eps}）或价格不可用'
-        logger.warning("  ⚠️ PE_TTM 无法计算: %s", null_reasons['pe_ttm'])
+        logger.warning("  ⚠️ PE_静态无法计算: %s", null_reasons['pe_static'])
 
 
 def _fetch_dividend(code: str, current_price: float | None,
@@ -1016,9 +1032,10 @@ def _fetch_percentiles(code: str, fin_df: Any,
                        results: dict, null_reasons: dict,
                        split_ratio: float = 0.0,
                        split_ex_date: str | None = None) -> None:
-    """Step 5: PE / PB 历史10年分位（需拉历史价格 + 年报每股指标）。"""
-    logger.info("  [5/7] 计算 PE / PB 历史10年分位...")
+    """Step 5: PE 5/10-year and PB 10-year percentiles."""
+    logger.info("  [5/7] 计算 PE 5/10年与 PB 10年历史分位...")
     if fin_df is None or isinstance(fin_df, (str, tuple)):
+        null_reasons['pe_percentile_5y'] = '财务数据不可用'
         null_reasons['pe_percentile_10y'] = '财务数据不可用'
         null_reasons['pb_percentile_10y'] = '财务数据不可用'
         logger.warning("  ⚠️ 跳过（财务数据不可用）")
@@ -1027,22 +1044,36 @@ def _fetch_percentiles(code: str, fin_df: Any,
     # 价格历史仅拉取一次，PE 和 PB 分位共享同一份数据
     price_df = _load_price_df(code, years=10)
     if isinstance(price_df, str):
+        null_reasons['pe_percentile_5y'] = '历史价格API失败（网络错误，重试后仍不可用）'
         null_reasons['pe_percentile_10y'] = '历史价格API失败（网络错误，重试后仍不可用）'
         null_reasons['pb_percentile_10y'] = '历史价格API失败（网络错误，重试后仍不可用）'
         logger.warning("  ⚠️ 历史价格获取失败，跳过PE/PB分位计算")
         return
+    results['_pe_percentile_windows'] = {}
+    for years in (5, 10):
+        window = _trim_price_window(price_df, years)
+        if not window.empty:
+            results['_pe_percentile_windows'][str(years)] = {
+                'sample_start': window['date'].min().date().isoformat(),
+                'sample_end': window['date'].max().date().isoformat(),
+            }
 
-    if results.get('pe_ttm'):
-        pct = compute_pe_percentile(code, results['pe_ttm'], fin_df, years=10,
-                                    price_df=price_df,
-                                    split_ratio=split_ratio, split_ex_date=split_ex_date)
-        if isinstance(pct, float):
-            results['pe_percentile_10y'] = pct
-            logger.info(f"  ✅ PE10y分位={pct}%")
-        else:
-            null_reasons['pe_percentile_10y'] = '历史PE数据点不足（<100）'
+    if results.get('pe_static'):
+        for years in (5, 10):
+            field = f'pe_percentile_{years}y'
+            pct = compute_pe_percentile(
+                code, results['pe_static'], fin_df, years=years,
+                price_df=price_df, split_ratio=split_ratio,
+                split_ex_date=split_ex_date,
+            )
+            if isinstance(pct, float):
+                results[field] = pct
+                logger.info(f"  ✅ PE{years}y分位={pct}%")
+            else:
+                null_reasons[field] = '历史PE数据点不足（<100）'
     else:
-        null_reasons['pe_percentile_10y'] = 'PE_TTM 不可用'
+        null_reasons['pe_percentile_5y'] = 'PE_静态不可用'
+        null_reasons['pe_percentile_10y'] = 'PE_静态不可用'
 
     if results.get('pb'):
         pct = compute_pb_percentile(code, results['pb'], fin_df, years=10,
@@ -1123,7 +1154,8 @@ def _build_cache_payload(code: str, name: str, industry: str,
     provenance: dict[str, dict[str, str]] = {}
     quote_as_of = results.get('_quote_as_of')
     quote_derived_fields = {
-        'pe_ttm', 'pb', 'dividend_yield', 'pe_percentile_10y',
+        'pe_static', 'pe_ttm', 'pb', 'dividend_yield', 'pe_percentile_5y',
+        'pe_percentile_10y',
         'pb_percentile_10y', 'float_to_total_ratio',
     }
     for key in business_fields:
@@ -1142,6 +1174,17 @@ def _build_cache_payload(code: str, name: str, industry: str,
             'as_of': quote_as_of if key in quote_derived_fields and quote_as_of else data_period,
             'status': status,
         }
+        if key in {'pe_percentile_5y', 'pe_percentile_10y'}:
+            years = '5' if key.endswith('_5y') else '10'
+            provenance[key].update({
+                'window_years': years,
+                'basis': 'annual_eps_disclosure_lag_adjusted',
+                'price_basis': 'raw_close',
+                'split_policy': 'detected_event_eps_adjustment',
+            })
+            provenance[key].update(
+                results.get('_pe_percentile_windows', {}).get(years, {})
+            )
     cache_data.update({
         'data_period': data_period,
         'null_reasons': normalized_reasons,
@@ -1208,6 +1251,7 @@ def _print_field_quality_table(data):
         'structured': '📊 ' + ('AKShare' if DATA_SOURCE == 'akshare' else 'TuShare'),
         'akshare': '📊 AKShare',
         'computed': '🔢 自动计算',
+        'compatibility': '↩ 兼容别名',
         'web': '🔍 需WebSearch',
     }
 

@@ -222,7 +222,16 @@ def test_fundamentals_requires_provenance_and_null_reason_for_every_field() -> N
 
 
 def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -> None:
-    results = {'roe_3y_avg': 12.0, '_quote_as_of': '2026-07-14T10:00:00'}
+    results = {
+        'roe_3y_avg': 12.0,
+        'pe_static': 18.0,
+        'pe_ttm': 18.0,
+        'pe_percentile_5y': 25.0,
+        '_pe_percentile_windows': {
+            '5': {'sample_start': '2021-07-14', 'sample_end': '2026-07-14'},
+        },
+        '_quote_as_of': '2026-07-14T10:00:00',
+    }
     fetcher._build_cache_payload('600000', '测试', '制造', results, {}, '2025年报')
 
     with cache.db_session() as conn:
@@ -235,6 +244,14 @@ def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -
     assert stored['field_provenance']['roe_3y_avg']['status'] == 'ok'
     assert stored['field_provenance']['pb']['status'] == 'missing'
     assert stored['null_reasons']['pb']
+    assert stored['pe_static'] == stored['pe_ttm'] == 18.0
+    assert stored['field_provenance']['pe_static']['as_of'] == '2026-07-14T10:00:00'
+    assert stored['field_provenance']['pe_percentile_5y']['window_years'] == '5'
+    assert stored['field_provenance']['pe_percentile_5y']['basis'] == 'annual_eps_disclosure_lag_adjusted'
+    assert stored['field_provenance']['pe_percentile_5y']['price_basis'] == 'raw_close'
+    assert stored['field_provenance']['pe_percentile_5y']['split_policy'] == 'detected_event_eps_adjustment'
+    assert stored['field_provenance']['pe_percentile_5y']['sample_start'] == '2021-07-14'
+    assert stored['field_provenance']['pe_percentile_5y']['sample_end'] == '2026-07-14'
 
 
 @pytest.mark.parametrize(('raw', 'expected'), [

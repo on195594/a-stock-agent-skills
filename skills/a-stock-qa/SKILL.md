@@ -1,6 +1,6 @@
 ---
 name: a-stock-qa
-description: Use after an a-stock-research report to independently verify that mandatory analysis steps were executed and data fields are complete. Unsupported report types return SKIP. Returns a structured compliance verdict (COMPLIANT/PARTIAL/NON_COMPLIANT) with per-check details.
+description: Use after an a-stock-research report to independently verify mandatory steps and data completeness. Unsupported types return SKIP; invalid inputs return INVALID_RUN. Returns a structured compliance verdict with per-check details.
 license: Proprietary
 compatibility: Reads this Skill's rubric and checks supplied report text.
 ---
@@ -15,8 +15,8 @@ compatibility: Reads this Skill's rubric and checks supplied report text.
 
 ## 调用前提
 
-必须已有完整 a-stock-research 分析输出文本。
-如无完整输出，直接返回 `verdict: SKIP`，附注"无分析输出可检查"。
+必须已有完整 a-stock-research 分析输出正文，并以正文直接传入或提供当前宿主可读的固定文件路径。
+如缺少完整正文、只提供摘要/修订说明、路径不可读或工具异常，直接返回 `verdict: INVALID_RUN` 并说明缺失项；不得返回 `NON_COMPLIANT`，也不得把该次运行计入报告合规结果。
 当前仅支持已有的 a-stock-research rubric；其他类型返回 `SKIP`。
 
 ## 执行步骤
@@ -33,7 +33,7 @@ compatibility: Reads this Skill's rubric and checks supplied report text.
 ### Step 2：加载对应 rubric
 
 ```
-Read the discovered a-stock-qa rubric for <skill_type>
+Read the [a-stock-research rubric](references/rubrics/a-stock-research.md) for <skill_type>
 ```
 
 如 rubric 文件不存在（Phase 2/3 尚未实现），返回：
@@ -57,9 +57,11 @@ reason: rubric for <skill_type> not yet implemented (Phase 2/3)
 
 ```
 COMPLIANT    = 所有检查均 PASS 或 SKIP（无 FAIL）
-PARTIAL      = 有 1-2 个 FAIL，但均为 Minor 级别
+PARTIAL      = 有一个或多个 FAIL，但全部为 Minor 级别
 NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
 ```
+
+必须先按级别汇总再写 verdict，禁止凭整体印象改写结果。Rubric 以外的建议放入独立 `Advisory` 段；Advisory 不得影响 verdict。
 
 ### Step 5：输出结构化报告
 
@@ -69,7 +71,7 @@ NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
 **Skill type**: <skill_type>
 **股票**: <代码 + 名称，如可从输出中提取>
 **检查时间**: <今日日期>
-**整体 verdict**: COMPLIANT | PARTIAL | NON_COMPLIANT
+**整体 verdict**: COMPLIANT | PARTIAL | NON_COMPLIANT | INVALID_RUN
 
 ### 检查明细
 
@@ -84,6 +86,7 @@ NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
 <如果 PARTIAL>：存在 Minor 问题，不影响分析结论可用性，建议下次修正。
 <如果 NON_COMPLIANT>：存在以下问题需在报告首部置顶警告：
   - [FAIL 项列表，各一句说明]
+<如果 INVALID_RUN>：输入缺少完整报告正文或不可读，本次未形成合规结论：[原因]
 ```
 
 ## 注意事项
@@ -92,4 +95,5 @@ NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
 - 本 skill **不发表投资意见**，只判断流程合规性
 - 检查结果基于报告文本，无法核验外部数据源的实际准确性
   （如 fetcher 数据本身是否正确，不在本 skill 职责范围内）
-- 遇到模糊情况（输出不完整、无法判断某步骤是否执行）→ 保守判断为 FAIL，附注"无法从输出文本确认"
+- 完整报告存在、但某一步骤证据模糊或无法判断 → 按 rubric 级别保守判断为 FAIL，附注"无法从输出文本确认"
+- 完整报告本身不存在或不可读 → `INVALID_RUN`，不是合规 FAIL

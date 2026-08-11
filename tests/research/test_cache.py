@@ -1614,6 +1614,7 @@ def test_watchlist_json_marks_pending_refresh(capsys, monkeypatch):
     cache.cmd_watchlist(['--json'])
     rows = json.loads(capsys.readouterr().out)
     assert rows[0]['code'] == '600036'
+    assert rows[0]['pe_static'] == rows[0]['pe_ttm'] == 5.5
     assert rows[0]['needs_refresh'] is True
 
 

@@ -177,6 +177,7 @@ def get_watchlist_rows() -> list[dict]:
                 "score_breakdown": score_breakdown,
                 "needs_refresh": needs_refresh,
                 "price_invalidated": price_invalidated,
+                "pe_static": data.get("pe_static") or data.get("pe_ttm"),
                 "pe_ttm": data.get("pe_ttm"),
                 "pb": data.get("pb"),
                 "dividend_yield": data.get("dividend_yield"),
@@ -246,7 +247,7 @@ def cmd_watchlist(args: list[str] | None = None) -> None:
         code, name = row["code"], row["name"]
         industry = row["industry"] or "─"
         analysis_time, score, flags = row["analysis_time"], row["score"], row["flags"]
-        pe = str(row["pe_ttm"] or "─")
+        pe = str(row["pe_static"] or "─")
         pb = str(row["pb"] or "─")
         div = (str(row["dividend_yield"]) + "%") if row["dividend_yield"] else "─"
         roe = (str(row["roe_3y_avg"]) + "%") if row["roe_3y_avg"] else "─"

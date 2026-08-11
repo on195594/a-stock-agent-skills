@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Runtime fetcher now emits a same-basis 5-year PE percentile with explicit window/basis provenance.
+- A-framework reports now carry an external-concentration risk overlay without changing the 60-point score.
+
+### Changed
+
+- `pe_static` is the canonical annual-EPS price multiple; legacy `pe_ttm` remains a deprecated compatibility alias.
+- Research requires `a-stock-fetch fetch` to complete before `a-stock-cache check`, and explicitly links every framework reference.
+- QA classifies missing report inputs as `INVALID_RUN`, aggregates Important/Critical failures deterministically, and keeps rubric-external advice out of verdicts.
+
 ## 0.1.2 - 2026-08-11
 
 ### Changed
