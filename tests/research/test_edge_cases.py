@@ -55,16 +55,21 @@ class TestAddHoldingArgParsing:
         assert exc.value.code == 1
         assert '成本价必须为数字' in err
 
-    def test_text_as_third_arg_becomes_notes_not_shares(self):
-        """add-holding <code> <cost> <text> — non-digit 3rd arg goes to notes."""
-        cache.cmd_add_holding(['600519', '100', '备注文字'])
+    def test_notes_require_explicit_option(self):
+        cache.cmd_add_holding(['600519', '100', '--notes', '备注文字'])
         conn = cache.get_db()
         row = conn.execute(
             "SELECT shares, notes FROM holdings WHERE code='600519'"
         ).fetchone()
         conn.close()
-        assert row[0] is None, "non-digit 3rd arg should be stored as notes, not shares"
+        assert row[0] is None
         assert row[1] == '备注文字'
+
+    def test_text_as_third_arg_is_rejected(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            cache.cmd_add_holding(['600519', '100', '备注文字'])
+        assert exc.value.code == 1
+        assert '--notes' in capsys.readouterr().err
 
     def test_digit_as_third_arg_becomes_shares(self):
         """add-holding <code> <cost> <digit> — digit 3rd arg goes to shares."""

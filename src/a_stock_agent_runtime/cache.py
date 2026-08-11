@@ -28,7 +28,7 @@ A股投研数据缓存管理器
   cache.py l3-add ... / l3-update ... / l3-list <代码>   # 结构化 L3 条件
   cache.py tier-config ... / tier-update ...             # 结构化 Tier 状态
   cache.py holding-framework <代码> <A|B|C|D|E|F>        # 显式迁移持仓框架并重算止损线
-  cache.py add-holding <代码> <成交价> [股数] [备注] [--fee 金额] [--date YYYY-MM-DD]
+  cache.py add-holding <代码> <成交价> [股数] [--notes 备注] [--fee 金额] [--date YYYY-MM-DD]
                                                         # 新增建仓批次
   cache.py buy-holding <代码> <买入价> <股数> [--fee 金额] [--date YYYY-MM-DD]
                                                         # 加仓并保留最初 buy_date
@@ -66,6 +66,7 @@ TTL 按行业自动推断（set 命令未指定 TTL 时）：
   其余行业                   → 24h（默认）
 """
 
+import argparse
 import sqlite3
 import json
 import math
@@ -1595,27 +1596,37 @@ def cmd_set_score_breakdown(args: list[str]) -> None:
 
 def _parse_add_holding_args(
     args: list[str],
-) -> tuple[str, float, int | None, str | None, int]:
+) -> tuple[str, float, int | None, str | None, list[str]]:
     if len(args) < 2:
-        print("错误：需要参数 <代码> <成本价> [股数] [备注]", file=sys.stderr)
+        print("错误：需要参数 <代码> <成本价> [股数] [--notes 备注]", file=sys.stderr)
         sys.exit(1)
     code = args[0]
     cost_price = _parse_cli_finite_float(args[1], '成本价', minimum=0, strict_minimum=True)
-    shares = int(args[2]) if len(args) > 2 and args[2].isdigit() else None
+    remaining = args[2:]
+    shares = None
+    if remaining and not remaining[0].startswith('--'):
+        try:
+            shares = int(remaining.pop(0))
+        except ValueError:
+            print("错误：股数必须为整数；备注请使用 --notes", file=sys.stderr)
+            sys.exit(1)
     if shares is not None and shares <= 0:
         print("错误：股数必须大于0", file=sys.stderr)
         sys.exit(1)
-    if shares is not None:
-        if len(args) > 3 and not args[3].startswith('--'):
-            notes = args[3]
-            option_start = 4
+    notes = None
+    trade_options: list[str] = []
+    i = 0
+    while i < len(remaining):
+        if remaining[i] == '--notes':
+            if i + 1 >= len(remaining):
+                print("错误：--notes 需要参数", file=sys.stderr)
+                sys.exit(1)
+            notes = remaining[i + 1]
+            i += 2
         else:
-            notes = None
-            option_start = 3
-    else:
-        notes = args[2] if len(args) > 2 and not args[2].startswith('--') else None
-        option_start = 3 if notes is not None else 2
-    return code, cost_price, shares, notes, option_start
+            trade_options.extend(remaining[i:i + 2])
+            i += 2
+    return code, cost_price, shares, notes, trade_options
 
 
 def _a_share_board(code: str) -> tuple[str, int]:
@@ -1691,8 +1702,8 @@ def _resolve_holding_framework(conn: sqlite3.Connection, code: str) -> tuple[str
 
 def cmd_add_holding(args: list[str]) -> None:
     """Add a new holding lot and its baseline event; use buy-holding to add shares."""
-    code, trade_price, shares, notes, option_start = _parse_add_holding_args(args)
-    fees, tax, buy_date = _parse_trade_options(args, option_start)
+    code, trade_price, shares, notes, trade_options = _parse_add_holding_args(args)
+    fees, tax, buy_date = _parse_trade_options(trade_options, 0)
     if tax:
         print("错误：建仓买入不接受 --tax，请仅记录实际买入费用 --fee", file=sys.stderr)
         sys.exit(1)
@@ -3731,27 +3742,136 @@ COMMAND_CLASSIFICATION = {
 }
 
 
+class _CLIParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        print(f"参数错误：{message}", file=sys.stderr)
+        raise SystemExit(2)
+
+
+_CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
+    'check': (('代码', '?'),),
+    'get': (('代码', '?'),),
+    'set': (('代码', None), ('名称', None), ('行业', None), ('JSON', None), ('TTL', '?')),
+    'get-analysis': (('代码', '?'),),
+    'set-analysis': (('代码', None), ('框架', None), ('得分', '?')),
+    'set-score': (('代码', None), ('分数', None)),
+    'set-score-breakdown': (('代码', None), ('JSON', None)),
+    'set-flag': (('代码', None), ('级别', None), ('原因', None)),
+    'clear-flag': (('代码', None),),
+    'alert-open': (
+        ('代码', None), ('级别', None), ('类别', None), ('reason_code', None),
+        ('复核日期', None), ('原因', None), ('证据', '?'),
+    ),
+    'alert-pending': (('代码', None), ('reason_code', None), ('说明', None)),
+    'alert-resolve': (('代码', None), ('reason_code', None), ('证据', None)),
+    'alerts': (('代码', None),),
+    'l3-add': (('代码', None), ('来源', None), ('条件', None), ('临时规则', '?')),
+    'l3-update': (
+        ('条件id', None), ('状态', None), ('as-of', None), ('证据', None),
+        ('下次复核', '?'),
+    ),
+    'l3-list': (('代码', None),),
+    'tier-config': (
+        ('代码', None), ('路径', None), ('目标涨幅', '?'), ('豁免框架', '?'),
+    ),
+    'tier-update': (('代码', None), ('Tier', None), ('状态', None)),
+    'holding-framework': (('代码', None), ('框架', None)),
+    'add-holding': (('代码', None), ('成交价', None), ('股数', '?')),
+    'buy-holding': (('代码', None), ('买入价', None), ('股数', None)),
+    'sell-holding': (('代码', None), ('卖出价', None), ('股数或all', None)),
+    'record-dividend': (('代码', None), ('现金总额', None), ('日期', '?')),
+    'corporate-action': (
+        ('代码', None), ('每股现金分红', None), ('转增比例', None), ('日期', '?'),
+    ),
+    'close-holding': (('代码', None), ('卖出价', None), ('日期', '?')),
+    'retro-add': (('代码', None), ('error_tags', None)),
+    'retro-pending': (),
+    'retro-stats': (('框架', '?'),),
+    'retro-outliers': (),
+    'holdings': (),
+    'remove-holding': (('代码', None),),
+    'update-return': (('代码', None), ('回报率', None)),
+    'position-return': (('代码', None), ('当前价', '?')),
+    'portfolio-risk': (),
+    'check-holdings': (),
+    'watchlist': (),
+    'list': (),
+    'cleanup': (),
+    'clear': (('代码', '?'),),
+    'checklist': (('代码', None), ('框架', None)),
+}
+
+_CLI_VALUE_OPTIONS = {
+    'add-holding': ('--notes', '--fee', '--date'),
+    'buy-holding': ('--fee', '--date'),
+    'sell-holding': ('--fee', '--tax', '--date'),
+    'retro-add': ('--note', '--thesis', '--gap'),
+    'retro-outliers': ('--loss',),
+    'portfolio-risk': ('--portfolio-value', '--max-position-risk-pct'),
+}
+
+
+def _build_cli_parser() -> argparse.ArgumentParser:
+    parser = _CLIParser(
+        prog='a-stock-cache',
+        description='A股投研数据缓存管理器',
+    )
+    parser.add_argument(
+        '--confirm-write', action='store_true',
+        help='确认执行会修改本地投资状态的 W1 子命令（必须位于子命令前）',
+    )
+    subparsers = parser.add_subparsers(dest='command', metavar='<子命令>')
+    for command, positionals in _CLI_POSITIONALS.items():
+        handler_doc = COMMANDS[command].__doc__ or ''
+        command_parser = subparsers.add_parser(
+            command,
+            help=handler_doc.splitlines()[0].replace('%', '%%') if handler_doc else None,
+        )
+        for index, (metavar, nargs) in enumerate(positionals, start=1):
+            if nargs is None:
+                command_parser.add_argument(f'arg{index}', metavar=metavar)
+            else:
+                command_parser.add_argument(f'arg{index}', metavar=metavar, nargs=nargs)
+        for option in _CLI_VALUE_OPTIONS.get(command, ()):
+            command_parser.add_argument(option, metavar='值')
+        if command == 'watchlist':
+            command_parser.add_argument('--json', action='store_true')
+            command_parser.add_argument('--breakdown', action='store_true')
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
     global _READ_ONLY_REQUEST
     args = list(sys.argv[1:] if argv is None else argv)
-    if not args or args == ['--help']:
-        print(__doc__)
+    parser = _build_cli_parser()
+    if not args:
+        parser.print_help()
         return 0
     confirm_write = bool(args and args[0] == '--confirm-write')
     if confirm_write:
         args.pop(0)
-    if not confirm_write and args and args[0].startswith('--'):
+    if not confirm_write and args and args[0].startswith('--') and args != ['--help']:
         print('错误：仅支持位于子命令前的全局 --confirm-write', file=sys.stderr)
         return 2
     if not args:
-        print(__doc__)
+        parser.print_help()
         return 0
+    if args == ['--help']:
+        try:
+            parser.parse_args(args)
+        except SystemExit as exc:
+            return int(exc.code or 0)
     command, remaining = args[0], args[1:]
     classification = COMMAND_CLASSIFICATION.get(command)
     if command not in COMMANDS or classification is None:
         print(f'错误：未知命令 {command}', file=sys.stderr)
-        print(__doc__, file=sys.stderr)
+        parser.print_help(sys.stderr)
         return 1
+    if remaining == ['--help']:
+        try:
+            parser.parse_args(args)
+        except SystemExit as exc:
+            return int(exc.code or 0)
     if classification == 'W1' and not confirm_write:
         print(
             f'需要明确确认：{command} 将修改本地投资状态；'
@@ -3759,6 +3879,10 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 3
+    try:
+        parser.parse_args(args)
+    except SystemExit as exc:
+        return int(exc.code or 0)
     database_path = paths.cache_db_path()
     if classification == 'R0' and not database_path.exists():
         print(f'状态数据库不存在：{database_path}', file=sys.stderr)

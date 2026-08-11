@@ -1423,7 +1423,7 @@ def test_portfolio_risk_no_holdings(capsys):
 
 def test_portfolio_risk_with_holdings(capsys, monkeypatch):
     """有持仓时正常输出持仓明细和框架分布"""
-    cache.cmd_add_holding(['600036', '45.0', '100', '测试招行'])
+    cache.cmd_add_holding(['600036', '45.0', '100', '--notes', '测试招行'])
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(50.0, cache.cst_today(), '15:00:00'),
@@ -1436,7 +1436,7 @@ def test_portfolio_risk_with_holdings(capsys, monkeypatch):
 
 
 def test_portfolio_risk_rejects_quote_without_date(capsys, monkeypatch):
-    cache.cmd_add_holding(['600036', '45.0', '100', '测试招行'])
+    cache.cmd_add_holding(['600036', '45.0', '100', '--notes', '测试招行'])
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(50.0, None, None),
@@ -1458,7 +1458,7 @@ def test_check_holdings_no_holdings(capsys):
 
 def test_check_holdings_price_fetch_fails(capsys, monkeypatch):
     """实时取价失败时显示'无实时价格'，不崩溃"""
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])
     monkeypatch.setattr(cache, 'fetch_current_price_quote', lambda code: None)
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
@@ -1467,7 +1467,7 @@ def test_check_holdings_price_fetch_fails(capsys, monkeypatch):
 
 def test_check_holdings_normal(capsys, monkeypatch):
     """现价高于止损线时显示✅正常，不计入预警"""
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(38.0, cache.cst_today(), '15:00:00'),
@@ -1480,7 +1480,7 @@ def test_check_holdings_normal(capsys, monkeypatch):
 
 def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
     """现价跌破15%止损线但未到20%时触发⚠️黄色预警"""
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
@@ -1494,7 +1494,7 @@ def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
 
 def test_check_holdings_alerts_below_20pct(capsys, monkeypatch):
     """现价跌破20%止损线时触发🔴红色预警"""
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
@@ -1508,7 +1508,7 @@ def test_check_holdings_alerts_below_20pct(capsys, monkeypatch):
 
 def test_check_holdings_skips_closed_positions(capsys, monkeypatch):
     """已平仓持仓不参与止损检查"""
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])
     cache.cmd_close_holding(['600036', '50.0'])
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
@@ -1532,7 +1532,7 @@ class _FixedDatetime(datetime):
 
 def test_check_holdings_stale_quote_is_observation_only(capsys, monkeypatch):
     """非交易时段拿到上一交易日收盘价时，只输出观察提醒，不计入预警"""
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     _FixedDatetime._fixed = datetime(2026, 7, 2, 1, 30)  # 周四凌晨，非交易时段
     monkeypatch.setattr(cache, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
@@ -1548,7 +1548,7 @@ def test_check_holdings_stale_quote_is_observation_only(capsys, monkeypatch):
 
 
 def test_check_holdings_unknown_quote_timestamp_is_not_actionable(capsys, monkeypatch):
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date=None, quote_time=None),
@@ -1562,7 +1562,7 @@ def test_check_holdings_unknown_quote_timestamp_is_not_actionable(capsys, monkey
 
 def test_check_holdings_intraday_breach_uses_alarm_prefix(capsys, monkeypatch):
     """交易时段内跌破止损线，文案带 🚨 盘中已跌破 前缀，仍用"现价" """
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     _FixedDatetime._fixed = datetime(2026, 7, 2, 10, 0)  # 周四盘中
     monkeypatch.setattr(cache, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
@@ -1578,7 +1578,7 @@ def test_check_holdings_intraday_breach_uses_alarm_prefix(capsys, monkeypatch):
 
 def test_check_holdings_after_hours_breach_uses_close_price_wording(capsys, monkeypatch):
     """收盘后跌破止损线，文案用"收盘价"而不是"现价"，图标沿用历史 🔴/⚠️"""
-    cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     _FixedDatetime._fixed = datetime(2026, 7, 2, 16, 0)  # 周四收盘后
     monkeypatch.setattr(cache, 'datetime', _FixedDatetime)
     monkeypatch.setattr(

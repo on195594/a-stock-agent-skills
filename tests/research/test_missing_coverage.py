@@ -402,7 +402,7 @@ class TestCheckHoldingsBoundary:
 
     def _add_holding_cost40(self):
         # cost=40 → sl15=34.000, sl20=32.000
-        cache.cmd_add_holding(['600036', '40.0', '100', '测试'])
+        cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])
 
     def test_price_exactly_at_15pct_stop_triggers_yellow(self, capsys, monkeypatch):
         self._add_holding_cost40()

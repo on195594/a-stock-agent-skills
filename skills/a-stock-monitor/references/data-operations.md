@@ -11,7 +11,7 @@
 
 ```bash
 # 全新股票第一次建仓；会固化持仓 framework、initial_shares 和最初 buy_date
-$CACHE --confirm-write add-holding <代码> <成交价> <股数> [备注] \
+$CACHE --confirm-write add-holding <代码> <成交价> <股数> [--notes 备注] \
   [--fee <金额>] [--date YYYY-MM-DD]
 
 # 已有持仓加仓；自动计算含买入费用的加权成本、重算框架止损线，

@@ -58,7 +58,7 @@ $CACHE check-holdings                         # 持仓止损检查（当前价 v
 $CACHE check <代码>                           # 查询该股缓存状态
 
 # 交易账本（写入操作的完整规则见数据操作附录）
-$CACHE --confirm-write add-holding <代码> <成交价> <股数> [备注] ... # 仅全新股票首次建仓
+$CACHE --confirm-write add-holding <代码> <成交价> <股数> [--notes 备注] ... # 仅全新股票首次建仓
 $CACHE --confirm-write buy-holding <代码> <价格> <股数> ...      # 加仓，保留最初buy_date
 $CACHE --confirm-write sell-holding <代码> <价格> <股数|all> ... # 部分/全部卖出，含费用税费
 $CACHE --confirm-write record-dividend <代码> <现金总额> [日期]
@@ -141,7 +141,7 @@ $CACHE l3-list <代码>
 建仓时执行（写入操作的完整规则见「数据操作附录」）：
 ```bash
 a-stock-cache --confirm-write add-holding \
-  <代码> <成交价> <股数> [备注] [--fee <金额>] [--date YYYY-MM-DD]
+  <代码> <成交价> <股数> [--notes 备注] [--fee <金额>] [--date YYYY-MM-DD]
 ```
 自动按该股票所属框架的专属系数写入止损第一档/第二档价位（系数因框架而异，见步骤2「价格止损」小节的完整对照表）和买入得分。
 

@@ -39,7 +39,10 @@ CLI_ARGUMENT_CASES = {
     "holding-framework": (["600000", "A"], ["600000", "A"]),
     "add-holding": (
         ["600000", "10"],
-        ["600000", "10", "100", "备注", "--fee", "1", "--date", "2026-08-11"],
+        [
+            "600000", "10", "100", "--notes", "备注", "--fee", "1", "--date",
+            "2026-08-11",
+        ],
     ),
     "buy-holding": (
         ["600000", "10", "100"],
@@ -150,3 +153,28 @@ def test_confirmation_position_and_unknown_global_option(monkeypatch) -> None:
     assert cache.main(["--bogus", "set-flag", *args]) == 2
     assert cache.main(["--confirm-write", "set-flag", *args]) == 0
     assert called == [args]
+
+
+def test_argparse_rejects_extra_positionals_and_unknown_options(monkeypatch) -> None:
+    def fail_if_called(_args) -> None:
+        raise AssertionError("invalid argv reached command handler")
+
+    cache.paths.cache_db_path().touch()
+    for command, (_, maximum) in CLI_ARGUMENT_CASES.items():
+        monkeypatch.setitem(cache.COMMANDS, command, fail_if_called)
+        prefix = ["--confirm-write"] if cache.COMMAND_CLASSIFICATION[command] == "W1" else []
+        assert cache.main([*prefix, command, *maximum, "EXTRA_POSITIONAL"]) == 2, command
+        assert cache.main([*prefix, command, "--unknown-option"]) == 2, command
+
+
+def test_every_subcommand_has_help(capsys) -> None:
+    for command in cache.COMMANDS:
+        assert cache.main([command, "--help"]) == 0, command
+        assert command in capsys.readouterr().out
+
+
+def test_top_level_help_discovers_commands_and_write_gate(capsys) -> None:
+    assert cache.main(["--help"]) == 0
+    output = capsys.readouterr().out
+    assert "--confirm-write" in output
+    assert all(command in output for command in cache.COMMANDS)

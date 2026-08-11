@@ -63,7 +63,7 @@ def test_r0_command_never_bootstraps_or_changes_database(tmp_path, monkeypatch) 
 def test_populated_r0_commands_keep_fixture_hash(tmp_path, monkeypatch) -> None:
     database = tmp_path / "cache.db"
     monkeypatch.setenv("CACHE_DB_PATH", str(database))
-    cache.cmd_add_holding(["600036", "40", "100", "fixture"])
+    cache.cmd_add_holding(["600036", "40", "100", "--notes", "fixture"])
 
     for command in (["holdings"], ["retro-pending"], ["retro-outliers"]):
         before = hashlib.sha256(database.read_bytes()).hexdigest()
