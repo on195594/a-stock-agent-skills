@@ -5,6 +5,86 @@ import sqlite3
 from a_stock_agent_runtime import cache, fetcher
 
 
+CLI_ARGUMENT_CASES = {
+    "check": ([], ["600000"]),
+    "get": ([], ["600000"]),
+    "set": (["600000", "名称", "行业", "{}"], ["600000", "名称", "行业", "{}", "24"]),
+    "get-analysis": ([], ["600000"]),
+    "set-analysis": (["600000", "A"], ["600000", "A", "60"]),
+    "set-score": (["600000", "60"], ["600000", "60"]),
+    "set-score-breakdown": (["600000", "{}"], ["600000", "{}"]),
+    "set-flag": (["600000", "yellow", "原因"], ["600000", "yellow", "原因"]),
+    "clear-flag": (["600000"], ["600000"]),
+    "alert-open": (
+        ["600000", "yellow", "unverified", "code", "none", "原因"],
+        ["600000", "yellow", "unverified", "code", "none", "原因", "证据"],
+    ),
+    "alert-pending": (["600000", "code", "说明"], ["600000", "code", "说明"]),
+    "alert-resolve": (["600000", "code", "证据"], ["600000", "code", "证据"]),
+    "alerts": (["600000"], ["600000"]),
+    "l3-add": (
+        ["600000", "original", "条件"],
+        ["600000", "original", "条件", "临时规则"],
+    ),
+    "l3-update": (
+        ["1", "pending", "2026-08-11", "证据"],
+        ["1", "pending", "2026-08-11", "证据", "2026-08-12"],
+    ),
+    "l3-list": (["600000"], ["600000"]),
+    "tier-config": (["600000", "none"], ["600000", "none", "none", "none"]),
+    "tier-update": (
+        ["600000", "tier1", "pending"],
+        ["600000", "tier1", "pending"],
+    ),
+    "holding-framework": (["600000", "A"], ["600000", "A"]),
+    "add-holding": (
+        ["600000", "10"],
+        ["600000", "10", "100", "备注", "--fee", "1", "--date", "2026-08-11"],
+    ),
+    "buy-holding": (
+        ["600000", "10", "100"],
+        ["600000", "10", "100", "--fee", "1", "--date", "2026-08-11"],
+    ),
+    "sell-holding": (
+        ["600000", "10", "all"],
+        [
+            "600000", "10", "all", "--fee", "1", "--tax", "1", "--date",
+            "2026-08-11",
+        ],
+    ),
+    "record-dividend": (["600000", "1"], ["600000", "1", "2026-08-11"]),
+    "corporate-action": (
+        ["600000", "1", "0"],
+        ["600000", "1", "0", "2026-08-11"],
+    ),
+    "close-holding": (["600000", "10"], ["600000", "10", "2026-08-11"]),
+    "retro-add": (
+        ["600000", "无错误"],
+        [
+            "600000", "无错误", "--note", "备注", "--thesis", "理由", "--gap",
+            "改进",
+        ],
+    ),
+    "retro-pending": ([], []),
+    "retro-stats": ([], ["A通用"]),
+    "retro-outliers": ([], ["--loss", "10"]),
+    "holdings": ([], []),
+    "remove-holding": (["600000"], ["600000"]),
+    "update-return": (["600000", "10"], ["600000", "10"]),
+    "position-return": (["600000"], ["600000", "10"]),
+    "portfolio-risk": (
+        [],
+        ["--portfolio-value", "100000", "--max-position-risk-pct", "2"],
+    ),
+    "check-holdings": ([], []),
+    "watchlist": ([], ["--json", "--breakdown"]),
+    "list": ([], []),
+    "cleanup": ([], []),
+    "clear": ([], ["600000"]),
+    "checklist": (["600000", "A"], ["600000", "A"]),
+}
+
+
 def test_public_mains_return_int() -> None:
     assert isinstance(cache.main(["--help"]), int)
     assert isinstance(fetcher.main(["--help"]), int)
@@ -30,3 +110,43 @@ def test_cli_help_does_not_create_state(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     assert cache.main(["--help"]) == 0
     assert not (tmp_path / ".local").exists()
+
+
+def test_cli_argument_matrix_covers_every_command(monkeypatch) -> None:
+    assert set(CLI_ARGUMENT_CASES) == set(cache.COMMANDS)
+    cache.paths.cache_db_path().touch()
+    called: list[tuple[str, list[str]]] = []
+    for command, cases in CLI_ARGUMENT_CASES.items():
+        monkeypatch.setitem(
+            cache.COMMANDS,
+            command,
+            lambda args, name=command: called.append((name, args)),
+        )
+        prefix = ["--confirm-write"] if cache.COMMAND_CLASSIFICATION[command] == "W1" else []
+        for case in cases:
+            called.clear()
+            assert cache.main([*prefix, command, *case]) == 0, command
+            assert called == [(command, case)], command
+
+
+def test_every_w1_command_requires_prefix_confirmation(monkeypatch, capsys) -> None:
+    def fail_if_called(_args) -> None:
+        raise AssertionError("write command dispatched without confirmation")
+
+    for command, classification in cache.COMMAND_CLASSIFICATION.items():
+        if classification != "W1":
+            continue
+        monkeypatch.setitem(cache.COMMANDS, command, fail_if_called)
+        assert cache.main([command, *CLI_ARGUMENT_CASES[command][0]]) == 3, command
+        assert "--confirm-write" in capsys.readouterr().err
+
+
+def test_confirmation_position_and_unknown_global_option(monkeypatch) -> None:
+    called: list[list[str]] = []
+    monkeypatch.setitem(cache.COMMANDS, "set-flag", called.append)
+    args = ["600000", "yellow", "原因"]
+
+    assert cache.main(["set-flag", "--confirm-write", *args]) == 3
+    assert cache.main(["--bogus", "set-flag", *args]) == 2
+    assert cache.main(["--confirm-write", "set-flag", *args]) == 0
+    assert called == [args]
