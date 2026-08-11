@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import contextmanager
 from pathlib import Path
+
+import pytest
 
 
 MODULES = (
-    "cache", "fetcher", "checklist", "framework_metadata", "market_quotes",
-    "position_ledger", "schema_ledger", "paths", "domain", "db", "schema", "store",
-    "commands_analysis", "commands_holdings", "commands_monitor", "commands_admin",
+    "cache",
+    "fetcher",
+    "checklist",
+    "framework_metadata",
+    "market_quotes",
+    "position_ledger",
+    "schema_ledger",
+    "paths",
+    "domain",
+    "db",
+    "schema",
+    "store",
+    "commands_analysis",
+    "commands_holdings",
+    "commands_monitor",
+    "commands_admin",
 )
 
 
@@ -33,3 +49,26 @@ def test_command_modules_do_not_import_cache() -> None:
     root = Path(__file__).resolve().parents[1] / "src/a_stock_agent_runtime"
     for path in root.glob("commands_*.py"):
         assert "import cache" not in path.read_text(encoding="utf-8")
+
+
+def test_commands_monitor_observes_holdings_owner_patches(monkeypatch) -> None:
+    from a_stock_agent_runtime import commands_holdings, commands_monitor, db
+
+    def patched_parser(*_args, **_kwargs):
+        raise RuntimeError("parser owner patch observed")
+
+    monkeypatch.setattr(commands_holdings, "_parse_cli_finite_float", patched_parser)
+    with pytest.raises(RuntimeError, match="parser owner patch observed"):
+        commands_monitor.cmd_tier_config(["000001", "B", "1"])
+
+    @contextmanager
+    def fake_db_session():
+        yield object()
+
+    def patched_holding(*_args, **_kwargs):
+        raise RuntimeError("holding owner patch observed")
+
+    monkeypatch.setattr(db, "db_session", fake_db_session)
+    monkeypatch.setattr(commands_holdings, "_single_open_holding", patched_holding)
+    with pytest.raises(RuntimeError, match="holding owner patch observed"):
+        commands_monitor.cmd_l3_add(["000001", "original", "condition"])

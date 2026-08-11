@@ -6,11 +6,7 @@ import json
 import sys
 from datetime import date
 
-from a_stock_agent_runtime import db, domain
-from a_stock_agent_runtime.commands_holdings import (
-    _parse_cli_finite_float,
-    _single_open_holding,
-)
+from a_stock_agent_runtime import commands_holdings, db, domain
 
 
 def cmd_l3_add(args: list[str]) -> None:
@@ -28,7 +24,7 @@ def cmd_l3_add(args: list[str]) -> None:
         print("错误：origin 非法", file=sys.stderr)
         sys.exit(1)
     with db.db_session() as conn:
-        holding_id, _, _ = _single_open_holding(conn, code)
+        holding_id, _, _ = commands_holdings._single_open_holding(conn, code)
         now_iso = domain.utc_now_iso()
         cursor = conn.execute(
             """INSERT INTO holding_l3_conditions
@@ -127,7 +123,7 @@ def cmd_tier_config(args: list[str]) -> None:
         sys.exit(1)
     target_pct = None
     if len(args) > 2 and args[2].lower() != "none":
-        target_pct = _parse_cli_finite_float(args[2], "目标涨幅")
+        target_pct = commands_holdings._parse_cli_finite_float(args[2], "目标涨幅")
     if exit_path == "B" and (target_pct is None or target_pct <= 0):
         print("错误：路径B必须设置大于0的目标涨幅", file=sys.stderr)
         sys.exit(1)
@@ -144,7 +140,9 @@ def cmd_tier_config(args: list[str]) -> None:
         print("错误：轻仓试探出场路径与正式仓位Tier1豁免不能同时设置", file=sys.stderr)
         sys.exit(1)
     with db.db_session() as conn:
-        holding_id, buy_date, framework = _single_open_holding(conn, code)
+        holding_id, buy_date, framework = commands_holdings._single_open_holding(
+            conn, code
+        )
         if exemption and buy_date != domain.cst_today():
             print("错误：Tier1估值豁免只能在建仓当日声明", file=sys.stderr)
             sys.exit(1)
@@ -192,7 +190,9 @@ def cmd_holding_framework(args: list[str]) -> None:
         print("错误：框架必须为 A/B/C/D/E/F 或完整标签", file=sys.stderr)
         sys.exit(1)
     with db.db_session() as conn:
-        holding_id, _, old_framework = _single_open_holding(conn, code)
+        holding_id, _, old_framework = commands_holdings._single_open_holding(
+            conn, code
+        )
         row = conn.execute(
             "SELECT reference_cost, cost_price FROM holdings WHERE id=?",
             (holding_id,),
@@ -245,7 +245,7 @@ def cmd_tier_update(args: list[str]) -> None:
         print("错误：Tier或状态非法", file=sys.stderr)
         sys.exit(1)
     with db.db_session() as conn:
-        holding_id, _, _ = _single_open_holding(conn, code)
+        holding_id, _, _ = commands_holdings._single_open_holding(conn, code)
         conn.execute(
             """INSERT INTO holding_tier_state (holding_id, updated_at)
                VALUES (?, ?) ON CONFLICT(holding_id) DO NOTHING""",
@@ -285,7 +285,7 @@ def cmd_alert_open(args: list[str]) -> None:
             print("错误：复核日期必须为 YYYY-MM-DD 或 none", file=sys.stderr)
             sys.exit(1)
     with db.db_session() as conn:
-        holding_id, _, _ = _single_open_holding(conn, code)
+        holding_id, _, _ = commands_holdings._single_open_holding(conn, code)
         now_iso = domain.utc_now_iso()
         conn.execute(
             """INSERT INTO holding_alerts
