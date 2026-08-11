@@ -80,7 +80,7 @@ import threading
 from collections.abc import Iterator
 from datetime import date, datetime, timedelta, time as dtime, timezone
 from contextlib import contextmanager
-from a_stock_agent_runtime import framework_metadata
+from a_stock_agent_runtime import domain, framework_metadata
 from a_stock_agent_runtime import market_quotes
 from a_stock_agent_runtime import paths
 from a_stock_agent_runtime.schema_ledger import bootstrap_schema, schema_process_lock
@@ -94,15 +94,20 @@ from a_stock_lib.contracts import (
 
 logger = logging.getLogger(__name__)
 
-# ② 行业 → TTL 映射（关键词匹配，越靠前优先级越高）
-INDUSTRY_TTL_MAP = [
-    # 72h：季报驱动、基本面变化慢
-    (['银行', '保险', '券商', '国有大行', '股份制银行', '城商行', '农商行',
-      '水电', '公用事业', '电网', '水务', '燃气', '高速'], 72),
-    # 12h：情绪/渠道敏感
-    (['白酒', '消费', '食品', '零售', '饮料', '乳制品'], 12),
-    # 24h：默认（能源/科技/制造等）
-]
+# Explicit compatibility exports; production code calls domain.* so owner patches
+# remain observable after this module split.
+utc_now = domain.utc_now
+utc_now_iso = domain.utc_now_iso
+cst_today = domain.cst_today
+parse_timestamp_utc = domain.parse_timestamp_utc
+format_timestamp_cst = domain.format_timestamp_cst
+is_expired = domain.is_expired
+is_unsupported_financial_industry = domain.is_unsupported_financial_industry
+get_industry_ttl = domain.get_industry_ttl
+infer_framework = domain.infer_framework
+get_stop_loss_pct = domain.get_stop_loss_pct
+_is_a_share_trading_hours = domain.is_a_share_trading_hours
+_evaluate_holding_status = domain.evaluate_holding_status
 
 SCHEMA_MIGRATIONS = [
     ('002-analysis-name', 'ALTER TABLE analysis_results ADD COLUMN name TEXT'),
@@ -132,7 +137,6 @@ _SCHEMA_LOCK = threading.Lock()
 _SCHEMA_INITIALIZED: bool = False
 _SCHEMA_INITIALIZED_PATH: str = ""
 _READ_ONLY_REQUEST: bool = False
-_CST = timezone(timedelta(hours=8))
 _UTC = timezone.utc
 _DATA_PERIOD_RE = re.compile(r'^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$')
 _VALUATION_CONFLICT_RE = re.compile(
@@ -146,95 +150,10 @@ _FRAMEWORK_ALIASES = {
     'E': 'E消费', 'E消费': 'E消费',
     'F': 'F科技', 'F科技': 'F科技',
 }
-_UNSUPPORTED_FINANCIAL_KEYWORDS = ('保险', '券商', '证券')
 QUOTE_SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 QUOTE_SNAPSHOT_RETENTION_PER_CODE = 64
 MAX_SNAPSHOT_CLOCK_SKEW = timedelta(seconds=30)
 ANALYSIS_PRICE_INVALIDATION_THRESHOLD = 0.03
-
-
-def utc_now() -> datetime:
-    """Return the current timezone-aware UTC time."""
-    return datetime.now(_UTC)
-
-
-def utc_now_iso() -> str:
-    """Return a timezone-aware UTC ISO-8601 timestamp."""
-    return utc_now().isoformat()
-
-
-def cst_today() -> str:
-    """Return the current calendar date in Asia/Shanghai."""
-    return utc_now().astimezone(_CST).date().isoformat()
-
-
-def parse_timestamp_utc(value: str) -> datetime:
-    """Parse timestamps as UTC; legacy naive values are Asia/Shanghai."""
-    parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=_CST)
-    return parsed.astimezone(_UTC)
-
-
-def format_timestamp_cst(value: str) -> str:
-    """Format a stored timestamp for human-facing Asia/Shanghai output."""
-    try:
-        return parse_timestamp_utc(value).astimezone(_CST).strftime('%Y-%m-%d %H:%M')
-    except (TypeError, ValueError):
-        return str(value)
-
-
-def is_unsupported_financial_industry(industry: str | None) -> bool:
-    """Return whether the industry is intentionally qualitative-only."""
-    return bool(
-        industry
-        and any(keyword in industry for keyword in _UNSUPPORTED_FINANCIAL_KEYWORDS)
-    )
-
-
-def get_industry_ttl(industry: str) -> int:
-    """根据行业名称推断合适的 TTL（小时）"""
-    for keywords, ttl in INDUSTRY_TTL_MAP:
-        if any(kw in industry for kw in keywords):
-            return ttl
-    return 24
-
-
-def infer_framework(industry: str | None) -> tuple[str, bool]:
-    """根据行业关键词推断打分框架。
-
-    返回 (framework, confident)：confident=False 表示 industry 缺失/未知，
-    此时 framework 只是兜底默认值（'A通用'），不是真实判断——调用方应该
-    用这个标志区分"确实判断为通用框架"和"数据缺失导致无法判断"。
-
-    行业关键词数据来源是 framework_metadata.FRAMEWORK_REGISTRY（checklist.py
-    加载时填入），这里懒加载 import checklist 保证 registry 已被填充——
-    cache.py 模块顶层不能直接 import checklist（checklist.py 顶层反向
-    import cache，会形成循环依赖），且 add-holding/portfolio-risk 这两个
-    调用入口从不会经过 cmd_checklist() 里那次懒加载，必须在这里自己兜底。
-    """
-    from a_stock_agent_runtime import checklist  # noqa: F401  延迟导入：触发 FRAMEWORK_REGISTRY 注册
-    if not industry or '未知' in industry:
-        return 'A通用', False
-    if is_unsupported_financial_industry(industry):
-        return 'A通用', False
-    for metadata in framework_metadata.FRAMEWORK_REGISTRY.values():
-        if metadata.portfolio_label and any(k in industry for k in metadata.industry_keywords):
-            return metadata.portfolio_label, True
-    return 'A通用', True
-
-
-DEFAULT_STOP_LOSS_PCT = (0.85, 0.80)  # 15% / 20%，A通用/E消费及无法识别行业时的默认值
-
-
-def get_stop_loss_pct(framework: str) -> tuple[float, float]:
-    """根据框架返回 (止损15%系数, 止损20%系数)，未在 registry 里配置专属
-    止损系数的框架（A通用/E消费）用 DEFAULT_STOP_LOSS_PCT。"""
-    from a_stock_agent_runtime import checklist  # noqa: F401  延迟导入：原因同 infer_framework()
-    for metadata in framework_metadata.FRAMEWORK_REGISTRY.values():
-        if metadata.portfolio_label == framework and metadata.stop_loss_pct is not None:
-            return metadata.stop_loss_pct
-    return DEFAULT_STOP_LOSS_PCT
 
 
 def apply_column_migration(conn: sqlite3.Connection, sql: str) -> None:
@@ -535,13 +454,13 @@ def _backfill_holding_metadata(conn: sqlite3.Connection) -> None:
              )'''
     ).fetchall()
     for holding_id, code, cost, shares, buy_date, exit_price, exit_date in legacy_rows:
-        created_at = utc_now_iso()
+        created_at = domain.utc_now_iso()
         conn.execute(
             '''INSERT INTO holding_events
                (holding_id, code, event_type, event_date, shares, price,
                 notes, inferred, created_at)
                VALUES (?, ?, 'buy', ?, ?, ?, 'legacy_inferred_from_holding', 1, ?)''',
-            (holding_id, code, buy_date or cst_today(), shares, cost, created_at),
+            (holding_id, code, buy_date or domain.cst_today(), shares, cost, created_at),
         )
         if exit_date and exit_price:
             conn.execute(
@@ -585,7 +504,7 @@ def _backfill_legacy_alerts(conn: sqlite3.Connection) -> None:
                  AND evidence='legacy analysis_results.flags; requires classification' ''',
             (holding_id,),
         ).fetchall()
-        now_iso = utc_now_iso()
+        now_iso = domain.utc_now_iso()
         for alert_id, reason in migrated_alerts:
             if reason not in latest_reasons:
                 conn.execute(
@@ -604,7 +523,7 @@ def _backfill_legacy_alerts(conn: sqlite3.Connection) -> None:
             if level not in ('yellow', 'red') or not reason:
                 continue
             reason_hash = hashlib.sha256(reason.encode('utf-8')).hexdigest()[:16]
-            opened_at = str(flag.get('date') or cst_today())
+            opened_at = str(flag.get('date') or domain.cst_today())
             conn.execute(
                 '''INSERT OR IGNORE INTO holding_alerts
                    (holding_id, code, level, category, reason_code, reason, status,
@@ -638,7 +557,7 @@ def _bootstrap_database_schema(conn: sqlite3.Connection) -> None:
         ('025-holdings-metadata-backfill', lambda: _backfill_holding_metadata(conn)),
         ('026-legacy-alerts-backfill', lambda: _backfill_legacy_alerts(conn)),
     ])
-    bootstrap_schema(conn, utc_now_iso(), migrations)
+    bootstrap_schema(conn, domain.utc_now_iso(), migrations)
 
 
 def get_db(timeout: float = 30.0) -> sqlite3.Connection:
@@ -821,8 +740,8 @@ def record_quote_snapshot(
         raise ValueError("invalid validated quote snapshot")
     date.fromisoformat(quote_date)
     dtime.fromisoformat(quote_time)
-    fetched_at_dt = parse_timestamp_utc(fetched_at or utc_now_iso())
-    if fetched_at_dt - utc_now() > MAX_SNAPSHOT_CLOCK_SKEW:
+    fetched_at_dt = domain.parse_timestamp_utc(fetched_at or domain.utc_now_iso())
+    if fetched_at_dt - domain.utc_now() > MAX_SNAPSHOT_CLOCK_SKEW:
         raise ValueError("quote snapshot fetched_at is in the future")
     fetched_at_value = fetched_at_dt.isoformat()
     with db_session() as conn:
@@ -869,7 +788,7 @@ def get_latest_quote_snapshot(
     if row is None:
         return None
     try:
-        age = utc_now() - parse_timestamp_utc(row[3])
+        age = domain.utc_now() - domain.parse_timestamp_utc(row[3])
     except (TypeError, ValueError):
         logger.warning("Ignoring quote snapshot with malformed fetched_at")
         return None
@@ -905,8 +824,8 @@ def set_market_indicator_snapshot(
         or not source
     ):
         raise ValueError("invalid market indicator snapshot")
-    fetched_at_dt = parse_timestamp_utc(fetched_at or utc_now_iso())
-    if fetched_at_dt - utc_now() > MAX_SNAPSHOT_CLOCK_SKEW:
+    fetched_at_dt = domain.parse_timestamp_utc(fetched_at or domain.utc_now_iso())
+    if fetched_at_dt - domain.utc_now() > MAX_SNAPSHOT_CLOCK_SKEW:
         raise ValueError("market indicator fetched_at is in the future")
     fetched_at_value = fetched_at_dt.isoformat()
     with db_session() as conn:
@@ -929,14 +848,14 @@ def update_qualitative_only_security(code: str, name: str, industry: str | None)
     if not industry or '未知' in industry:
         return
     with db_session() as conn:
-        if is_unsupported_financial_industry(industry):
+        if domain.is_unsupported_financial_industry(industry):
             conn.execute(
                 '''INSERT INTO qualitative_only_securities
                    (code, name, industry, updated_at) VALUES (?,?,?,?)
                    ON CONFLICT(code) DO UPDATE SET
                        name=excluded.name, industry=excluded.industry,
                        updated_at=excluded.updated_at''',
-                (code, name, industry, utc_now_iso()),
+                (code, name, industry, domain.utc_now_iso()),
             )
         else:
             conn.execute(
@@ -962,7 +881,7 @@ def get_market_indicator_snapshot(
     if row is None or row[4] != 'ok' or not row[3]:
         return None
     try:
-        age = utc_now() - parse_timestamp_utc(row[2])
+        age = domain.utc_now() - domain.parse_timestamp_utc(row[2])
     except (TypeError, ValueError):
         logger.warning("Ignoring market indicator with malformed fetched_at")
         return None
@@ -993,12 +912,12 @@ def get_fundamentals(code: str) -> dict | None:
     if not row:
         return None
     name, industry, data, updated_at, ttl_hours = row
-    if is_expired(updated_at, ttl_hours):
+    if domain.is_expired(updated_at, ttl_hours):
         return None
     result = _add_market_indicators(json.loads(data))
     result['_cache_meta'] = {
         'code': code, 'name': name, 'industry': industry,
-        'updated_at': format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
+        'updated_at': domain.format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
     }
     return result
 
@@ -1009,14 +928,14 @@ def set_fundamentals(code: str, name: str, industry: str,
     validation_error = validate_fundamentals_payload(data_dict)
     if validation_error:
         raise ValueError(validation_error)
-    ttl_hours = ttl if ttl is not None else get_industry_ttl(industry)
+    ttl_hours = ttl if ttl is not None else domain.get_industry_ttl(industry)
     with db_session() as conn:
         conn.execute(
             '''INSERT OR REPLACE INTO stock_fundamentals
                (code, name, industry, data, updated_at, ttl_hours)
                VALUES (?,?,?,?,?,?)''',
             (code, name, industry, json.dumps(data_dict, ensure_ascii=False),
-             utc_now_iso(), ttl_hours)
+             domain.utc_now_iso(), ttl_hours)
         )
         conn.commit()
     return f"已缓存 {name}({code}) 行业:{industry} TTL:{ttl_hours}h"
@@ -1092,23 +1011,13 @@ def fetch_current_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]
     }
 
 
-def is_expired(updated_at_str: str, ttl_hours: int) -> bool:
-    try:
-        return (
-            utc_now() - parse_timestamp_utc(updated_at_str)
-            > timedelta(hours=ttl_hours)
-        )
-    except (TypeError, ValueError):
-        return True
-
-
 def cmd_check(args: list[str]) -> None:
     """一次性检查分析结论+基本面缓存，输出状态码+内容"""
     if len(args) < 1:
         print("FULL_MISS")
         return
     code = args[0]
-    today = cst_today()
+    today = domain.cst_today()
 
     # 优先检查今日分析结论
     with db_session() as conn:
@@ -1141,7 +1050,7 @@ def cmd_check(args: list[str]) -> None:
                     f" 最新报价:{latest_quote['price']:.3f}({latest_quote['source']})"
                     f" 较分析快照:{signed_deviation * 100:+.2f}%"
                 )
-                print(f"ANALYSIS_HIT {code}{name_str} [{format_timestamp_cst(created_at)}]{quote_note}")
+                print(f"ANALYSIS_HIT {code}{name_str} [{domain.format_timestamp_cst(created_at)}]{quote_note}")
                 print(result)
                 return
             else:
@@ -1159,13 +1068,13 @@ def cmd_check(args: list[str]) -> None:
 
     if fund_row:
         name, industry, data, updated_at, ttl_hours = fund_row
-        if not is_expired(updated_at, ttl_hours):
+        if not domain.is_expired(updated_at, ttl_hours):
             result = _add_market_indicators(json.loads(data))
             result['_cache_meta'] = {
                 'code': code, 'name': name, 'industry': industry,
-                'updated_at': format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
+                'updated_at': domain.format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
             }
-            print(f"FUNDAMENTALS_HIT {code}({name}) [{industry}] 更新:{format_timestamp_cst(updated_at)}")
+            print(f"FUNDAMENTALS_HIT {code}({name}) [{industry}] 更新:{domain.format_timestamp_cst(updated_at)}")
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return
 
@@ -1187,13 +1096,13 @@ def cmd_get(args: list[str]) -> None:
         print("CACHE_MISS")
         return
     name, industry, data, updated_at, ttl_hours = row
-    if is_expired(updated_at, ttl_hours):
+    if domain.is_expired(updated_at, ttl_hours):
         print("CACHE_MISS")
         return
     result = _add_market_indicators(json.loads(data))
     result['_cache_meta'] = {
         'code': code, 'name': name, 'industry': industry,
-        'updated_at': format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
+        'updated_at': domain.format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -1205,7 +1114,7 @@ def cmd_set(args: list[str]) -> None:
         sys.exit(1)
     code, name, industry, data_str = args[0], args[1], args[2], args[3]
     # TTL：显式指定 > 行业推断
-    ttl_hours = int(args[4]) if len(args) > 4 else get_industry_ttl(industry)
+    ttl_hours = int(args[4]) if len(args) > 4 else domain.get_industry_ttl(industry)
     try:
         data = json.loads(data_str)
     except json.JSONDecodeError as e:
@@ -1221,7 +1130,7 @@ def cmd_set(args: list[str]) -> None:
                (code, name, industry, data, updated_at, ttl_hours)
                VALUES (?,?,?,?,?,?)''',
             (code, name, industry, json.dumps(data, ensure_ascii=False),
-             utc_now_iso(), ttl_hours)
+             domain.utc_now_iso(), ttl_hours)
         )
         conn.commit()
     print(f"已缓存 {name}({code}) 行业:{industry} TTL:{ttl_hours}h")
@@ -1233,7 +1142,7 @@ def cmd_get_analysis(args: list[str]) -> None:
         print("CACHE_MISS")
         return
     code = args[0]
-    today = cst_today()
+    today = domain.cst_today()
     with db_session() as conn:
         row = conn.execute(
             'SELECT result, created_at FROM analysis_results WHERE code=? AND date=?',
@@ -1243,7 +1152,7 @@ def cmd_get_analysis(args: list[str]) -> None:
         print("CACHE_MISS")
         return
     result, created_at = row
-    print(f"[缓存命中 {format_timestamp_cst(created_at)}]\n{result}")
+    print(f"[缓存命中 {domain.format_timestamp_cst(created_at)}]\n{result}")
 
 
 def _framework_tokens() -> set[str]:
@@ -1359,12 +1268,12 @@ def cmd_set_analysis(args: list[str]) -> None:
             (code,),
         ).fetchone()
     industry = industry_row[0] if industry_row else None
-    if qualitative_row is not None or is_unsupported_financial_industry(industry):
+    if qualitative_row is not None or domain.is_unsupported_financial_industry(industry):
         print("错误：保险/券商/证券不适用当前量化框架，不允许写入 set-analysis", file=sys.stderr)
         sys.exit(1)
     result = _read_validated_analysis_stdin(framework)
     _validate_cycle_stage_for_framework(result, framework)
-    today = cst_today()
+    today = domain.cst_today()
     scoring_status = 'complete'
     valuation_conflict = framework == 'C资源' and _VALUATION_CONFLICT_RE.search(result)
     if valuation_conflict:
@@ -1415,7 +1324,7 @@ def cmd_set_analysis(args: list[str]) -> None:
                        WHEN ? THEN NULL ELSE analysis_results.score_breakdown
                    END''',
             (
-                code, today, name, result, utc_now_iso(), score, framework,
+                code, today, name, result, domain.utc_now_iso(), score, framework,
                 quote['price'], quote['quote_as_of'], quote['source'], scoring_status,
                 clear_stale_breakdown,
             )
@@ -1444,7 +1353,7 @@ def cmd_set_score(args: list[str]) -> None:
     if not 0 <= score <= 80:
         print("错误：分数必须为 0—80 的整数", file=sys.stderr)
         sys.exit(1)
-    today = cst_today()
+    today = domain.cst_today()
     with db_session() as conn:
         state = conn.execute(
             '''SELECT framework, COALESCE(scoring_status, 'complete'), score_breakdown
@@ -1569,7 +1478,7 @@ def cmd_set_score_breakdown(args: list[str]) -> None:
     except json.JSONDecodeError as e:
         print(f"JSON解析错误: {e}", file=sys.stderr)
         sys.exit(1)
-    today = cst_today()
+    today = domain.cst_today()
     with db_session() as conn:
         analysis = conn.execute(
             '''SELECT framework, COALESCE(scoring_status, 'complete'), score
@@ -1696,7 +1605,7 @@ def _resolve_holding_framework(conn: sqlite3.Connection, code: str) -> tuple[str
     if persisted_framework:
         framework, confident = persisted_framework, True
     else:
-        framework, confident = infer_framework(industry)
+        framework, confident = domain.infer_framework(industry)
     return framework, confident, buy_score, name
 
 
@@ -1739,7 +1648,7 @@ def cmd_add_holding(args: list[str]) -> None:
             )
             sys.exit(1)
         framework, confident, buy_score, name = _resolve_holding_framework(conn, code)
-        sl15_pct, sl20_pct = get_stop_loss_pct(framework)
+        sl15_pct, sl20_pct = domain.get_stop_loss_pct(framework)
         stop_loss_15 = round(trade_price * sl15_pct, 3)
         stop_loss_20 = round(trade_price * sl20_pct, 3)
 
@@ -1751,7 +1660,7 @@ def cmd_add_holding(args: list[str]) -> None:
                 framework_confident)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
             (code, name, economic_cost, shares, buy_date, buy_score,
-             stop_loss_15, stop_loss_20, notes, utc_now_iso(), framework, shares,
+             stop_loss_15, stop_loss_20, notes, domain.utc_now_iso(), framework, shares,
              buy_date, economic_cost * shares if shares is not None else None, 0,
              trade_price,
              int(confident))
@@ -1764,13 +1673,13 @@ def cmd_add_holding(args: list[str]) -> None:
                    VALUES (?, ?, 'buy', ?, ?, ?, ?, ?)''',
                 (
                     holding_id, code, buy_date, shares, trade_price, fees,
-                    utc_now_iso(),
+                    domain.utc_now_iso(),
                 ),
             )
         conn.execute(
             '''INSERT INTO holding_tier_state (holding_id, updated_at)
                VALUES (?, ?) ON CONFLICT(holding_id) DO NOTHING''',
-            (holding_id, utc_now_iso()),
+            (holding_id, domain.utc_now_iso()),
         )
         conn.commit()
 
@@ -1871,7 +1780,7 @@ def cmd_holdings(args: list[str] | None = None) -> None:
 def _parse_trade_options(args: list[str], start: int) -> tuple[float, float, str]:
     fees = 0.0
     tax = 0.0
-    trade_date = cst_today()
+    trade_date = domain.cst_today()
     i = start
     while i < len(args):
         if args[i] not in ('--fee', '--tax', '--date') or i + 1 >= len(args):
@@ -1946,14 +1855,14 @@ def cmd_buy_holding(args: list[str]) -> None:
         new_reference_cost = (
             (reference_cost or cost_price) * old_shares + added_reference_value
         ) / new_shares
-        sl15_pct, sl20_pct = get_stop_loss_pct(framework or 'A通用')
+        sl15_pct, sl20_pct = domain.get_stop_loss_pct(framework or 'A通用')
         additions = (additions or 0) + added_cash
         main_basis = main_basis or old_book_cost
         if additions > main_basis * 0.5:
             main_date = trade_date
             main_basis = old_book_cost + added_cash
             additions = 0
-        now_iso = utc_now_iso()
+        now_iso = domain.utc_now_iso()
         conn.execute(
             '''UPDATE holdings
                SET cost_price=?, shares=?, stop_loss_15=?, stop_loss_20=?,
@@ -2032,7 +1941,7 @@ def cmd_sell_holding(args: list[str], *, single_lot: bool = False) -> None:
 
         remaining = sell_shares
         total_realized = 0.0
-        now_iso = utc_now_iso()
+        now_iso = domain.utc_now_iso()
         for holding_id, cost_price, lot_shares, buy_date in lots:
             if remaining == 0:
                 break
@@ -2084,7 +1993,7 @@ def cmd_record_dividend(args: list[str]) -> None:
         sys.exit(1)
     code = args[0]
     cash_amount = _parse_cli_finite_float(args[1], '现金总额', minimum=0)
-    event_date = args[2] if len(args) > 2 else cst_today()
+    event_date = args[2] if len(args) > 2 else domain.cst_today()
     try:
         date.fromisoformat(event_date)
     except ValueError:
@@ -2105,7 +2014,7 @@ def cmd_record_dividend(args: list[str]) -> None:
             '''INSERT INTO holding_events
                (holding_id, code, event_type, event_date, cash_amount, created_at)
                VALUES (?, ?, 'dividend', ?, ?, ?)''',
-            (row[0], code, event_date, cash_amount, utc_now_iso()),
+            (row[0], code, event_date, cash_amount, domain.utc_now_iso()),
         )
         conn.commit()
     print(f"现金分红已记录：{code} {cash_amount:.2f}元（{event_date}）")
@@ -2122,7 +2031,7 @@ def cmd_corporate_action(args: list[str]) -> None:
     code = args[0]
     dps = _parse_cli_finite_float(args[1], '分红', minimum=0)
     split_ratio = _parse_cli_finite_float(args[2], '转增比例', minimum=0)
-    action_date = args[3] if len(args) > 3 else cst_today()
+    action_date = args[3] if len(args) > 3 else domain.cst_today()
     try:
         date.fromisoformat(action_date)
     except ValueError:
@@ -2160,9 +2069,9 @@ def cmd_corporate_action(args: list[str]) -> None:
             conn.rollback()
             print("错误：调整后的规则参考成本必须大于0", file=sys.stderr)
             sys.exit(1)
-        sl15_pct, sl20_pct = get_stop_loss_pct(framework or 'A通用')
+        sl15_pct, sl20_pct = domain.get_stop_loss_pct(framework or 'A通用')
         dividend_cash = dps * old_shares
-        now_iso = utc_now_iso()
+        now_iso = domain.utc_now_iso()
         conn.execute(
             '''UPDATE holdings
                SET cost_price=?, reference_cost=?, shares=?, initial_shares=?,
@@ -2206,7 +2115,7 @@ def cmd_close_holding(args: list[str]) -> None:
         sys.exit(1)
     code = args[0]
     exit_price = _parse_cli_finite_float(args[1], '卖出价', minimum=0, strict_minimum=True)
-    exit_date = args[2] if len(args) > 2 else cst_today()
+    exit_date = args[2] if len(args) > 2 else domain.cst_today()
     try:
         date.fromisoformat(exit_date)
     except ValueError:
@@ -2256,7 +2165,7 @@ def cmd_close_holding(args: list[str]) -> None:
             cursor = conn.execute(
                 '''UPDATE holdings SET shares=0, exit_price=?, exit_date=?, updated_at=?
                    WHERE id=? AND exit_date IS NULL''',
-                (exit_price, exit_date, utc_now_iso(), lot_id),
+                (exit_price, exit_date, domain.utc_now_iso(), lot_id),
             )
             if cursor.rowcount == 0:
                 conn.rollback()
@@ -2346,7 +2255,7 @@ def cmd_retro_add(args: list[str]) -> None:
             (
                 holding_id, code, name, framework, buy_date, exit_date, buy_score,
                 actual_return_pct, holding_days, error_tags, thesis_notes, retro_text,
-                framework_gap, utc_now_iso(),
+                framework_gap, domain.utc_now_iso(),
             ),
         )
         conn.commit()
@@ -2616,7 +2525,7 @@ def cmd_position_return(args: list[str]) -> None:
     remaining_shares = open_shares if exit_date is None else 0
     if remaining_shares and current_price is None:
         current_price = fetch_current_price(code)
-    last_day = cst_today() if remaining_shares else (exit_date or events[-1][1])
+    last_day = domain.cst_today() if remaining_shares else (exit_date or events[-1][1])
     try:
         lifecycle_return = calculate_lifecycle_return(
             events, remaining_shares, end_date=last_day, current_price=current_price,
@@ -2674,7 +2583,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
 
     codes = [h[0] for h in holdings]
     quotes = fetch_current_price_quotes(codes)
-    today_str = cst_today()
+    today_str = domain.cst_today()
     valued_rows = []
     for (
         code, name, cost, shares, buy_date, score, industry, holding_framework,
@@ -2683,7 +2592,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         if holding_framework:
             fw, confident = holding_framework, bool(framework_confident)
         else:
-            fw, confident = infer_framework(industry)
+            fw, confident = domain.infer_framework(industry)
         quote = quotes.get(code)
         curr = quote.price if quote and quote.quote_date == today_str else None
         market_value = curr * shares if curr and shares else None
@@ -2756,64 +2665,6 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     print()
 
 
-def _is_a_share_trading_hours(dt: datetime) -> bool:
-    """A股标准交易时段：工作日 09:30-11:30 / 13:00-15:00。调用方须传入 Asia/Shanghai (UTC+8) 时区的 datetime。"""
-    if dt.weekday() >= 5:  # 5=Sat, 6=Sun
-        return False
-    t = dt.time()
-    return dtime(9, 30) <= t <= dtime(11, 30) or dtime(13, 0) <= t <= dtime(15, 0)
-
-
-def _legacy_style_status(curr: float, sl15: float, sl20: float, price_label: str) -> tuple[str, bool]:
-    """🔴/⚠️/✅ 图标区分严重度的历史文案，用于"新鲜度未知"和"收盘价"两种场景。
-    返回 (status_text, is_alert)。
-    """
-    if curr <= sl20:
-        return f"🔴 已跌破20%止损线（{sl20:.3f}），{price_label}{curr:.2f}，建议立即止损", True
-    if curr <= sl15:
-        return f"⚠️ 已跌破15%止损线（{sl15:.3f}），{price_label}{curr:.2f}，需提高警惕", True
-    return f"✅ 正常，{price_label}{curr:.2f}（止损15%:{sl15:.3f} 20%:{sl20:.3f}）", False
-
-
-def _intraday_status(curr: float, sl15: float, sl20: float) -> tuple[str, bool]:
-    """盘中场景：跌破阈值统一用 🚨 盘中已跌破 标注，返回 (status_text, is_alert)。"""
-    if curr <= sl20:
-        return f"🚨 盘中已跌破20%止损线（{sl20:.3f}），现价{curr:.2f}，建议立即止损", True
-    if curr <= sl15:
-        return f"🚨 盘中已跌破15%止损线（{sl15:.3f}），现价{curr:.2f}，需提高警惕", True
-    return f"✅ 正常，现价{curr:.2f}（止损15%:{sl15:.3f} 20%:{sl20:.3f}）", False
-
-
-def _evaluate_holding_status(
-    code: str, name: str | None,
-    sl15: float, sl20: float,
-    quote: "PriceQuote | None",
-    today_str: str, now: datetime
-) -> tuple[str, str, bool]:
-    """Evaluate one holding's stop-loss status.
-
-    Returns (label, status_text, is_alert).
-    """
-    label = f"{name}({code})" if name else code
-    curr = quote.price if quote else None
-
-    if curr is None:
-        status = "─ 无实时价格"
-        is_alert = False
-    elif quote.quote_date is not None and quote.quote_date != today_str:
-        status = f"📋 上一交易日收盘价观察提醒（{quote.quote_date}收盘{curr:.2f}，非当前价，请开盘后复核）"
-        is_alert = False
-    elif quote.quote_date == today_str and _is_a_share_trading_hours(now):
-        status, is_alert = _intraday_status(curr, sl15, sl20)
-    elif quote.quote_date == today_str:
-        status, is_alert = _legacy_style_status(curr, sl15, sl20, "收盘价")
-    else:
-        status = "─ 行情时间戳不可验证，不触发止损预警"
-        is_alert = False
-
-    return label, status, is_alert
-
-
 def cmd_check_holdings(args: list[str] | None = None) -> None:
     """持仓止损检查：对比当前价与15%/20%止损线，主动预警（P3-4）。
     区分盘中现价/收盘价/上一交易日陈旧行情三种口径，非交易时段拿到隔夜收盘价
@@ -2828,7 +2679,7 @@ def cmd_check_holdings(args: list[str] | None = None) -> None:
         print("暂无持仓")
         return
 
-    now = datetime.now(tz=_CST)
+    now = domain.cst_now()
     today_str = now.strftime('%Y-%m-%d')
 
     print(f"\n{'─'*72}")
@@ -2840,7 +2691,7 @@ def cmd_check_holdings(args: list[str] | None = None) -> None:
 
     alerts = []
     for code, name, _cost, sl15, sl20 in holdings:
-        label, status, is_alert = _evaluate_holding_status(
+        label, status, is_alert = domain.evaluate_holding_status(
             code, name, sl15, sl20, quotes.get(code), today_str, now
         )
         if is_alert:
@@ -2891,7 +2742,7 @@ def cmd_l3_add(args: list[str]) -> None:
         sys.exit(1)
     with db_session() as conn:
         holding_id, _, _ = _single_open_holding(conn, code)
-        now_iso = utc_now_iso()
+        now_iso = domain.utc_now_iso()
         cursor = conn.execute(
             '''INSERT INTO holding_l3_conditions
                (holding_id, condition_text, origin_type, temporary_exit_rule,
@@ -2937,7 +2788,7 @@ def cmd_l3_update(args: list[str]) -> None:
             '''UPDATE holding_l3_conditions
                SET status=?, evidence=?, as_of=?, next_review_date=?, updated_at=?
                WHERE id=?''',
-            (status, evidence, as_of, next_review, utc_now_iso(), condition_id),
+            (status, evidence, as_of, next_review, domain.utc_now_iso(), condition_id),
         )
         if cursor.rowcount == 0:
             print(f"错误：未找到L3条件 id={condition_id}", file=sys.stderr)
@@ -3003,7 +2854,7 @@ def cmd_tier_config(args: list[str]) -> None:
         sys.exit(1)
     with db_session() as conn:
         holding_id, buy_date, framework = _single_open_holding(conn, code)
-        if exemption and buy_date != cst_today():
+        if exemption and buy_date != domain.cst_today():
             print("错误：Tier1估值豁免只能在建仓当日声明", file=sys.stderr)
             sys.exit(1)
         if exemption and not (framework or '').startswith(exemption):
@@ -3022,7 +2873,7 @@ def cmd_tier_config(args: list[str]) -> None:
                  updated_at=excluded.updated_at''',
             (
                 holding_id, exit_path, target_pct, exemption,
-                cst_today() if exemption else None, utc_now_iso(),
+                domain.cst_today() if exemption else None, domain.utc_now_iso(),
             ),
         )
         conn.commit()
@@ -3045,8 +2896,8 @@ def cmd_holding_framework(args: list[str]) -> None:
             (holding_id,),
         ).fetchone()
         reference_cost = row[0] or row[1]
-        sl15_pct, sl20_pct = get_stop_loss_pct(normalized)
-        now_iso = utc_now_iso()
+        sl15_pct, sl20_pct = domain.get_stop_loss_pct(normalized)
+        now_iso = domain.utc_now_iso()
         conn.execute(
             '''UPDATE holdings
                SET framework=?, framework_confident=1,
@@ -3062,7 +2913,7 @@ def cmd_holding_framework(args: list[str]) -> None:
                (holding_id, code, event_type, event_date, notes, created_at)
                VALUES (?, ?, 'adjustment', ?, ?, ?)''',
             (
-                holding_id, code, cst_today(),
+                holding_id, code, domain.cst_today(),
                 f"framework:{old_framework or 'unknown'}->{normalized}", now_iso,
             ),
         )
@@ -3088,11 +2939,11 @@ def cmd_tier_update(args: list[str]) -> None:
         conn.execute(
             '''INSERT INTO holding_tier_state (holding_id, updated_at)
                VALUES (?, ?) ON CONFLICT(holding_id) DO NOTHING''',
-            (holding_id, utc_now_iso()),
+            (holding_id, domain.utc_now_iso()),
         )
         conn.execute(
             f"UPDATE holding_tier_state SET {tier}_status=?, updated_at=? WHERE holding_id=?",
-            (status, utc_now_iso(), holding_id),
+            (status, domain.utc_now_iso(), holding_id),
         )
         conn.commit()
     print(f"Tier状态已更新：{code} {tier}={status}")
@@ -3125,7 +2976,7 @@ def cmd_alert_open(args: list[str]) -> None:
             sys.exit(1)
     with db_session() as conn:
         holding_id, _, _ = _single_open_holding(conn, code)
-        now_iso = utc_now_iso()
+        now_iso = domain.utc_now_iso()
         conn.execute(
             '''INSERT INTO holding_alerts
                (holding_id, code, level, category, reason_code, reason, evidence,
@@ -3150,7 +3001,7 @@ def cmd_alert_resolve(args: list[str]) -> None:
         sys.exit(1)
     code, reason_code, evidence = args[0], args[1], ' '.join(args[2:])
     with db_session() as conn:
-        now_iso = utc_now_iso()
+        now_iso = domain.utc_now_iso()
         cursor = conn.execute(
             '''UPDATE holding_alerts
                SET status='resolved', resolved_at=?, resolution_evidence=?, updated_at=?
@@ -3174,7 +3025,7 @@ def cmd_alert_pending(args: list[str]) -> None:
             '''UPDATE holding_alerts
                SET status='pending', evidence=?, updated_at=?
                WHERE code=? AND reason_code=? AND status='active' ''',
-            (evidence, utc_now_iso(), code, reason_code),
+            (evidence, domain.utc_now_iso(), code, reason_code),
         )
         if cursor.rowcount == 0:
             print("错误：未找到对应的活动预警", file=sys.stderr)
@@ -3215,7 +3066,7 @@ def cmd_set_flag(args: list[str]) -> None:
     if level not in ('yellow', 'red'):
         print("错误：level 必须为 yellow 或 red", file=sys.stderr)
         sys.exit(1)
-    today = cst_today()
+    today = domain.cst_today()
     new_flag = json.dumps({'level': level, 'reason': reason, 'date': today}, ensure_ascii=False)
     with db_session() as conn:
         cursor = conn.execute(
@@ -3238,7 +3089,7 @@ def cmd_clear_flag(args: list[str]) -> None:
         print("错误：需要参数 <代码>", file=sys.stderr)
         sys.exit(1)
     code = args[0]
-    today = cst_today()
+    today = domain.cst_today()
     with db_session() as conn:
         conn.execute(
             'UPDATE analysis_results SET flags=NULL WHERE code=? AND date=?',
@@ -3250,8 +3101,8 @@ def cmd_clear_flag(args: list[str]) -> None:
 
 def get_watchlist_rows() -> list[dict]:
     """Return the durable refresh set in a single fair scheduling order."""
-    now = utc_now()
-    today = cst_today()
+    now = domain.utc_now()
+    today = domain.cst_today()
     analysis_cutoff = now - timedelta(days=14)
     first_analysis_cutoff = now - timedelta(hours=24)
     with db_session() as conn:
@@ -3305,7 +3156,7 @@ def get_watchlist_rows() -> list[dict]:
     for row in analysis_rows:
         code = row[0]
         try:
-            if parse_timestamp_utc(row[3]) >= analysis_cutoff:
+            if domain.parse_timestamp_utc(row[3]) >= analysis_cutoff:
                 recent_analysis_codes.add(code)
         except (TypeError, ValueError):
             continue
@@ -3314,7 +3165,7 @@ def get_watchlist_rows() -> list[dict]:
     recent_fetch_codes: set[str] = set()
     for row in quote_rows:
         try:
-            if parse_timestamp_utc(row[2]) >= first_analysis_cutoff:
+            if domain.parse_timestamp_utc(row[2]) >= first_analysis_cutoff:
                 recent_fetch_codes.add(row[0])
         except (TypeError, ValueError):
             continue
@@ -3334,12 +3185,12 @@ def get_watchlist_rows() -> list[dict]:
         current = today_analysis.get(code)
         quote = latest_quotes.get(code)
         data = _safe_json_value(fund[3], dict, {}) if fund else {}
-        cache_expired = fund is None or is_expired(fund[4], fund[5])
+        cache_expired = fund is None or domain.is_expired(fund[4], fund[5])
         terminal_status = qualitative_only_securities.get(code)
         industry = (fund[2] if fund else None) or (
             terminal_status[1] if terminal_status else None
         )
-        qualitative_only = bool(terminal_status) or is_unsupported_financial_industry(industry)
+        qualitative_only = bool(terminal_status) or domain.is_unsupported_financial_industry(industry)
         price_invalidated = False
         analysis_price = current[7] if current else None
         quote_price = quote[1] if quote else None
@@ -3415,7 +3266,7 @@ def get_watchlist_rows() -> list[dict]:
         if value is None:
             return (0, datetime.min.replace(tzinfo=_UTC))
         try:
-            return (1, parse_timestamp_utc(value))
+            return (1, domain.parse_timestamp_utc(value))
         except (TypeError, ValueError):
             return (0, datetime.min.replace(tzinfo=_UTC))
 
@@ -3496,7 +3347,7 @@ def cmd_watchlist(args: list[str] | None = None) -> None:
 
 def cmd_list(args: list[str] | None = None) -> None:
     """列出所有缓存内容（含过期）"""
-    today = cst_today()
+    today = domain.cst_today()
     with db_session() as conn:
         stocks = conn.execute(
             'SELECT code, name, industry, updated_at, ttl_hours FROM stock_fundamentals ORDER BY updated_at DESC'
@@ -3509,13 +3360,13 @@ def cmd_list(args: list[str] | None = None) -> None:
                ORDER BY a.created_at DESC LIMIT 20'''
         ).fetchall()
 
-    valid_count = sum(1 for s in stocks if not is_expired(s[3], s[4]))
+    valid_count = sum(1 for s in stocks if not domain.is_expired(s[3], s[4]))
     print(f"=== 基本面缓存 ({valid_count}有效 / {len(stocks)}条) ===")
     for s in stocks:
         code, name, industry, updated_at, ttl_hours = s
-        expired = is_expired(updated_at, ttl_hours)
+        expired = domain.is_expired(updated_at, ttl_hours)
         status = "⚠️ 已过期" if expired else "✅ 有效"
-        print(f"  {name}({code}) [{industry}] 更新:{format_timestamp_cst(updated_at)} TTL:{ttl_hours}h [{status}]")
+        print(f"  {name}({code}) [{industry}] 更新:{domain.format_timestamp_cst(updated_at)} TTL:{ttl_hours}h [{status}]")
 
     today_count = sum(1 for a in analyses if a[1] == today)
     print(f"\n=== 分析结论缓存 ({today_count}今日有效 / 近{len(analyses)}条) ===")
@@ -3530,7 +3381,7 @@ def cmd_list(args: list[str] | None = None) -> None:
             if isinstance(flag, dict) and flag.get('level') in {'red', 'yellow'}
         ]
         flag_icons = ''.join('🔴' if f['level'] == 'red' else '⚠️' for f in flags)
-        print(f"  {display_name}({code}) [{status}]{score_str}{breakdown_str}{flag_icons} 创建:{format_timestamp_cst(created_at)}")
+        print(f"  {display_name}({code}) [{status}]{score_str}{breakdown_str}{flag_icons} 创建:{domain.format_timestamp_cst(created_at)}")
 
 
 def cmd_cleanup(args: list[str] | None = None) -> None:
@@ -3541,7 +3392,7 @@ def cmd_cleanup(args: list[str] | None = None) -> None:
         ).fetchall()
         expired_names = []
         for s in stocks:
-            if is_expired(s[2], s[3]):
+            if domain.is_expired(s[2], s[3]):
                 deleted = conn.execute(
                     '''DELETE FROM stock_fundamentals
                        WHERE code=? AND updated_at=?''',
@@ -3550,14 +3401,14 @@ def cmd_cleanup(args: list[str] | None = None) -> None:
                 if deleted:
                     expired_names.append(f"{s[1]}({s[0]})")
 
-        analysis_cutoff = utc_now() - timedelta(days=14)
+        analysis_cutoff = domain.utc_now() - timedelta(days=14)
         analysis_rows = conn.execute(
             'SELECT code, date, created_at FROM analysis_results'
         ).fetchall()
         old_count = 0
         for code, analysis_date, created_at in analysis_rows:
             try:
-                if parse_timestamp_utc(created_at) < analysis_cutoff:
+                if domain.parse_timestamp_utc(created_at) < analysis_cutoff:
                     old_count += conn.execute(
                         '''DELETE FROM analysis_results
                            WHERE code=? AND date=? AND created_at=?''',

@@ -6,7 +6,7 @@ from pathlib import Path
 
 MODULES = (
     "cache", "fetcher", "checklist", "framework_metadata", "market_quotes",
-    "position_ledger", "schema_ledger", "paths",
+    "position_ledger", "schema_ledger", "paths", "domain",
 )
 
 

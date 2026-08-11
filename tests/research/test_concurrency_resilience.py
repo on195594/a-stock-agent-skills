@@ -12,7 +12,7 @@ from datetime import timedelta
 
 import pytest
 
-from a_stock_agent_runtime import cache
+from a_stock_agent_runtime import cache, domain
 from tests.helpers import valid_fundamentals_payload
 
 
@@ -25,7 +25,7 @@ def isolated_db(tmp_path, monkeypatch):
 
 def test_quote_snapshot_max_age_exact_boundary(monkeypatch) -> None:
     now = cache.utc_now()
-    monkeypatch.setattr(cache, 'utc_now', lambda: now)
+    monkeypatch.setattr(domain, 'utc_now', lambda: now)
     cache.record_quote_snapshot(
         'BOUNDARY', 10.0, cache.cst_today(), '10:00:00', 'sina',
         {'sina': {'price': 10.0}}, False,

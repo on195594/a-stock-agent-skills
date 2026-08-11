@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache
+from a_stock_agent_runtime import cache, domain
 from tests.helpers import record_valid_quote, set_valid_fundamentals
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -107,7 +107,7 @@ def test_get_fundamentals_miss():
 def test_get_fundamentals_expired(monkeypatch):
     set_valid_fundamentals('000002', '平安银行', '股份制银行', {'pb': 0.6})
     # 模拟缓存已过期
-    monkeypatch.setattr(cache, 'is_expired', lambda *_: True)
+    monkeypatch.setattr(domain, 'is_expired', lambda *_: True)
     assert cache.get_fundamentals('000002') is None
 
 
@@ -148,7 +148,7 @@ def test_cmd_check_fundamentals_hit(capsys):
 
 def test_cmd_check_fundamentals_expired_is_full_miss(capsys, monkeypatch):
     set_valid_fundamentals('601919', '中远海控', '航运', {'pe': 3})
-    monkeypatch.setattr(cache, 'is_expired', lambda *_: True)
+    monkeypatch.setattr(domain, 'is_expired', lambda *_: True)
     cache.cmd_check(['601919'])
     out = capsys.readouterr().out
     assert out.strip() == 'FULL_MISS'
@@ -1481,7 +1481,7 @@ def test_check_holdings_normal(capsys, monkeypatch):
 def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
     """现价跌破15%止损线但未到20%时触发⚠️黄色预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
-    monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
+    monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(33.0, cache.cst_today(), '15:00:00'),
@@ -1495,7 +1495,7 @@ def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
 def test_check_holdings_alerts_below_20pct(capsys, monkeypatch):
     """现价跌破20%止损线时触发🔴红色预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
-    monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
+    monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(31.0, cache.cst_today(), '15:00:00'),
@@ -1534,7 +1534,7 @@ def test_check_holdings_stale_quote_is_observation_only(capsys, monkeypatch):
     """非交易时段拿到上一交易日收盘价时，只输出观察提醒，不计入预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     _FixedDatetime._fixed = datetime(2026, 7, 2, 1, 30)  # 周四凌晨，非交易时段
-    monkeypatch.setattr(cache, 'datetime', _FixedDatetime)
+    monkeypatch.setattr(domain, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date='2026-07-01', quote_time='15:00:00')
@@ -1564,7 +1564,7 @@ def test_check_holdings_intraday_breach_uses_alarm_prefix(capsys, monkeypatch):
     """交易时段内跌破止损线，文案带 🚨 盘中已跌破 前缀，仍用"现价" """
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     _FixedDatetime._fixed = datetime(2026, 7, 2, 10, 0)  # 周四盘中
-    monkeypatch.setattr(cache, 'datetime', _FixedDatetime)
+    monkeypatch.setattr(domain, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date='2026-07-02', quote_time='10:00:00')
@@ -1580,7 +1580,7 @@ def test_check_holdings_after_hours_breach_uses_close_price_wording(capsys, monk
     """收盘后跌破止损线，文案用"收盘价"而不是"现价"，图标沿用历史 🔴/⚠️"""
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     _FixedDatetime._fixed = datetime(2026, 7, 2, 16, 0)  # 周四收盘后
-    monkeypatch.setattr(cache, 'datetime', _FixedDatetime)
+    monkeypatch.setattr(domain, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date='2026-07-02', quote_time='15:00:00')
@@ -1856,10 +1856,10 @@ def test_infer_framework_works_in_subprocess_without_checklist_preimported():
     test_checklist.py被收集过，sys.modules缓存会让这里看到的registry已经是
     填好的，掩盖了生产环境下registry为空的真实回归。"""
     script = (
-        "from a_stock_agent_runtime import cache; "
-        "fw, confident = cache.infer_framework('煤炭开采'); "
+        "from a_stock_agent_runtime import domain; "
+        "fw, confident = domain.infer_framework('煤炭开采'); "
         "assert fw == 'C资源' and confident is True, (fw, confident); "
-        "sl = cache.get_stop_loss_pct('F科技'); "
+        "sl = domain.get_stop_loss_pct('F科技'); "
         "assert sl == (0.80, 0.72), sl"
     )
     result = subprocess.run(

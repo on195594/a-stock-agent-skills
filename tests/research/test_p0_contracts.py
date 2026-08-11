@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache
+from a_stock_agent_runtime import cache, domain
 from a_stock_agent_runtime import fetcher
 from tests.helpers import valid_fundamentals_payload
 
@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / 'p0.db'
     monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
-    monkeypatch.setattr(cache, 'utc_now', lambda: NOW)
+    monkeypatch.setattr(domain, 'utc_now', lambda: NOW)
     yield str(db_file)
 
 
@@ -258,7 +258,7 @@ def test_fetcher_refuses_fundamentals_write_when_report_period_unknown() -> None
 
 
 def test_legacy_naive_timestamp_is_interpreted_as_asia_shanghai(monkeypatch) -> None:
-    monkeypatch.setattr(cache, 'utc_now', lambda: datetime(2026, 7, 14, 2, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(domain, 'utc_now', lambda: datetime(2026, 7, 14, 2, 0, tzinfo=timezone.utc))
 
     assert cache.is_expired('2026-07-14T09:00:00', 2) is False
     assert cache.is_expired('2026-07-14T07:59:59', 2) is True
@@ -270,7 +270,7 @@ def test_market_indicator_24_hour_boundary(monkeypatch) -> None:
         fetched_at=(NOW - timedelta(hours=24)).isoformat(),
     )
     assert cache.get_market_indicator_snapshot('bond_yield_10y', max_age=timedelta(hours=24)) is not None
-    monkeypatch.setattr(cache, 'utc_now', lambda: NOW + timedelta(microseconds=1))
+    monkeypatch.setattr(domain, 'utc_now', lambda: NOW + timedelta(microseconds=1))
     assert cache.get_market_indicator_snapshot('bond_yield_10y', max_age=timedelta(hours=24)) is None
 
 

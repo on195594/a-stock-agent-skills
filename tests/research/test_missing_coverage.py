@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from a_stock_agent_runtime import cache
+from a_stock_agent_runtime import cache, domain
 from tests.helpers import record_valid_quote, set_valid_fundamentals, valid_fundamentals_payload
 from a_stock_agent_runtime import fetcher
 
@@ -89,7 +89,7 @@ class TestCmdSetAndGet:
         payload = json.dumps(valid_fundamentals_payload({'roe': 15}), ensure_ascii=False)
         cache.cmd_set(['600036', '招商银行', '银行', payload])
         capsys.readouterr()
-        monkeypatch.setattr(cache, 'is_expired', lambda *_: True)
+        monkeypatch.setattr(domain, 'is_expired', lambda *_: True)
         cache.cmd_get(['600036'])
         out = capsys.readouterr().out
         assert out.strip() == 'CACHE_MISS'
@@ -303,7 +303,7 @@ class TestRemoveHolding:
 class TestCleanupAndClear:
     def test_cleanup_removes_expired_fundamentals(self, capsys, monkeypatch):
         set_valid_fundamentals('600000', '浦发银行', '银行', {'pe': 5})
-        monkeypatch.setattr(cache, 'is_expired', lambda *_: True)
+        monkeypatch.setattr(domain, 'is_expired', lambda *_: True)
         cache.cmd_cleanup()
         out = capsys.readouterr().out
         assert '浦发银行' in out
@@ -317,7 +317,7 @@ class TestCleanupAndClear:
         self, capsys, monkeypatch
     ):
         now = cache.utc_now()
-        monkeypatch.setattr(cache, 'utc_now', lambda: now)
+        monkeypatch.setattr(domain, 'utc_now', lambda: now)
         conn = cache.get_db()
         conn.executemany(
             "INSERT INTO analysis_results (code, date, result, created_at) VALUES (?,?,?,?)",
@@ -406,7 +406,7 @@ class TestCheckHoldingsBoundary:
 
     def test_price_exactly_at_15pct_stop_triggers_yellow(self, capsys, monkeypatch):
         self._add_holding_cost40()
-        monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
+        monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
         monkeypatch.setattr(
             cache, 'fetch_current_price_quote',
             lambda code: cache.PriceQuote(34.0, cache.cst_today(), '15:00:00'),
@@ -418,7 +418,7 @@ class TestCheckHoldingsBoundary:
 
     def test_price_exactly_at_20pct_stop_triggers_red(self, capsys, monkeypatch):
         self._add_holding_cost40()
-        monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
+        monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
         monkeypatch.setattr(
             cache, 'fetch_current_price_quote',
             lambda code: cache.PriceQuote(32.0, cache.cst_today(), '15:00:00'),
@@ -468,7 +468,7 @@ class TestWatchlistRows:
 
     def test_expired_stocks_excluded(self, capsys, monkeypatch):
         set_valid_fundamentals('600036', '招商银行', '银行', {})
-        monkeypatch.setattr(cache, 'is_expired', lambda *_: True)
+        monkeypatch.setattr(domain, 'is_expired', lambda *_: True)
         cache.cmd_watchlist(['--json'])
         rows = json.loads(capsys.readouterr().out)
         assert rows == []
