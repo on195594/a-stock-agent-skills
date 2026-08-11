@@ -499,6 +499,8 @@ def _ensure_holdings_indices(conn: sqlite3.Connection) -> None:
 
 def _backfill_holding_metadata(conn: sqlite3.Connection) -> None:
     """Populate durable position metadata for legacy rows without changing later choices."""
+    if _READ_ONLY_REQUEST:
+        return
     conn.execute(
         'UPDATE holdings SET initial_shares=shares '
         'WHERE initial_shares IS NULL AND shares IS NOT NULL'
