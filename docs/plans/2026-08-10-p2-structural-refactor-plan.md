@@ -1,19 +1,31 @@
 ---
 title: P2 结构性重构计划（CLI argparse 化 · cache.py 拆分 · 评审证据迁出）
-status: approved_not_started
+status: phase_0_3_complete_phase_4_awaiting_authorization
 created: 2026-08-10
 updated: 2026-08-11
 spec: none
 spec_rationale: 纯工程重构，不含投资规则变更，故不适用 AGENTS.md 的 dated-spec 要求
-execution_authorized: false
+execution_authorized: phase_0_3
 risk_tier: active-layer
 review: AGY r2 + Codex adversarial (REQUEST_CHANGES → addressed)
 baseline_commit: 9ad3b8e
+implementation_head: 7b6bb62
 ---
 
 # P2 结构性重构计划
 
 > 本计划不构成实施授权。仓库内 Phase 0-3 可由用户一次明确的“开始实施 P2”授权；Phase 4 涉及创建仓外 Git 仓和删除本仓 tracked 文件，必须另行明确授权。
+
+> 2026-08-11 执行记录：用户已授权并完成 Phase 0-3；Phase 4 尚未获得单独授权，因此保持未执行。最终门禁为 627 tests、971 个 `assert` token，`bash scripts/check.sh` 全部通过。
+
+Phase 0-3 实施提交：
+
+- `a8253f5` — Phase 0：测试数据库隔离与显式只读访问；
+- `0f3aec1` — Phase 1：冻结 CLI/W1 契约；
+- `34e80b1` — Phase 2：argparse subparsers 与 `add-holding --notes`；
+- `3420a84` — Phase 3a：领域规则拆分；
+- `dd29f7e` — Phase 3b：DB/schema/store 拆分；
+- `7b6bb62` — Phase 3c：commands 拆分与入口收口。
 
 ## 1. 背景与当前基线
 
