@@ -22,16 +22,7 @@ from a_stock_lib.providers import (
     QuoteObservation,
 )
 
-from a_stock_agent_runtime.cache import (
-    get_fundamentals,
-    get_market_indicator_snapshot,
-    list_codes,
-    record_quote_snapshot,
-    read_only_db_session,
-    set_fundamentals,
-    set_market_indicator_snapshot,
-    update_qualitative_only_security,
-)
+from a_stock_agent_runtime import db, store
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -292,7 +283,7 @@ def _fetch_realtime_quote(code: str) -> QuoteObservation:
     validation_error = _validate_sina_quote(quote, calendar_result)
     if validation_error:
         raise RuntimeError(f'新浪行情校验失败: {validation_error}')
-    record_quote_snapshot(
+    store.record_quote_snapshot(
         code,
         quote.price,
         quote.quote_date,
@@ -857,7 +848,7 @@ def _lookup_cached_industry(code: str) -> str | None:
     新浪行情本身不返回行业字段，复用哪怕过期的历史值好过显示"未知"。"""
     try:
         import sqlite3
-        with read_only_db_session() as conn:
+        with db.read_only_db_session() as conn:
             row = conn.execute(
                 "SELECT industry FROM stock_fundamentals "
                 "WHERE code=? AND industry IS NOT NULL AND industry NOT LIKE '未知%'",
@@ -872,7 +863,7 @@ def _lookup_cached_name(code: str) -> str | None:
     """Return the last cached stock name without applying fundamentals TTL."""
     try:
         import sqlite3
-        with read_only_db_session() as conn:
+        with db.read_only_db_session() as conn:
             row = conn.execute(
                 'SELECT name FROM stock_fundamentals WHERE code=?', (code,)
             ).fetchone()
@@ -920,7 +911,7 @@ def _fetch_spot_data(code: str, results: dict, null_reasons: dict) -> tuple[str,
         results['_industry_source'] = 'none'
     current_price = quote.price
     if results['industry_status'] == 'verified':
-        update_qualitative_only_security(code, name, industry)
+        store.update_qualitative_only_security(code, name, industry)
     results['_quote_as_of'] = quote.as_of
     total_mv  = parse_float(info.get('总市值'))
     float_mv  = parse_float(info.get('流通市值'))
@@ -1069,7 +1060,7 @@ def _fetch_percentiles(code: str, fin_df: Any,
 def _fetch_bond_yield(null_reasons: dict) -> dict | None:
     """Step 6: 10年期国债收益率（D框架股息率溢价计算用，全局字段）。"""
     logger.info("  [6/7] 10年期国债收益率...")
-    recent = get_market_indicator_snapshot(
+    recent = store.get_market_indicator_snapshot(
         'bond_yield_10y', max_age=BOND_YIELD_REFRESH_INTERVAL
     )
     if recent is not None:
@@ -1099,14 +1090,14 @@ def _fetch_bond_yield(null_reasons: dict) -> dict | None:
                     as_of = None
                 break
         if as_of is not None:
-            set_market_indicator_snapshot(
+            store.set_market_indicator_snapshot(
                 'bond_yield_10y', round(val, 4), as_of, 'akshare.bond_china_yield'
             )
             logger.info(f"  ✅ 10年期国债={val}%（{as_of}）")
-            return get_market_indicator_snapshot('bond_yield_10y')
+            return store.get_market_indicator_snapshot('bond_yield_10y')
         logger.warning("  ⚠️ 国债API返回值缺少可验证日期，不写入快照")
 
-    cached = get_market_indicator_snapshot('bond_yield_10y', max_age=timedelta(hours=24))
+    cached = store.get_market_indicator_snapshot('bond_yield_10y', max_age=timedelta(hours=24))
     if cached is not None:
         logger.warning(
             "  ⚠️ 国债收益率 API 失败，复用24小时内可信快照: %s%%（%s）",
@@ -1157,7 +1148,7 @@ def _build_cache_payload(code: str, name: str, industry: str,
         'field_provenance': provenance,
     })
     try:
-        msg = set_fundamentals(code, name, industry, cache_data)
+        msg = store.set_fundamentals(code, name, industry, cache_data)
     except ValueError as exc:
         logger.error("  ❌ fundamentals校验失败: %s", exc)
         raise SystemExit(1) from exc
@@ -1265,7 +1256,7 @@ def cmd_check(args: list[str]) -> None:
         sys.exit(1)
     code = args[0]
 
-    data = get_fundamentals(code)
+    data = store.get_fundamentals(code)
     if data is None:
         print(f"未找到 {code} 的缓存数据，请先执行: a-stock-fetch fetch {code}")
         return
@@ -1283,7 +1274,7 @@ def cmd_check(args: list[str]) -> None:
 
 
 def cmd_batch(args: list[str]) -> None:
-    codes = list_codes()
+    codes = store.list_codes()
     # 去重保序（list_codes 已按更新时间排序，保序去重防万一）
     seen, unique = set(), []
     for c in codes:

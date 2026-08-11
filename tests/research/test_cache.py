@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache, domain
+from a_stock_agent_runtime import cache, domain, schema, store
 from tests.helpers import record_valid_quote, set_valid_fundamentals
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -30,10 +30,10 @@ def isolated_db(tmp_path, monkeypatch):
     """每个测试用独立临时数据库，不影响生产 cache.db"""
     db_file = tmp_path / "test_cache.db"
     monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
-    monkeypatch.setattr(cache, 'get_latest_quote_snapshot', lambda *args, **kwargs: {
+    monkeypatch.setattr(store, 'get_latest_quote_snapshot', lambda *args, **kwargs: {
         'price': 10.0, 'quote_as_of': f'{cache.cst_today()}T10:00:00', 'source': 'sina',
     })
-    monkeypatch.setattr(cache, 'get_market_indicator_snapshot', lambda *args, **kwargs: {
+    monkeypatch.setattr(store, 'get_market_indicator_snapshot', lambda *args, **kwargs: {
         'value': 1.8, 'as_of': cache.cst_today(), 'source': 'fixture', 'status': 'ok',
     })
     yield str(db_file)
@@ -787,7 +787,7 @@ def test_schema_migration_ignores_only_duplicate_column():
         def commit(self):
             raise AssertionError("the migration ledger owns commits, not this helper")
 
-    cache.apply_column_migration(DuplicateColumnConn(), cache.SCHEMA_MIGRATIONS[0][1])
+    schema.apply_column_migration(DuplicateColumnConn(), schema.SCHEMA_MIGRATIONS[0][1])
 
     class LockedConn:
         def execute(self, _sql):
@@ -797,7 +797,7 @@ def test_schema_migration_ignores_only_duplicate_column():
             raise AssertionError("commit should not run after failed execute")
 
     with pytest.raises(sqlite3.OperationalError, match="database is locked"):
-        cache.apply_column_migration(LockedConn(), cache.SCHEMA_MIGRATIONS[0][1])
+        schema.apply_column_migration(LockedConn(), schema.SCHEMA_MIGRATIONS[0][1])
 
 
 # ── update-return ──────────────────────────────────────────────────────────────
@@ -1296,7 +1296,7 @@ def test_legacy_flags_migrate_as_pending_unverified_without_being_lost():
         ], ensure_ascii=False),),
     )
     conn.commit()
-    cache._backfill_legacy_alerts(conn)
+    schema.backfill_legacy_alerts(conn)
     row = conn.execute(
         """SELECT level, category, status, reason FROM holding_alerts"""
     ).fetchone()
@@ -1328,7 +1328,7 @@ def test_legacy_flags_migration_uses_only_latest_analysis():
         ],
     )
     conn.commit()
-    cache._backfill_legacy_alerts(conn)
+    schema.backfill_legacy_alerts(conn)
     rows = conn.execute(
         """SELECT level, reason FROM holding_alerts ORDER BY id"""
     ).fetchall()
@@ -1374,7 +1374,7 @@ def test_legacy_flags_migration_resolves_previously_migrated_stale_alert():
         (holding_id,),
     )
     conn.commit()
-    cache._backfill_legacy_alerts(conn)
+    schema.backfill_legacy_alerts(conn)
     rows = conn.execute(
         """SELECT reason, status, resolution_evidence
            FROM holding_alerts ORDER BY id"""
@@ -1405,7 +1405,7 @@ def test_legacy_flags_migration_does_not_revive_old_flags_when_latest_is_clear()
         ],
     )
     conn.commit()
-    cache._backfill_legacy_alerts(conn)
+    schema.backfill_legacy_alerts(conn)
     count = conn.execute('SELECT COUNT(*) FROM holding_alerts').fetchone()[0]
     conn.close()
 

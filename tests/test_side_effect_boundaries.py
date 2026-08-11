@@ -7,7 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from a_stock_agent_runtime import cache
+import pytest
+
+from a_stock_agent_runtime import cache, db
 from a_stock_agent_runtime import fetcher, paths
 
 
@@ -34,6 +36,14 @@ def test_read_only_lookup_does_not_create_database(tmp_path, monkeypatch) -> Non
     assert fetcher._lookup_cached_industry("600000") is None
     assert fetcher._lookup_cached_name("600000") is None
     assert not database.parent.exists()
+
+
+def test_read_only_scope_resets_after_exception() -> None:
+    with pytest.raises(RuntimeError):
+        with db.read_only_scope():
+            assert db.is_read_only()
+            raise RuntimeError("fixture")
+    assert not db.is_read_only()
 
 
 def test_missing_w1_confirmation_keeps_fixture_hash(tmp_path, monkeypatch) -> None:

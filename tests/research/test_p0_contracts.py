@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache, domain
+from a_stock_agent_runtime import cache, db, domain, schema
 from a_stock_agent_runtime import fetcher
 from tests.helpers import valid_fundamentals_payload
 
@@ -75,25 +75,25 @@ def test_schema_migration_ledger_skips_done_work_but_applies_new_item(monkeypatc
         }
     assert {'001-core-tables', '022-holding-events-inferred'} <= migration_ids
 
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED', False)
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED_PATH', '')
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED', False)
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED_PATH', '')
     monkeypatch.setattr(
-        cache, '_create_core_tables',
+        schema, '_create_core_tables',
         lambda _conn: pytest.fail('durable migration ledger should skip bootstrap'),
     )
     with cache.db_session() as conn:
         assert conn.execute('SELECT 1').fetchone() == (1,)
 
     monkeypatch.setattr(
-        cache,
+        schema,
         'SCHEMA_MIGRATIONS',
         [
-            *cache.SCHEMA_MIGRATIONS,
+            *schema.SCHEMA_MIGRATIONS,
             ('999-test-incremental-column', 'ALTER TABLE stock_fundamentals ADD COLUMN future_field TEXT'),
         ],
     )
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED', False)
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED_PATH', '')
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED', False)
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED_PATH', '')
     with cache.db_session() as conn:
         columns = {row[1] for row in conn.execute('PRAGMA table_info(stock_fundamentals)')}
         new_row = conn.execute(
@@ -117,13 +117,13 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
     with cache.db_session():  # bring the fixture database to the current release
         pass
 
-    released = list(cache.SCHEMA_MIGRATIONS)
+    released = list(schema.SCHEMA_MIGRATIONS)
     good = ('998-test-recovery', 'ALTER TABLE stock_fundamentals ADD COLUMN recovery_field TEXT')
     doomed = ('999-test-doomed', 'ALTER TABLE stock_fundamentals ADD COLUMN bad TEXT, NOT SQL')
 
-    monkeypatch.setattr(cache, 'SCHEMA_MIGRATIONS', [*released, good, doomed])
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED', False)
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED_PATH', '')
+    monkeypatch.setattr(schema, 'SCHEMA_MIGRATIONS', [*released, good, doomed])
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED', False)
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED_PATH', '')
     with pytest.raises(sqlite3.OperationalError):
         with cache.db_session():
             pass
@@ -140,9 +140,9 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
     assert recorded is None, 'its ledger row is rolled back with the rest of the batch'
 
     # Replay without the doomed item: the duplicate column must not be fatal.
-    monkeypatch.setattr(cache, 'SCHEMA_MIGRATIONS', [*released, good])
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED', False)
-    monkeypatch.setattr(cache, '_SCHEMA_INITIALIZED_PATH', '')
+    monkeypatch.setattr(schema, 'SCHEMA_MIGRATIONS', [*released, good])
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED', False)
+    monkeypatch.setattr(db, '_SCHEMA_INITIALIZED_PATH', '')
     with cache.db_session() as conn:
         assert conn.execute(
             'SELECT 1 FROM schema_migrations WHERE migration_id=?', (good[0],)

@@ -12,7 +12,7 @@ from datetime import timedelta
 
 import pytest
 
-from a_stock_agent_runtime import cache, domain
+from a_stock_agent_runtime import cache, db, domain
 from tests.helpers import valid_fundamentals_payload
 
 
@@ -120,7 +120,7 @@ def test_cleanup_compare_and_delete_preserves_concurrently_refreshed_rows(
         finally:
             conn.close()
 
-    monkeypatch.setattr(cache, 'db_session', hooked_session)
+    monkeypatch.setattr(db, 'db_session', hooked_session)
     cache.cmd_cleanup()
 
     with closing(cache.get_db()) as conn:

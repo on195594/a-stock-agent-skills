@@ -9,8 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from a_stock_agent_runtime import cache
 from a_stock_agent_runtime import framework_metadata
+from a_stock_agent_runtime import store
 from a_stock_agent_runtime.framework_metadata import FrameworkMetadata, SkippedChecklistItem
 
 
@@ -385,7 +385,7 @@ def build_checklist(code: str, framework: str, cycle_stage: str | None = None) -
             f"暂不支持框架 {framework!r} 的 checklist；当前仅支持 'A'/'B'/'C'/'D'/'E'/'F'"
         )
 
-    fundamentals = cache.get_fundamentals(code)
+    fundamentals = store.get_fundamentals(code)
     if fundamentals is None:
         raise FundamentalsCacheMissingError(f"未找到 {code} 的有效基本面缓存")
 

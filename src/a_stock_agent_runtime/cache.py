@@ -71,19 +71,13 @@ import sqlite3
 import json
 import math
 import sys
-import os
-import hashlib
 import logging
 import re
 import requests  # noqa: F401 - 兼容外部调用方对 cache.requests 的 monkeypatch
-import threading
-from collections.abc import Iterator
-from datetime import date, datetime, timedelta, time as dtime, timezone
-from contextlib import contextmanager
-from a_stock_agent_runtime import domain, framework_metadata
+from datetime import date, datetime, timedelta, timezone
+from a_stock_agent_runtime import db, domain, framework_metadata, schema, store
 from a_stock_agent_runtime import market_quotes
 from a_stock_agent_runtime import paths
-from a_stock_agent_runtime.schema_ledger import bootstrap_schema, schema_process_lock
 from a_stock_agent_runtime.position_ledger import LifecycleReturn, calculate_lifecycle_return
 from a_stock_lib.contracts import (
     FrameworkKey,
@@ -108,37 +102,30 @@ infer_framework = domain.infer_framework
 get_stop_loss_pct = domain.get_stop_loss_pct
 _is_a_share_trading_hours = domain.is_a_share_trading_hours
 _evaluate_holding_status = domain.evaluate_holding_status
+SCHEMA_MIGRATIONS = schema.SCHEMA_MIGRATIONS
+apply_column_migration = schema.apply_column_migration
+_backfill_holding_metadata = schema.backfill_holding_metadata
+_backfill_legacy_alerts = schema.backfill_legacy_alerts
+_bootstrap_database_schema = schema.bootstrap_database_schema
+get_db = db.get_db
+db_session = db.db_session
+read_only_db_session = db.read_only_db_session
+validate_fundamentals_payload = store.validate_fundamentals_payload
+_safe_json_value = store.safe_json_value
+record_quote_snapshot = store.record_quote_snapshot
+get_latest_quote_snapshot = store.get_latest_quote_snapshot
+set_market_indicator_snapshot = store.set_market_indicator_snapshot
+update_qualitative_only_security = store.update_qualitative_only_security
+get_market_indicator_snapshot = store.get_market_indicator_snapshot
+_add_market_indicators = store.add_market_indicators
+get_fundamentals = store.get_fundamentals
+set_fundamentals = store.set_fundamentals
+list_codes = store.list_codes
+QUOTE_SNAPSHOT_MAX_AGE = store.QUOTE_SNAPSHOT_MAX_AGE
+QUOTE_SNAPSHOT_RETENTION_PER_CODE = store.QUOTE_SNAPSHOT_RETENTION_PER_CODE
+MAX_SNAPSHOT_CLOCK_SKEW = store.MAX_SNAPSHOT_CLOCK_SKEW
 
-SCHEMA_MIGRATIONS = [
-    ('002-analysis-name', 'ALTER TABLE analysis_results ADD COLUMN name TEXT'),
-    ('003-analysis-score', 'ALTER TABLE analysis_results ADD COLUMN score INTEGER'),
-    ('004-analysis-flags', 'ALTER TABLE analysis_results ADD COLUMN flags TEXT'),
-    ('005-analysis-score-breakdown', 'ALTER TABLE analysis_results ADD COLUMN score_breakdown TEXT'),
-    ('006-analysis-return-pct', 'ALTER TABLE analysis_results ADD COLUMN return_pct REAL'),
-    ('007-analysis-holding-days', 'ALTER TABLE analysis_results ADD COLUMN holding_days INT'),
-    ('008-holdings-exit-price', 'ALTER TABLE holdings ADD COLUMN exit_price REAL'),
-    ('009-holdings-exit-date', 'ALTER TABLE holdings ADD COLUMN exit_date TEXT'),
-    ('010-analysis-framework', 'ALTER TABLE analysis_results ADD COLUMN framework TEXT'),
-    ('011-analysis-quote-price', 'ALTER TABLE analysis_results ADD COLUMN quote_price REAL'),
-    ('012-analysis-quote-as-of', 'ALTER TABLE analysis_results ADD COLUMN quote_as_of TEXT'),
-    ('013-analysis-quote-source', 'ALTER TABLE analysis_results ADD COLUMN quote_source TEXT'),
-    ('014-analysis-scoring-status', "ALTER TABLE analysis_results ADD COLUMN scoring_status TEXT DEFAULT 'complete'"),
-    ('015-holdings-framework', 'ALTER TABLE holdings ADD COLUMN framework TEXT'),
-    ('016-holdings-initial-shares', 'ALTER TABLE holdings ADD COLUMN initial_shares INTEGER'),
-    ('017-holdings-main-entry-date', 'ALTER TABLE holdings ADD COLUMN main_entry_date TEXT'),
-    ('018-holdings-main-entry-basis', 'ALTER TABLE holdings ADD COLUMN main_entry_basis REAL'),
-    ('019-holdings-additions-since-main', 'ALTER TABLE holdings ADD COLUMN additions_since_main REAL NOT NULL DEFAULT 0'),
-    ('020-holdings-reference-cost', 'ALTER TABLE holdings ADD COLUMN reference_cost REAL'),
-    ('021-holdings-framework-confident', 'ALTER TABLE holdings ADD COLUMN framework_confident INTEGER NOT NULL DEFAULT 0'),
-    ('022-holding-events-inferred', 'ALTER TABLE holding_events ADD COLUMN inferred INTEGER NOT NULL DEFAULT 0'),
-]
-
-_SCHEMA_LOCK = threading.Lock()
-_SCHEMA_INITIALIZED: bool = False
-_SCHEMA_INITIALIZED_PATH: str = ""
-_READ_ONLY_REQUEST: bool = False
 _UTC = timezone.utc
-_DATA_PERIOD_RE = re.compile(r'^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$')
 _VALUATION_CONFLICT_RE = re.compile(
     r'估值冲突\[状态=待核实；PB结论="[^"]+"；交叉估值结论="[^"]+"\]'
 )
@@ -150,467 +137,8 @@ _FRAMEWORK_ALIASES = {
     'E': 'E消费', 'E消费': 'E消费',
     'F': 'F科技', 'F科技': 'F科技',
 }
-QUOTE_SNAPSHOT_MAX_AGE = timedelta(minutes=30)
-QUOTE_SNAPSHOT_RETENTION_PER_CODE = 64
-MAX_SNAPSHOT_CLOCK_SKEW = timedelta(seconds=30)
 ANALYSIS_PRICE_INVALIDATION_THRESHOLD = 0.03
 
-
-def apply_column_migration(conn: sqlite3.Connection, sql: str) -> None:
-    """Add one column, ignoring only the already-applied duplicate-column case.
-
-    Swallowing ``duplicate column name`` is the recovery mechanism, not a
-    convenience.  Python's sqlite3 opens an implicit transaction only before DML,
-    so this DDL autocommits immediately while the ledger INSERT that records it
-    does not.  A batch that dies midway therefore leaves columns on disk that the
-    ledger still reports as pending, and the next run replays them; this branch is
-    what makes that replay idempotent.  Do not "tidy" it away, and do not add a
-    commit here -- the ledger owns commits.
-    """
-    try:
-        conn.execute(sql)
-    except sqlite3.OperationalError as exc:
-        if 'duplicate column name' in str(exc).lower():
-            return
-        logger.exception('Schema migration failed: %s', sql)
-        raise
-
-
-def _create_core_tables(conn: sqlite3.Connection) -> None:
-    conn.execute('''CREATE TABLE IF NOT EXISTS stock_fundamentals (
-        code TEXT PRIMARY KEY,
-        name TEXT,
-        industry TEXT,
-        data JSON,
-        updated_at TEXT,
-        ttl_hours INTEGER DEFAULT 24
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS analysis_results (
-        code TEXT,
-        date TEXT,
-        name TEXT,
-        result TEXT,
-        created_at TEXT,
-        score INTEGER,
-        flags TEXT,
-        score_breakdown TEXT,
-        return_pct REAL,
-        holding_days INT,
-        framework TEXT,
-        quote_price REAL,
-        quote_as_of TEXT,
-        quote_source TEXT,
-        scoring_status TEXT DEFAULT 'complete',
-        PRIMARY KEY (code, date)
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS holdings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT NOT NULL,
-        name TEXT,
-        cost_price REAL,
-        shares INTEGER,
-        buy_date TEXT,
-        buy_score INTEGER,
-        stop_loss_15 REAL,
-        stop_loss_20 REAL,
-        notes TEXT,
-        updated_at TEXT,
-        exit_price REAL,
-        exit_date TEXT,
-        framework TEXT,
-        initial_shares INTEGER,
-        main_entry_date TEXT,
-        main_entry_basis REAL,
-        additions_since_main REAL NOT NULL DEFAULT 0,
-        reference_cost REAL,
-        framework_confident INTEGER NOT NULL DEFAULT 0
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS holding_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        holding_id INTEGER NOT NULL,
-        code TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        event_date TEXT NOT NULL,
-        shares INTEGER,
-        price REAL,
-        fees REAL NOT NULL DEFAULT 0,
-        tax REAL NOT NULL DEFAULT 0,
-        cash_amount REAL,
-        realized_pnl REAL,
-        notes TEXT,
-        inferred INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        CHECK (event_type IN ('buy', 'sell', 'dividend', 'adjustment'))
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS holding_l3_conditions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        holding_id INTEGER NOT NULL,
-        condition_text TEXT NOT NULL,
-        origin_type TEXT NOT NULL DEFAULT 'original',
-        status TEXT NOT NULL DEFAULT 'pending',
-        evidence TEXT,
-        as_of TEXT,
-        next_review_date TEXT,
-        temporary_exit_rule TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        CHECK (origin_type IN ('original', 'recovered', 'new_monitoring')),
-        CHECK (status IN ('pending', 'not_triggered', 'watch', 'triggered'))
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS holding_tier_state (
-        holding_id INTEGER PRIMARY KEY,
-        tier1_status TEXT NOT NULL DEFAULT 'pending',
-        tier2_status TEXT NOT NULL DEFAULT 'pending',
-        tier3_status TEXT NOT NULL DEFAULT 'pending',
-        exit_path TEXT,
-        exit_target_pct REAL,
-        exemption_framework TEXT,
-        exemption_declared_at TEXT,
-        peg_method TEXT,
-        updated_at TEXT NOT NULL,
-        CHECK (tier1_status IN ('pending', 'completed', 'exempted')),
-        CHECK (tier2_status IN ('pending', 'completed')),
-        CHECK (tier3_status IN ('pending', 'completed'))
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS holding_alerts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        holding_id INTEGER NOT NULL,
-        code TEXT NOT NULL,
-        level TEXT NOT NULL,
-        category TEXT NOT NULL,
-        reason_code TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active',
-        evidence TEXT,
-        opened_at TEXT NOT NULL,
-        review_due TEXT,
-        resolved_at TEXT,
-        resolution_evidence TEXT,
-        updated_at TEXT NOT NULL,
-        CHECK (level IN ('yellow', 'red')),
-        CHECK (category IN ('holding_deterioration', 'entry_valuation', 'unverified')),
-        CHECK (status IN ('active', 'pending', 'resolved'))
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS retro_notes (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        holding_id      INTEGER NOT NULL,
-        code            TEXT NOT NULL,
-        name            TEXT,
-        framework       TEXT,
-        buy_date        TEXT,
-        exit_date       TEXT,
-        buy_score       INTEGER,
-        actual_return_pct REAL,
-        holding_days    INTEGER,
-        error_tags      TEXT,
-        thesis_notes    TEXT,
-        retro_text      TEXT,
-        framework_gap   TEXT,
-        created_at      TEXT NOT NULL
-    )''')
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_retro_holding ON retro_notes(holding_id)'
-    )
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_retro_framework ON retro_notes(framework)'
-    )
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_holding_events_holding_date '
-        'ON holding_events(holding_id, event_date, id)'
-    )
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_l3_holding_status '
-        'ON holding_l3_conditions(holding_id, status)'
-    )
-    conn.execute(
-        'CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_active_reason '
-        "ON holding_alerts(holding_id, reason_code) WHERE status != 'resolved'"
-    )
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_alert_code_status '
-        'ON holding_alerts(code, status)'
-    )
-    conn.execute('''CREATE TABLE IF NOT EXISTS quote_snapshots (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT NOT NULL,
-        price REAL NOT NULL,
-        quote_date TEXT NOT NULL,
-        quote_time TEXT NOT NULL,
-        fetched_at TEXT NOT NULL,
-        source TEXT NOT NULL,
-        verification_sources TEXT NOT NULL,
-        degraded INTEGER NOT NULL DEFAULT 0,
-        valid INTEGER NOT NULL DEFAULT 1
-    )''')
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_quote_snapshots_code_time '
-        'ON quote_snapshots(code, fetched_at DESC)'
-    )
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_quote_snapshots_code_id '
-        'ON quote_snapshots(code, id DESC)'
-    )
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_analysis_results_code_created '
-        'ON analysis_results(code, created_at DESC)'
-    )
-    conn.execute(
-        'CREATE INDEX IF NOT EXISTS idx_analysis_results_date '
-        'ON analysis_results(date)'
-    )
-    conn.execute('''CREATE TABLE IF NOT EXISTS market_indicator_snapshots (
-        indicator_key TEXT PRIMARY KEY,
-        value REAL NOT NULL,
-        as_of TEXT NOT NULL,
-        fetched_at TEXT NOT NULL,
-        source TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'ok'
-    )''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS qualitative_only_securities (
-        code TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        industry TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-    )''')
-
-
-def _migrate_holdings_autoincrement_id(conn: sqlite3.Connection) -> None:
-    holdings_cols = [r[1] for r in conn.execute("PRAGMA table_info(holdings)").fetchall()]
-    if 'id' not in holdings_cols:
-        conn.execute('DROP TABLE IF EXISTS holdings_new')
-        conn.execute('''CREATE TABLE holdings_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT NOT NULL,
-            name TEXT, cost_price REAL, shares INTEGER, buy_date TEXT,
-            buy_score INTEGER, stop_loss_15 REAL, stop_loss_20 REAL,
-            notes TEXT, updated_at TEXT, exit_price REAL, exit_date TEXT,
-            framework TEXT, initial_shares INTEGER, main_entry_date TEXT,
-            main_entry_basis REAL, additions_since_main REAL NOT NULL DEFAULT 0,
-            reference_cost REAL, framework_confident INTEGER NOT NULL DEFAULT 0
-        )''')
-        conn.execute('''INSERT INTO holdings_new
-            (code, name, cost_price, shares, buy_date, buy_score,
-             stop_loss_15, stop_loss_20, notes, updated_at, exit_price, exit_date,
-             framework, initial_shares, main_entry_date, main_entry_basis,
-             additions_since_main, reference_cost, framework_confident)
-            SELECT code, name, cost_price, shares, buy_date, buy_score,
-                   stop_loss_15, stop_loss_20, notes, updated_at, exit_price, exit_date,
-                   framework, initial_shares, main_entry_date, main_entry_basis,
-                   additions_since_main, reference_cost, framework_confident
-            FROM holdings''')
-        conn.execute('DROP TABLE holdings')
-        conn.execute('ALTER TABLE holdings_new RENAME TO holdings')
-        conn.commit()
-
-
-def _ensure_holdings_indices(conn: sqlite3.Connection) -> None:
-    indices = conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND name IN ('idx_holdings_code', 'idx_holdings_exit')").fetchall()
-    if len(indices) < 2:
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_holdings_code ON holdings(code)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_holdings_exit ON holdings(exit_date)")
-        conn.commit()
-
-
-def _backfill_holding_metadata(conn: sqlite3.Connection) -> None:
-    """Populate durable position metadata for legacy rows without changing later choices."""
-    if _READ_ONLY_REQUEST:
-        return
-    conn.execute(
-        'UPDATE holdings SET initial_shares=shares '
-        'WHERE initial_shares IS NULL AND shares IS NOT NULL'
-    )
-    conn.execute(
-        '''UPDATE holdings
-           SET main_entry_date=COALESCE(main_entry_date, buy_date),
-               main_entry_basis=COALESCE(main_entry_basis, cost_price * shares),
-               reference_cost=COALESCE(reference_cost, cost_price)
-           WHERE shares IS NOT NULL'''
-    )
-    conn.execute(
-        '''UPDATE holdings
-           SET framework=(
-               SELECT a.framework FROM analysis_results a
-               WHERE a.code=holdings.code AND a.framework IS NOT NULL
-               ORDER BY a.date DESC LIMIT 1
-           )
-           WHERE framework IS NULL'''
-    )
-    conn.execute(
-        '''UPDATE holdings
-           SET framework_confident=1
-           WHERE framework IS NOT NULL
-             AND EXISTS (
-               SELECT 1 FROM analysis_results a
-               WHERE a.code=holdings.code AND a.framework=holdings.framework
-             )'''
-    )
-    legacy_rows = conn.execute(
-        '''SELECT h.id, h.code, h.cost_price, h.shares, h.buy_date,
-                  h.exit_price, h.exit_date
-           FROM holdings h
-           WHERE h.shares IS NOT NULL AND h.shares > 0
-             AND NOT EXISTS (
-               SELECT 1 FROM holding_events e WHERE e.holding_id=h.id
-             )'''
-    ).fetchall()
-    for holding_id, code, cost, shares, buy_date, exit_price, exit_date in legacy_rows:
-        created_at = domain.utc_now_iso()
-        conn.execute(
-            '''INSERT INTO holding_events
-               (holding_id, code, event_type, event_date, shares, price,
-                notes, inferred, created_at)
-               VALUES (?, ?, 'buy', ?, ?, ?, 'legacy_inferred_from_holding', 1, ?)''',
-            (holding_id, code, buy_date or domain.cst_today(), shares, cost, created_at),
-        )
-        if exit_date and exit_price:
-            conn.execute(
-                '''INSERT INTO holding_events
-                   (holding_id, code, event_type, event_date, shares, price,
-                    realized_pnl, notes, inferred, created_at)
-                   VALUES (?, ?, 'sell', ?, ?, ?, ?,
-                           'legacy_inferred_from_holding', 1, ?)''',
-                (
-                    holding_id, code, exit_date, shares, exit_price,
-                    (exit_price - cost) * shares, created_at,
-                ),
-            )
-    conn.commit()
-
-
-def _backfill_legacy_alerts(conn: sqlite3.Connection) -> None:
-    """Carry legacy flag JSON forward as pending/unverified without risk-count inflation."""
-    rows = conn.execute(
-        '''SELECT h.id, h.code, (
-               SELECT latest.flags
-               FROM analysis_results latest
-               WHERE latest.code=h.code
-               ORDER BY latest.date DESC
-               LIMIT 1
-           )
-           FROM holdings h
-           WHERE h.exit_date IS NULL'''
-    ).fetchall()
-    for holding_id, code, raw_flags in rows:
-        flags = _safe_json_value(raw_flags, list, [])
-        latest_reasons = {
-            str(flag.get('reason') or '').strip()
-            for flag in flags
-            if isinstance(flag, dict) and str(flag.get('reason') or '').strip()
-        }
-        migrated_alerts = conn.execute(
-            '''SELECT id, reason FROM holding_alerts
-               WHERE holding_id=? AND category='unverified' AND status='pending'
-                 AND reason_code LIKE 'legacy-%'
-                 AND evidence='legacy analysis_results.flags; requires classification' ''',
-            (holding_id,),
-        ).fetchall()
-        now_iso = domain.utc_now_iso()
-        for alert_id, reason in migrated_alerts:
-            if reason not in latest_reasons:
-                conn.execute(
-                    '''UPDATE holding_alerts
-                       SET status='resolved', resolved_at=?,
-                           resolution_evidence='superseded by latest analysis',
-                           updated_at=?
-                       WHERE id=?''',
-                    (now_iso, now_iso, alert_id),
-                )
-        for flag in flags:
-            if not isinstance(flag, dict):
-                continue
-            level = flag.get('level')
-            reason = str(flag.get('reason') or '').strip()
-            if level not in ('yellow', 'red') or not reason:
-                continue
-            reason_hash = hashlib.sha256(reason.encode('utf-8')).hexdigest()[:16]
-            opened_at = str(flag.get('date') or domain.cst_today())
-            conn.execute(
-                '''INSERT OR IGNORE INTO holding_alerts
-                   (holding_id, code, level, category, reason_code, reason, status,
-                    evidence, opened_at, updated_at)
-                   VALUES (?, ?, ?, 'unverified', ?, ?, 'pending',
-                           'legacy analysis_results.flags; requires classification',
-                           ?, ?)''',
-                (
-                    holding_id, code, level, f"legacy-{reason_hash}", reason,
-                    opened_at, now_iso,
-                ),
-            )
-    conn.commit()
-
-
-def _bootstrap_database_schema(conn: sqlite3.Connection) -> None:
-    """Upgrade missing schema items and record each one durably.
-
-    ``_SCHEMA_INITIALIZED`` avoids repeat work within a process.  The migration
-    ledger below is the cross-process guard: normal one-command CLI invocations
-    must not rerun DDL, legacy backfills or migration probes on every startup.
-    """
-    migrations = [('001-core-tables', lambda: _create_core_tables(conn))]
-    migrations.extend(
-        (migration_id, lambda sql=sql: apply_column_migration(conn, sql))
-        for migration_id, sql in SCHEMA_MIGRATIONS
-    )
-    migrations.extend([
-        ('023-holdings-autoincrement-id', lambda: _migrate_holdings_autoincrement_id(conn)),
-        ('024-holdings-indices', lambda: _ensure_holdings_indices(conn)),
-        ('025-holdings-metadata-backfill', lambda: _backfill_holding_metadata(conn)),
-        ('026-legacy-alerts-backfill', lambda: _backfill_legacy_alerts(conn)),
-    ])
-    bootstrap_schema(conn, domain.utc_now_iso(), migrations)
-
-
-def get_db(timeout: float = 30.0) -> sqlite3.Connection:
-    global _SCHEMA_INITIALIZED, _SCHEMA_INITIALIZED_PATH
-    database_path = str(paths.cache_db_path())
-    if _READ_ONLY_REQUEST:
-        conn = sqlite3.connect(
-            f"file:{os.path.abspath(database_path)}?mode=ro", uri=True, timeout=timeout,
-        )
-        conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
-        return conn
-    paths.ensure_db_parent(database_path)
-    conn = sqlite3.connect(database_path, timeout=timeout)
-    conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
-    if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != database_path:
-        try:
-            with _SCHEMA_LOCK:
-                if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != database_path:
-                    with schema_process_lock(database_path):
-                        _bootstrap_database_schema(conn)
-                        _SCHEMA_INITIALIZED = True
-                        _SCHEMA_INITIALIZED_PATH = database_path
-        except BaseException:
-            # The caller never received this connection, so nothing else can close
-            # it.  A failed bootstrap leaves the ledger INSERT transaction open;
-            # leaking it here would lock the database and mask the real migration
-            # error behind "database is locked" for every later attempt.
-            conn.close()
-            raise
-    return conn
-
-
-@contextmanager
-def db_session(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
-    conn = get_db(timeout)
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-@contextmanager
-def read_only_db_session(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
-    """Open the configured database without creating or migrating it."""
-    database_path = paths.cache_db_path().resolve()
-    conn = sqlite3.connect(
-        f"file:{database_path}?mode=ro", uri=True, timeout=timeout,
-    )
-    try:
-        conn.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
-        yield conn
-    finally:
-        conn.close()
 
 
 def _load_lifecycle_events(conn: sqlite3.Connection, holding_id: int) -> list[tuple]:
@@ -656,298 +184,6 @@ def _validate_event_date_not_before(
         sys.exit(1)
 
 
-def validate_fundamentals_payload(data: dict) -> str | None:
-    """Validate report period, null reasons and per-field provenance."""
-    if not isinstance(data, dict):
-        return "基本面数据必须是 JSON 对象"
-    period = data.get('data_period')
-    if not isinstance(period, str) or _DATA_PERIOD_RE.fullmatch(period) is None:
-        return "data_period 必须为 YYYY年报、YYYY半年报或 YYYYQ1—YYYYQ3"
-    null_reasons = data.get('null_reasons')
-    provenance = data.get('field_provenance')
-    if not isinstance(null_reasons, dict):
-        return "null_reasons 必须是 JSON 对象"
-    if not isinstance(provenance, dict):
-        return "field_provenance 必须是 JSON 对象"
-
-    business_fields = set(data) - {'data_period', 'null_reasons', 'field_provenance'}
-    for field in sorted(business_fields):
-        field_provenance = provenance.get(field)
-        if not isinstance(field_provenance, dict):
-            return f"字段 {field} 缺少 field_provenance"
-        source = field_provenance.get('source')
-        as_of = field_provenance.get('as_of')
-        status = field_provenance.get('status')
-        if not isinstance(source, str) or not source.strip():
-            return f"字段 {field} provenance.source 缺失"
-        if not isinstance(as_of, str) or not as_of.strip():
-            return f"字段 {field} provenance.as_of 缺失"
-        if status not in {'ok', 'missing'}:
-            return f"字段 {field} provenance.status 必须为 ok 或 missing"
-        if data[field] is None:
-            if status != 'missing' or not isinstance(null_reasons.get(field), str) or not null_reasons[field].strip():
-                return f"缺失字段 {field} 必须同时提供 status=missing 和 null_reasons"
-        elif status != 'ok':
-            return f"非空字段 {field} 的 provenance.status 必须为 ok"
-
-    unknown_provenance = set(provenance) - business_fields
-    if unknown_provenance:
-        return f"field_provenance 包含未写入的字段: {', '.join(sorted(unknown_provenance))}"
-    unknown_reasons = set(null_reasons) - {field for field in business_fields if data[field] is None}
-    if unknown_reasons:
-        return f"null_reasons 包含非缺失字段: {', '.join(sorted(unknown_reasons))}"
-    return None
-
-
-def _safe_json_value(raw: str | None, expected_type: type, default):
-    """Read legacy JSON without letting one corrupt row break batch commands."""
-    if not raw:
-        return default
-    try:
-        value = json.loads(raw)
-    except (TypeError, json.JSONDecodeError):
-        logger.warning("Ignoring malformed cached JSON value")
-        return default
-    if not isinstance(value, expected_type):
-        logger.warning("Ignoring cached JSON value with unexpected type")
-        return default
-    return value
-
-
-def record_quote_snapshot(
-    code: str,
-    price: float,
-    quote_date: str,
-    quote_time: str,
-    source: str,
-    verification_sources: dict,
-    degraded: bool,
-    *,
-    fetched_at: str | None = None,
-) -> None:
-    """Persist one already-validated realtime quote snapshot."""
-    if (
-        not code
-        or isinstance(price, bool)
-        or not isinstance(price, (int, float))
-        or not math.isfinite(float(price))
-        or price <= 0
-        or not source
-        or not isinstance(verification_sources, dict)
-        or source not in verification_sources
-        or not isinstance(degraded, bool)
-    ):
-        raise ValueError("invalid validated quote snapshot")
-    date.fromisoformat(quote_date)
-    dtime.fromisoformat(quote_time)
-    fetched_at_dt = domain.parse_timestamp_utc(fetched_at or domain.utc_now_iso())
-    if fetched_at_dt - domain.utc_now() > MAX_SNAPSHOT_CLOCK_SKEW:
-        raise ValueError("quote snapshot fetched_at is in the future")
-    fetched_at_value = fetched_at_dt.isoformat()
-    with db_session() as conn:
-        conn.execute(
-            '''INSERT INTO quote_snapshots
-               (code, price, quote_date, quote_time, fetched_at, source,
-                verification_sources, degraded, valid)
-               VALUES (?,?,?,?,?,?,?,?,1)''',
-            (
-                code, price, quote_date, quote_time, fetched_at_value, source,
-                json.dumps(verification_sources, ensure_ascii=False), int(degraded),
-            ),
-        )
-        conn.execute(
-            '''DELETE FROM quote_snapshots
-               WHERE code=?
-                 AND id NOT IN (
-                     SELECT id FROM quote_snapshots
-                     WHERE code=?
-                     ORDER BY fetched_at DESC, id DESC
-                     LIMIT ?
-                 )''',
-            (code, code, QUOTE_SNAPSHOT_RETENTION_PER_CODE),
-        )
-        conn.commit()
-
-
-def get_latest_quote_snapshot(
-    code: str,
-    *,
-    max_age: timedelta | None = None,
-) -> dict | None:
-    """Return the latest valid quote snapshot, optionally bounded by age."""
-    if max_age is not None and max_age < timedelta(0):
-        raise ValueError("max_age must be non-negative")
-    with db_session() as conn:
-        row = conn.execute(
-            '''SELECT price, quote_date, quote_time, fetched_at, source,
-                      verification_sources, degraded
-               FROM quote_snapshots
-               WHERE code=? AND valid=1 ORDER BY fetched_at DESC LIMIT 1''',
-            (code,),
-        ).fetchone()
-    if row is None:
-        return None
-    try:
-        age = domain.utc_now() - domain.parse_timestamp_utc(row[3])
-    except (TypeError, ValueError):
-        logger.warning("Ignoring quote snapshot with malformed fetched_at")
-        return None
-    if age < -MAX_SNAPSHOT_CLOCK_SKEW:
-        return None
-    if max_age is not None and age > max_age:
-        return None
-    return {
-        'price': row[0], 'quote_date': row[1], 'quote_time': row[2],
-        'fetched_at': row[3], 'source': row[4],
-        'verification_sources': _safe_json_value(row[5], dict, {}),
-        'degraded': bool(row[6]),
-        'quote_as_of': f"{row[1]}T{row[2]}",
-    }
-
-
-def set_market_indicator_snapshot(
-    indicator_key: str,
-    value: float,
-    as_of: str,
-    source: str,
-    *,
-    fetched_at: str | None = None,
-) -> None:
-    """Persist the latest trusted market-wide indicator snapshot."""
-    if (
-        not indicator_key
-        or isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-        or value <= 0
-        or not as_of
-        or not source
-    ):
-        raise ValueError("invalid market indicator snapshot")
-    fetched_at_dt = domain.parse_timestamp_utc(fetched_at or domain.utc_now_iso())
-    if fetched_at_dt - domain.utc_now() > MAX_SNAPSHOT_CLOCK_SKEW:
-        raise ValueError("market indicator fetched_at is in the future")
-    fetched_at_value = fetched_at_dt.isoformat()
-    with db_session() as conn:
-        conn.execute(
-            '''INSERT INTO market_indicator_snapshots
-               (indicator_key, value, as_of, fetched_at, source, status)
-               VALUES (?,?,?,?,?,'ok')
-               ON CONFLICT(indicator_key) DO UPDATE SET
-                   value=excluded.value, as_of=excluded.as_of,
-                   fetched_at=excluded.fetched_at, source=excluded.source,
-                   status='ok'
-               WHERE excluded.fetched_at >= market_indicator_snapshots.fetched_at''',
-            (indicator_key, value, as_of, fetched_at_value, source),
-        )
-        conn.commit()
-
-
-def update_qualitative_only_security(code: str, name: str, industry: str | None) -> None:
-    """Persist or clear the terminal qualitative-only routing decision."""
-    if not industry or '未知' in industry:
-        return
-    with db_session() as conn:
-        if domain.is_unsupported_financial_industry(industry):
-            conn.execute(
-                '''INSERT INTO qualitative_only_securities
-                   (code, name, industry, updated_at) VALUES (?,?,?,?)
-                   ON CONFLICT(code) DO UPDATE SET
-                       name=excluded.name, industry=excluded.industry,
-                       updated_at=excluded.updated_at''',
-                (code, name, industry, domain.utc_now_iso()),
-            )
-        else:
-            conn.execute(
-                'DELETE FROM qualitative_only_securities WHERE code=?', (code,)
-            )
-        conn.commit()
-
-
-def get_market_indicator_snapshot(
-    indicator_key: str,
-    *,
-    max_age: timedelta | None = None,
-) -> dict | None:
-    """Return a source-complete market indicator within the requested age."""
-    if max_age is not None and max_age < timedelta(0):
-        raise ValueError("max_age must be non-negative")
-    with db_session() as conn:
-        row = conn.execute(
-            '''SELECT value, as_of, fetched_at, source, status
-               FROM market_indicator_snapshots WHERE indicator_key=?''',
-            (indicator_key,),
-        ).fetchone()
-    if row is None or row[4] != 'ok' or not row[3]:
-        return None
-    try:
-        age = domain.utc_now() - domain.parse_timestamp_utc(row[2])
-    except (TypeError, ValueError):
-        logger.warning("Ignoring market indicator with malformed fetched_at")
-        return None
-    if age < -MAX_SNAPSHOT_CLOCK_SKEW:
-        return None
-    if max_age is not None and age > max_age:
-        return None
-    return {'value': row[0], 'as_of': row[1], 'fetched_at': row[2], 'source': row[3], 'status': row[4]}
-
-
-def _add_market_indicators(data: dict) -> dict:
-    """Expose fresh global indicators without storing them per stock."""
-    result = dict(data)
-    snapshot = get_market_indicator_snapshot('bond_yield_10y', max_age=timedelta(hours=24))
-    if snapshot is not None:
-        result['bond_yield_10y'] = snapshot['value']
-        result.setdefault('market_indicator_provenance', {})['bond_yield_10y'] = snapshot
-    return result
-
-
-def get_fundamentals(code: str) -> dict | None:
-    """获取基本面缓存。未命中或过期返回 None；命中返回含 _cache_meta 的 dict。"""
-    with db_session() as conn:
-        row = conn.execute(
-            'SELECT name, industry, data, updated_at, ttl_hours FROM stock_fundamentals WHERE code=?',
-            (code,)
-        ).fetchone()
-    if not row:
-        return None
-    name, industry, data, updated_at, ttl_hours = row
-    if domain.is_expired(updated_at, ttl_hours):
-        return None
-    result = _add_market_indicators(json.loads(data))
-    result['_cache_meta'] = {
-        'code': code, 'name': name, 'industry': industry,
-        'updated_at': domain.format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
-    }
-    return result
-
-
-def set_fundamentals(code: str, name: str, industry: str,
-                     data_dict: dict, ttl: int | None = None) -> str:
-    """写入基本面缓存，ttl=None 时按行业自动推断。返回状态消息。"""
-    validation_error = validate_fundamentals_payload(data_dict)
-    if validation_error:
-        raise ValueError(validation_error)
-    ttl_hours = ttl if ttl is not None else domain.get_industry_ttl(industry)
-    with db_session() as conn:
-        conn.execute(
-            '''INSERT OR REPLACE INTO stock_fundamentals
-               (code, name, industry, data, updated_at, ttl_hours)
-               VALUES (?,?,?,?,?,?)''',
-            (code, name, industry, json.dumps(data_dict, ensure_ascii=False),
-             domain.utc_now_iso(), ttl_hours)
-        )
-        conn.commit()
-    return f"已缓存 {name}({code}) 行业:{industry} TTL:{ttl_hours}h"
-
-
-def list_codes() -> list[str]:
-    """返回所有基本面缓存中的股票代码（含过期），按更新时间倒序。"""
-    with db_session() as conn:
-        rows = conn.execute(
-            'SELECT code FROM stock_fundamentals ORDER BY updated_at DESC'
-        ).fetchall()
-    return [r[0] for r in rows]
 
 
 _orig_fetch_current_price = market_quotes.fetch_current_price
@@ -1020,7 +256,7 @@ def cmd_check(args: list[str]) -> None:
     today = domain.cst_today()
 
     # 优先检查今日分析结论
-    with db_session() as conn:
+    with db.db_session() as conn:
         analysis_row = conn.execute(
             '''SELECT result, created_at, name, quote_price
                FROM analysis_results WHERE code=? AND date=?''',
@@ -1028,8 +264,8 @@ def cmd_check(args: list[str]) -> None:
         ).fetchone()
         if analysis_row:
             result, created_at, name, analysis_quote = analysis_row
-            latest_quote = get_latest_quote_snapshot(
-                code, max_age=QUOTE_SNAPSHOT_MAX_AGE
+            latest_quote = store.get_latest_quote_snapshot(
+                code, max_age=store.QUOTE_SNAPSHOT_MAX_AGE
             )
             signed_deviation = None
             absolute_deviation = None
@@ -1069,7 +305,7 @@ def cmd_check(args: list[str]) -> None:
     if fund_row:
         name, industry, data, updated_at, ttl_hours = fund_row
         if not domain.is_expired(updated_at, ttl_hours):
-            result = _add_market_indicators(json.loads(data))
+            result = store.add_market_indicators(json.loads(data))
             result['_cache_meta'] = {
                 'code': code, 'name': name, 'industry': industry,
                 'updated_at': domain.format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
@@ -1087,7 +323,7 @@ def cmd_get(args: list[str]) -> None:
         print("CACHE_MISS")
         return
     code = args[0]
-    with db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             'SELECT name, industry, data, updated_at, ttl_hours FROM stock_fundamentals WHERE code=?',
             (code,)
@@ -1099,7 +335,7 @@ def cmd_get(args: list[str]) -> None:
     if domain.is_expired(updated_at, ttl_hours):
         print("CACHE_MISS")
         return
-    result = _add_market_indicators(json.loads(data))
+    result = store.add_market_indicators(json.loads(data))
     result['_cache_meta'] = {
         'code': code, 'name': name, 'industry': industry,
         'updated_at': domain.format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
@@ -1120,11 +356,11 @@ def cmd_set(args: list[str]) -> None:
     except json.JSONDecodeError as e:
         print(f"JSON解析错误: {e}", file=sys.stderr)
         sys.exit(1)
-    validation_error = validate_fundamentals_payload(data)
+    validation_error = store.validate_fundamentals_payload(data)
     if validation_error:
         print(f"基本面数据校验错误: {validation_error}", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             '''INSERT OR REPLACE INTO stock_fundamentals
                (code, name, industry, data, updated_at, ttl_hours)
@@ -1143,7 +379,7 @@ def cmd_get_analysis(args: list[str]) -> None:
         return
     code = args[0]
     today = domain.cst_today()
-    with db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             'SELECT result, created_at FROM analysis_results WHERE code=? AND date=?',
             (code, today)
@@ -1253,11 +489,11 @@ def cmd_set_analysis(args: list[str]) -> None:
       框架和得分的相对顺序不重要，按token形态严格识别；未知或重复参数会拒绝写入。
     """
     code, score, framework = _parse_set_analysis_args(args)
-    quote = get_latest_quote_snapshot(code, max_age=QUOTE_SNAPSHOT_MAX_AGE)
+    quote = store.get_latest_quote_snapshot(code, max_age=store.QUOTE_SNAPSHOT_MAX_AGE)
     if quote is None:
         print("错误：没有 fetcher 刚写入的有效行情快照，拒绝写入分析", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn_tmp:
+    with db.db_session() as conn_tmp:
         name = _lookup_cached_stock_name(conn_tmp, code)
         industry_row = conn_tmp.execute(
             'SELECT industry FROM stock_fundamentals WHERE code=?', (code,)
@@ -1281,14 +517,14 @@ def cmd_set_analysis(args: list[str]) -> None:
         if score is not None:
             print("错误：C资源估值冲突待核实时不得写入完整总分", file=sys.stderr)
             sys.exit(1)
-    elif framework == 'D公用' and get_market_indicator_snapshot(
+    elif framework == 'D公用' and store.get_market_indicator_snapshot(
         'bond_yield_10y', max_age=timedelta(hours=24)
     ) is None:
         scoring_status = 'incomplete'
         if score is not None:
             print("错误：D公用缺少可信国债收益率时不得写入完整总分", file=sys.stderr)
             sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         existing = conn.execute(
             '''SELECT score, score_breakdown FROM analysis_results
                WHERE code=? AND date=?''',
@@ -1354,7 +590,7 @@ def cmd_set_score(args: list[str]) -> None:
         print("错误：分数必须为 0—80 的整数", file=sys.stderr)
         sys.exit(1)
     today = domain.cst_today()
-    with db_session() as conn:
+    with db.db_session() as conn:
         state = conn.execute(
             '''SELECT framework, COALESCE(scoring_status, 'complete'), score_breakdown
                FROM analysis_results WHERE code=? AND date=?''',
@@ -1479,7 +715,7 @@ def cmd_set_score_breakdown(args: list[str]) -> None:
         print(f"JSON解析错误: {e}", file=sys.stderr)
         sys.exit(1)
     today = domain.cst_today()
-    with db_session() as conn:
+    with db.db_session() as conn:
         analysis = conn.execute(
             '''SELECT framework, COALESCE(scoring_status, 'complete'), score
                FROM analysis_results WHERE code=? AND date=?''',
@@ -1632,7 +868,7 @@ def cmd_add_holding(args: list[str]) -> None:
     # 查询今日分析得分 + 框架（决定止损系数）。优先用 set-analysis 时已经
     # 显式决定并持久化的 framework，只有从未做过分析的代码才退化到用
     # industry 关键词反推——反推在 industry 缺失/未知时会失真。
-    with db_session() as conn:
+    with db.db_session() as conn:
         conn.execute('BEGIN IMMEDIATE')
         open_count = conn.execute(
             '''SELECT COUNT(*) FROM holdings
@@ -1745,10 +981,10 @@ def _print_closed_holdings(
 
 def cmd_holdings(args: list[str] | None = None) -> None:
     """显示持仓列表：在仓持股 + 已平仓历史（含盈亏%，用于验证评分准确性）"""
-    with db_session() as conn:
+    with db.db_session() as conn:
         # Lazy compatibility migration for legacy rows imported after process
         # startup.  It only creates explicitly marked inferred baseline events.
-        _backfill_holding_metadata(conn)
+        schema.backfill_holding_metadata(conn)
         rows = conn.execute(
             '''SELECT id, code, name, cost_price, shares, buy_date, buy_score,
                       stop_loss_15, stop_loss_20, notes, exit_price, exit_date
@@ -1828,7 +1064,7 @@ def cmd_buy_holding(args: list[str]) -> None:
     if tax:
         print("错误：买入事件不接受 --tax，请仅记录实际买入费用 --fee", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         conn.execute('BEGIN IMMEDIATE')
         holding_id, _, framework = _single_open_holding(conn, code)
         _validate_event_date_not_before(conn, holding_id, trade_date)
@@ -1910,7 +1146,7 @@ def cmd_sell_holding(args: list[str], *, single_lot: bool = False) -> None:
         requested_shares = None
     fees, tax, exit_date = _parse_trade_options(args, 3)
 
-    with db_session() as conn:
+    with db.db_session() as conn:
         conn.execute('BEGIN IMMEDIATE')
         lot_limit = ' LIMIT 1' if single_lot else ''
         lots = conn.execute(
@@ -1999,7 +1235,7 @@ def cmd_record_dividend(args: list[str]) -> None:
     except ValueError:
         print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             '''SELECT id FROM holdings
                WHERE code=? AND exit_date IS NULL
@@ -2037,7 +1273,7 @@ def cmd_corporate_action(args: list[str]) -> None:
     except ValueError:
         print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         conn.execute('BEGIN IMMEDIATE')
         holding_id, _, framework = _single_open_holding(conn, code)
         row = conn.execute(
@@ -2122,7 +1358,7 @@ def cmd_close_holding(args: list[str]) -> None:
         print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
         sys.exit(1)
 
-    with db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             '''SELECT id, cost_price, name, buy_score, shares, buy_date FROM holdings
                WHERE code=? AND exit_date IS NULL
@@ -2145,7 +1381,7 @@ def cmd_close_holding(args: list[str]) -> None:
         # Older price-only positions cannot be reconstructed into a cash-flow
         # ledger.  Keep the historical close capability, but clear shares so a
         # closed row can never be valued as an open position.
-        with db_session() as conn:
+        with db.db_session() as conn:
             conn.execute('BEGIN IMMEDIATE')
             legacy_row = conn.execute(
                 '''SELECT id, cost_price, name, buy_score, buy_date FROM holdings
@@ -2213,8 +1449,8 @@ def cmd_retro_add(args: list[str]) -> None:
             print(f"错误：未知参数 {flag}", file=sys.stderr)
             sys.exit(1)
 
-    with db_session() as conn:
-        _backfill_holding_metadata(conn)
+    with db.db_session() as conn:
+        schema.backfill_holding_metadata(conn)
         row = conn.execute(
             '''SELECT h.id, h.code, h.name, h.buy_date, h.buy_score,
                       h.exit_date,
@@ -2266,8 +1502,8 @@ def cmd_retro_add(args: list[str]) -> None:
 
 def cmd_retro_pending(args: list[str] | None = None) -> None:
     """显示已平仓但尚未复盘的记录。用法：retro-pending"""
-    with db_session() as conn:
-        _backfill_holding_metadata(conn)
+    with db.db_session() as conn:
+        schema.backfill_holding_metadata(conn)
         rows = conn.execute(
             '''SELECT h.id, h.code, h.name, h.exit_date, h.buy_score
                FROM holdings h
@@ -2311,7 +1547,7 @@ def cmd_retro_stats(args: list[str]) -> None:
         where = "WHERE framework=?"
         params = (framework_filter,)
 
-    with db_session() as conn:
+    with db.db_session() as conn:
         rows = conn.execute(
             f'''SELECT actual_return_pct, error_tags
                 FROM retro_notes
@@ -2361,8 +1597,8 @@ def cmd_retro_outliers(args: list[str]) -> None:
             print(f"错误：未知参数 {args[i]}", file=sys.stderr)
             sys.exit(1)
 
-    with db_session() as conn:
-        _backfill_holding_metadata(conn)
+    with db.db_session() as conn:
+        schema.backfill_holding_metadata(conn)
         rows = conn.execute(
             '''SELECT h.id, h.code, h.name, h.exit_date, h.buy_score
                FROM holdings h
@@ -2403,7 +1639,7 @@ def cmd_remove_holding(args: list[str]) -> None:
         print("错误：需要参数 <代码>", file=sys.stderr)
         sys.exit(1)
     code = args[0]
-    with db_session() as conn:
+    with db.db_session() as conn:
         conn.execute('BEGIN IMMEDIATE')
         holding_ids = [
             row[0] for row in conn.execute(
@@ -2439,7 +1675,7 @@ def cmd_update_return(args: list[str]) -> None:
     code = args[0]
     return_pct = _parse_cli_finite_float(args[1], '回报率')
 
-    with db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             'SELECT date FROM analysis_results WHERE code=? ORDER BY date DESC LIMIT 1',
             (code,)
@@ -2492,7 +1728,7 @@ def cmd_position_return(args: list[str]) -> None:
         current_price = _parse_cli_finite_float(
             args[1], '当前价', minimum=0, strict_minimum=True,
         )
-    with db_session() as conn:
+    with db.db_session() as conn:
         open_rows = conn.execute(
             '''SELECT id, shares, exit_date FROM holdings
                WHERE code=? AND exit_date IS NULL ORDER BY id''',
@@ -2566,7 +1802,7 @@ def _parse_portfolio_risk_args(args: list[str] | None) -> tuple[float | None, fl
 def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     """Market-value weighted portfolio view with explicit stop-loss risk budget."""
     portfolio_value, max_position_risk_pct = _parse_portfolio_risk_args(args)
-    with db_session() as conn:
+    with db.db_session() as conn:
         holdings = conn.execute(
             '''SELECT h.code, h.name, h.cost_price, h.shares, h.buy_date, h.buy_score,
                       f.industry, h.framework, h.framework_confident, h.stop_loss_20
@@ -2670,7 +1906,7 @@ def cmd_check_holdings(args: list[str] | None = None) -> None:
     区分盘中现价/收盘价/上一交易日陈旧行情三种口径，非交易时段拿到隔夜收盘价
     时只输出观察提醒、不触发同等级止损预警（见 PITFALLS.md [BUG-006]）。
     """
-    with db_session() as conn:
+    with db.db_session() as conn:
         holdings = conn.execute(
             '''SELECT code, name, cost_price, stop_loss_15, stop_loss_20
                FROM holdings WHERE exit_date IS NULL ORDER BY code'''
@@ -2740,7 +1976,7 @@ def cmd_l3_add(args: list[str]) -> None:
     if origin not in ('original', 'recovered', 'new_monitoring'):
         print("错误：origin 非法", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         holding_id, _, _ = _single_open_holding(conn, code)
         now_iso = domain.utc_now_iso()
         cursor = conn.execute(
@@ -2783,7 +2019,7 @@ def cmd_l3_update(args: list[str]) -> None:
             except ValueError:
                 print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
                 sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         cursor = conn.execute(
             '''UPDATE holding_l3_conditions
                SET status=?, evidence=?, as_of=?, next_review_date=?, updated_at=?
@@ -2802,7 +2038,7 @@ def cmd_l3_list(args: list[str]) -> None:
         print("错误：需要参数 <代码>", file=sys.stderr)
         sys.exit(1)
     code = args[0]
-    with db_session() as conn:
+    with db.db_session() as conn:
         rows = conn.execute(
             '''SELECT l.id, l.origin_type, l.status, l.condition_text, l.as_of,
                       l.next_review_date, l.evidence, l.temporary_exit_rule
@@ -2852,7 +2088,7 @@ def cmd_tier_config(args: list[str]) -> None:
     if exemption and exit_path is not None:
         print("错误：轻仓试探出场路径与正式仓位Tier1豁免不能同时设置", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         holding_id, buy_date, framework = _single_open_holding(conn, code)
         if exemption and buy_date != domain.cst_today():
             print("错误：Tier1估值豁免只能在建仓当日声明", file=sys.stderr)
@@ -2889,7 +2125,7 @@ def cmd_holding_framework(args: list[str]) -> None:
     if normalized is None:
         print("错误：框架必须为 A/B/C/D/E/F 或完整标签", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         holding_id, _, old_framework = _single_open_holding(conn, code)
         row = conn.execute(
             'SELECT reference_cost, cost_price FROM holdings WHERE id=?',
@@ -2934,7 +2170,7 @@ def cmd_tier_update(args: list[str]) -> None:
     if tier not in allowed or status not in allowed[tier]:
         print("错误：Tier或状态非法", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         holding_id, _, _ = _single_open_holding(conn, code)
         conn.execute(
             '''INSERT INTO holding_tier_state (holding_id, updated_at)
@@ -2974,7 +2210,7 @@ def cmd_alert_open(args: list[str]) -> None:
         except ValueError:
             print("错误：复核日期必须为 YYYY-MM-DD 或 none", file=sys.stderr)
             sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         holding_id, _, _ = _single_open_holding(conn, code)
         now_iso = domain.utc_now_iso()
         conn.execute(
@@ -3000,7 +2236,7 @@ def cmd_alert_resolve(args: list[str]) -> None:
         print("错误：需要参数 <代码> <reason_code> <解除证据>", file=sys.stderr)
         sys.exit(1)
     code, reason_code, evidence = args[0], args[1], ' '.join(args[2:])
-    with db_session() as conn:
+    with db.db_session() as conn:
         now_iso = domain.utc_now_iso()
         cursor = conn.execute(
             '''UPDATE holding_alerts
@@ -3020,7 +2256,7 @@ def cmd_alert_pending(args: list[str]) -> None:
         print("错误：需要参数 <代码> <reason_code> <待核实说明>", file=sys.stderr)
         sys.exit(1)
     code, reason_code, evidence = args[0], args[1], ' '.join(args[2:])
-    with db_session() as conn:
+    with db.db_session() as conn:
         cursor = conn.execute(
             '''UPDATE holding_alerts
                SET status='pending', evidence=?, updated_at=?
@@ -3038,7 +2274,7 @@ def cmd_alerts(args: list[str]) -> None:
     if len(args) != 1:
         print("错误：需要参数 <代码>", file=sys.stderr)
         sys.exit(1)
-    with db_session() as conn:
+    with db.db_session() as conn:
         rows = conn.execute(
             '''SELECT level, category, reason_code, status, reason, review_due,
                       evidence, resolution_evidence
@@ -3068,7 +2304,7 @@ def cmd_set_flag(args: list[str]) -> None:
         sys.exit(1)
     today = domain.cst_today()
     new_flag = json.dumps({'level': level, 'reason': reason, 'date': today}, ensure_ascii=False)
-    with db_session() as conn:
+    with db.db_session() as conn:
         cursor = conn.execute(
             "UPDATE analysis_results "
             "SET flags = json_insert(COALESCE(NULLIF(flags, ''), '[]'), '$[#]', json(?)) "
@@ -3090,7 +2326,7 @@ def cmd_clear_flag(args: list[str]) -> None:
         sys.exit(1)
     code = args[0]
     today = domain.cst_today()
-    with db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             'UPDATE analysis_results SET flags=NULL WHERE code=? AND date=?',
             (code, today)
@@ -3105,7 +2341,7 @@ def get_watchlist_rows() -> list[dict]:
     today = domain.cst_today()
     analysis_cutoff = now - timedelta(days=14)
     first_analysis_cutoff = now - timedelta(hours=24)
-    with db_session() as conn:
+    with db.db_session() as conn:
         fundamentals_rows = conn.execute(
             'SELECT code, name, industry, data, updated_at, ttl_hours FROM stock_fundamentals'
         ).fetchall()
@@ -3184,7 +2420,7 @@ def get_watchlist_rows() -> list[dict]:
         latest = latest_analysis.get(code)
         current = today_analysis.get(code)
         quote = latest_quotes.get(code)
-        data = _safe_json_value(fund[3], dict, {}) if fund else {}
+        data = store.safe_json_value(fund[3], dict, {}) if fund else {}
         cache_expired = fund is None or domain.is_expired(fund[4], fund[5])
         terminal_status = qualitative_only_securities.get(code)
         industry = (fund[2] if fund else None) or (
@@ -3220,7 +2456,7 @@ def get_watchlist_rows() -> list[dict]:
             eligible_reason = 'recent-analysis'
         display_analysis = current or latest
         raw_flags = (
-            _safe_json_value(display_analysis[5], list, [])
+            store.safe_json_value(display_analysis[5], list, [])
             if display_analysis else []
         )
         flags = [
@@ -3228,7 +2464,7 @@ def get_watchlist_rows() -> list[dict]:
             if isinstance(flag, dict) and flag.get('level') in {'red', 'yellow'}
         ]
         score_breakdown = (
-            _safe_json_value(display_analysis[6], dict, None)
+            store.safe_json_value(display_analysis[6], dict, None)
             if display_analysis else None
         )
         rows.append({
@@ -3348,7 +2584,7 @@ def cmd_watchlist(args: list[str] | None = None) -> None:
 def cmd_list(args: list[str] | None = None) -> None:
     """列出所有缓存内容（含过期）"""
     today = domain.cst_today()
-    with db_session() as conn:
+    with db.db_session() as conn:
         stocks = conn.execute(
             'SELECT code, name, industry, updated_at, ttl_hours FROM stock_fundamentals ORDER BY updated_at DESC'
         ).fetchall()
@@ -3375,7 +2611,7 @@ def cmd_list(args: list[str] | None = None) -> None:
         status = "✅ 今日有效" if date == today else f"⚠️ 过期({date})"
         score_str = f" 得分:{score}" if score is not None else ""
         breakdown_str = " 📊分项" if breakdown_raw else ""
-        raw_flags = _safe_json_value(flags_raw, list, [])
+        raw_flags = store.safe_json_value(flags_raw, list, [])
         flags = [
             flag for flag in raw_flags
             if isinstance(flag, dict) and flag.get('level') in {'red', 'yellow'}
@@ -3386,7 +2622,7 @@ def cmd_list(args: list[str] | None = None) -> None:
 
 def cmd_cleanup(args: list[str] | None = None) -> None:
     """清除所有过期的缓存条目"""
-    with db_session() as conn:
+    with db.db_session() as conn:
         stocks = conn.execute(
             'SELECT code, name, updated_at, ttl_hours FROM stock_fundamentals'
         ).fetchall()
@@ -3431,7 +2667,7 @@ def cmd_cleanup(args: list[str] | None = None) -> None:
                    )
                    WHERE row_rank > ?
                )''',
-            (QUOTE_SNAPSHOT_RETENTION_PER_CODE,),
+            (store.QUOTE_SNAPSHOT_RETENTION_PER_CODE,),
         ).rowcount
         orphan_count = 0
         for table in (
@@ -3463,7 +2699,7 @@ def cmd_cleanup(args: list[str] | None = None) -> None:
 
 def cmd_clear(args: list[str]) -> None:
     """清除缓存。不带参数=清全部，带代码=清指定股票"""
-    with db_session() as conn:
+    with db.db_session() as conn:
         if args:
             code = args[0]
             conn.execute('DELETE FROM stock_fundamentals WHERE code=?', (code,))
@@ -3509,7 +2745,7 @@ def cmd_checklist(args: list[str]) -> None:
 
 
 def _latest_analysis_missing_cycle_stage(code: str) -> bool:
-    with db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             'SELECT result FROM analysis_results WHERE code=? ORDER BY date DESC LIMIT 1',
             (code,),
@@ -3692,7 +2928,6 @@ def _build_cli_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    global _READ_ONLY_REQUEST
     args = list(sys.argv[1:] if argv is None else argv)
     parser = _build_cli_parser()
     if not args:
@@ -3740,15 +2975,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(f'[a-stock-cache] 操作数据库: {database_path}', file=sys.stderr)
     try:
-        _READ_ONLY_REQUEST = classification == 'R0'
-        COMMANDS[command](remaining)
+        with db.read_only_scope(classification == 'R0'):
+            COMMANDS[command](remaining)
     except SystemExit as exc:
         return int(exc.code or 0)
     except sqlite3.Error as exc:
         print(f'数据库查询失败：{exc}', file=sys.stderr)
         return 1
-    finally:
-        _READ_ONLY_REQUEST = False
     return 0
 
 if __name__ == '__main__':

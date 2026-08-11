@@ -12,8 +12,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import pandas as pd
 
-from a_stock_agent_runtime import fetcher
-from a_stock_agent_runtime import cache
+from a_stock_agent_runtime import cache, fetcher, store
 from a_stock_lib.providers import QuoteObservation
 from a_stock_lib.fetcher_utils import detect_split_ratio
 
@@ -23,7 +22,7 @@ def isolated_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_fetcher_cache.db"
     monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
     # fetcher 内部也引用 list_codes，需要同步 patch
-    monkeypatch.setattr(fetcher, 'list_codes', lambda: ['600519', '000001'])
+    monkeypatch.setattr(store, 'list_codes', lambda: ['600519', '000001'])
     fetcher._fetch_tushare_industry_map.cache_clear()
     yield str(db_file)
     fetcher._fetch_tushare_industry_map.cache_clear()
@@ -105,7 +104,7 @@ def test_realtime_quote_uses_sina_only_and_records_snapshot(monkeypatch):
     monkeypatch.setattr(fetcher, '_fetch_sina_quote', lambda code: quote)
     monkeypatch.setattr(fetcher, '_validate_sina_quote', lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        fetcher,
+        store,
         'record_quote_snapshot',
         lambda *args, **kwargs: snapshot.update(args=args, kwargs=kwargs),
     )
@@ -266,7 +265,7 @@ def test_cmd_batch_catches_runtime_error(capsys, monkeypatch):
 
 def test_cmd_batch_empty_watchlist(capsys, monkeypatch):
     """watchlist 为空时 cmd_batch 提前返回，不崩溃"""
-    monkeypatch.setattr(fetcher, 'list_codes', lambda: [])
+    monkeypatch.setattr(store, 'list_codes', lambda: [])
 
     fetcher.cmd_batch([])
     out = capsys.readouterr().out
@@ -275,7 +274,7 @@ def test_cmd_batch_empty_watchlist(capsys, monkeypatch):
 
 def test_cmd_batch_deduplicates_codes(capsys, monkeypatch):
     """重复代码只取一次（保序去重）"""
-    monkeypatch.setattr(fetcher, 'list_codes', lambda: ['600519', '600519', '000001'])
+    monkeypatch.setattr(store, 'list_codes', lambda: ['600519', '600519', '000001'])
 
     fetched = []
 
@@ -373,7 +372,7 @@ def test_fetch_spot_data_marks_cached_industry_stale(monkeypatch):
     monkeypatch.setattr(fetcher, '_fetch_industry_from_lib', lambda code: None)
     monkeypatch.setattr(fetcher, '_lookup_cached_name', lambda code: '缓存名称')
     monkeypatch.setattr(fetcher, '_lookup_cached_industry', lambda code: '缓存行业')
-    monkeypatch.setattr(fetcher, 'update_qualitative_only_security', lambda *args: None)
+    monkeypatch.setattr(store, 'update_qualitative_only_security', lambda *args: None)
     monkeypatch.setattr(fetcher, '_fetch_realtime_quote', lambda code: QuoteObservation(
         price=10.0, quote_date='2026-07-14', quote_time='10:00:00', source='sina',
     ))
