@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from a_stock_agent_runtime import cache, domain
+from a_stock_agent_runtime import cache, commands_holdings, domain
 from tests.helpers import record_valid_quote, set_valid_fundamentals, valid_fundamentals_payload
 from a_stock_agent_runtime import fetcher
 
@@ -408,7 +408,7 @@ class TestCheckHoldingsBoundary:
         self._add_holding_cost40()
         monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
         monkeypatch.setattr(
-            cache, 'fetch_current_price_quote',
+            commands_holdings, 'fetch_current_price_quote',
             lambda code: cache.PriceQuote(34.0, cache.cst_today(), '15:00:00'),
         )
         cache.cmd_check_holdings()
@@ -420,7 +420,7 @@ class TestCheckHoldingsBoundary:
         self._add_holding_cost40()
         monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
         monkeypatch.setattr(
-            cache, 'fetch_current_price_quote',
+            commands_holdings, 'fetch_current_price_quote',
             lambda code: cache.PriceQuote(32.0, cache.cst_today(), '15:00:00'),
         )
         cache.cmd_check_holdings()
@@ -432,7 +432,7 @@ class TestCheckHoldingsBoundary:
         """34.001 > sl15=34.000，不应触发预警"""
         self._add_holding_cost40()
         monkeypatch.setattr(
-            cache, 'fetch_current_price_quote',
+            commands_holdings, 'fetch_current_price_quote',
             lambda code: cache.PriceQuote(34.001, cache.cst_today(), '15:00:00'),
         )
         cache.cmd_check_holdings()
@@ -650,7 +650,7 @@ class TestFetchCurrentPrice:
 
     def test_fetch_current_prices_mock_compat(self, monkeypatch):
         # When fetch_current_price is mocked, fetch_current_prices delegates to it
-        monkeypatch.setattr(cache, 'fetch_current_price', lambda code: 99.9)
+        monkeypatch.setattr(commands_holdings, 'fetch_current_price', lambda code: 99.9)
         res = cache.fetch_current_prices(['600036', '000001'])
         assert res['600036'] == 99.9
         assert res['000001'] == 99.9

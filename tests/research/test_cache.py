@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache, domain, schema, store
+from a_stock_agent_runtime import cache, commands_holdings, domain, schema, store
 from tests.helpers import record_valid_quote, set_valid_fundamentals
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -1425,7 +1425,7 @@ def test_portfolio_risk_with_holdings(capsys, monkeypatch):
     """有持仓时正常输出持仓明细和框架分布"""
     cache.cmd_add_holding(['600036', '45.0', '100', '--notes', '测试招行'])
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(50.0, cache.cst_today(), '15:00:00'),
     )
     cache.cmd_portfolio_risk()
@@ -1438,7 +1438,7 @@ def test_portfolio_risk_with_holdings(capsys, monkeypatch):
 def test_portfolio_risk_rejects_quote_without_date(capsys, monkeypatch):
     cache.cmd_add_holding(['600036', '45.0', '100', '--notes', '测试招行'])
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(50.0, None, None),
     )
     cache.cmd_portfolio_risk()
@@ -1459,7 +1459,7 @@ def test_check_holdings_no_holdings(capsys):
 def test_check_holdings_price_fetch_fails(capsys, monkeypatch):
     """实时取价失败时显示'无实时价格'，不崩溃"""
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])
-    monkeypatch.setattr(cache, 'fetch_current_price_quote', lambda code: None)
+    monkeypatch.setattr(commands_holdings, 'fetch_current_price_quote', lambda code: None)
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
     assert '无实时价格' in out
@@ -1469,7 +1469,7 @@ def test_check_holdings_normal(capsys, monkeypatch):
     """现价高于止损线时显示✅正常，不计入预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(38.0, cache.cst_today(), '15:00:00'),
     )
     cache.cmd_check_holdings()
@@ -1483,7 +1483,7 @@ def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(33.0, cache.cst_today(), '15:00:00'),
     )
     cache.cmd_check_holdings()
@@ -1497,7 +1497,7 @@ def test_check_holdings_alerts_below_20pct(capsys, monkeypatch):
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])  # 止损15%=34.0 20%=32.0
     monkeypatch.setattr(domain, 'is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(31.0, cache.cst_today(), '15:00:00'),
     )
     cache.cmd_check_holdings()
@@ -1511,7 +1511,7 @@ def test_check_holdings_skips_closed_positions(capsys, monkeypatch):
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])
     cache.cmd_close_holding(['600036', '50.0'])
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(31.0, cache.cst_today(), '15:00:00'),
     )
     cache.cmd_check_holdings()
@@ -1536,7 +1536,7 @@ def test_check_holdings_stale_quote_is_observation_only(capsys, monkeypatch):
     _FixedDatetime._fixed = datetime(2026, 7, 2, 1, 30)  # 周四凌晨，非交易时段
     monkeypatch.setattr(domain, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date='2026-07-01', quote_time='15:00:00')
     )
     cache.cmd_check_holdings()
@@ -1550,7 +1550,7 @@ def test_check_holdings_stale_quote_is_observation_only(capsys, monkeypatch):
 def test_check_holdings_unknown_quote_timestamp_is_not_actionable(capsys, monkeypatch):
     cache.cmd_add_holding(['600036', '40.0', '100', '--notes', '测试'])
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date=None, quote_time=None),
     )
     cache.cmd_check_holdings()
@@ -1566,7 +1566,7 @@ def test_check_holdings_intraday_breach_uses_alarm_prefix(capsys, monkeypatch):
     _FixedDatetime._fixed = datetime(2026, 7, 2, 10, 0)  # 周四盘中
     monkeypatch.setattr(domain, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date='2026-07-02', quote_time='10:00:00')
     )
     cache.cmd_check_holdings()
@@ -1582,7 +1582,7 @@ def test_check_holdings_after_hours_breach_uses_close_price_wording(capsys, monk
     _FixedDatetime._fixed = datetime(2026, 7, 2, 16, 0)  # 周四收盘后
     monkeypatch.setattr(domain, 'datetime', _FixedDatetime)
     monkeypatch.setattr(
-        cache, 'fetch_current_price_quote',
+        commands_holdings, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(price=31.0, quote_date='2026-07-02', quote_time='15:00:00')
     )
     cache.cmd_check_holdings()

@@ -20,6 +20,15 @@ INDUSTRY_TTL_MAP = [
     (['白酒', '消费', '食品', '零售', '饮料', '乳制品'], 12),
 ]
 DEFAULT_STOP_LOSS_PCT = (0.85, 0.80)
+ANALYSIS_PRICE_INVALIDATION_THRESHOLD = 0.03
+FRAMEWORK_ALIASES = {
+    'A': 'A通用', 'A通用': 'A通用',
+    'B': 'B银行', 'B银行': 'B银行',
+    'C': 'C资源', 'C资源': 'C资源',
+    'D': 'D公用', 'D公用': 'D公用',
+    'E': 'E消费', 'E消费': 'E消费',
+    'F': 'F科技', 'F科技': 'F科技',
+}
 
 
 def utc_now() -> datetime:
