@@ -15,6 +15,8 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 `holdings`、分析、预警、L3/Tier 和交易账本写入属于 W1：只有在用户确认具体动作后，才可在子命令前追加全局 `--confirm-write`。缺少该参数时 CLI 返回 3 且不打开写事务。数据过期、字段缺失或运行时失败必须 fail-closed，只能报告缺口，不能补造投资结论。
 
 > **方法论说明**：本框架区分"配置价值"（公司值不值得持有）和"时机评级"（现在是不是好买点）。两者独立评分，最终仓位建议由两者共同决定。好公司≠好价格，高股息≠高赔率，这是框架的核心前提。
+>
+> 用户要求结合 AI、新品发布、旺季或半年产品周期判断行情时，读取 `references/catalyst-cycle-analysis.md`；必须区分事件催化、订单进度与财务兑现，不能把客户或平台发布直接视为公司订单。
 
 ## 数据源边界（TuShare 2000 积分）
 

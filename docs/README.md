@@ -9,6 +9,7 @@
 ## Governing records
 
 - [`specs/2026-08-08-portable-a-stock-agent-skills-spec.md`](specs/2026-08-08-portable-a-stock-agent-skills-spec.md) — requirements, boundaries and acceptance criteria.
+- [`specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md`](specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md) — product-cycle and thematic-catalyst analysis migration boundaries.
 - [`plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md`](plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md) — milestone ledger, execution commands and rollback plan.
 - [`plans/2026-08-10-p2-structural-refactor-plan.md`](plans/2026-08-10-p2-structural-refactor-plan.md) — P2 structural debt: CLI argparse migration, `cache.py` split, evidence relocation. Approved, execution not authorized.
 - [`migration/README.md`](migration/README.md) — provenance and redacted execution evidence.

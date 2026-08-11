@@ -157,6 +157,24 @@ def test_project_version_is_single_release_source() -> None:
         assert '\nversion:' not in text
 
 
+def test_research_routes_product_cycle_analysis_to_grounded_reference() -> None:
+    skill_root = PROJECT_ROOT / 'skills' / 'a-stock-research'
+    skill = (skill_root / 'SKILL.md').read_text(encoding='utf-8')
+    reference = (skill_root / 'references' / 'catalyst-cycle-analysis.md').read_text(
+        encoding='utf-8'
+    )
+
+    assert 'references/catalyst-cycle-analysis.md' in skill
+    assert '不能把客户或平台发布直接视为公司订单' in skill
+    for contract in (
+        '延续研究也不能沿用早先盘中价格',
+        '强制反证',
+        'AI 服务器平台出货不等于公司供应关系',
+        '条件区间，不是目标价',
+    ):
+        assert contract in reference
+
+
 def test_set_analysis_uses_latest_snapshot_without_requesting_another_quote(monkeypatch) -> None:
     run_set_analysis(monkeypatch, '600000', 'A', score=60)
 
