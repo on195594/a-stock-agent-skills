@@ -2,9 +2,19 @@
 
 ## Unreleased
 
+## 0.1.2 - 2026-08-11
+
 ### Changed
 
 - M8 completion now means all Claude, Codex and Hermes `a-stock-*` entries use the canonical repository and superseded Skill copies remain archived; Claude is not retired.
+- The cache CLI now uses argparse subcommands, rejects surplus or misplaced arguments consistently, and accepts holding notes only through `add-holding --notes`.
+- The runtime monolith was split into domain, database, schema, store and command modules while preserving the stable `a-stock-cache` entrypoint.
+- Historical review packets moved to the independently versioned `/home/lin/a-stock-agent-evidence` repository with a verified manifest and recovery tombstone.
+
+### Fixed
+
+- Tests and subprocesses resolve isolated temporary databases, and cache metadata lookups use an explicit SQLite read-only session.
+- Cross-command helpers use owner-module-qualified calls so monkeypatches remain observable after the module split.
 
 ## 0.1.1 - 2026-08-11
 

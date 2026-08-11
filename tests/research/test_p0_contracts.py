@@ -151,7 +151,7 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
 
 def test_project_version_is_single_release_source() -> None:
     pyproject = tomllib.loads((PROJECT_ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
-    assert pyproject['project']['version'] == '0.1.1'
+    assert pyproject['project']['version'] == '0.1.2'
     for skill in ('a-stock-research', 'a-stock-monitor', 'a-stock-qa'):
         text = (PROJECT_ROOT / 'skills' / skill / 'SKILL.md').read_text(encoding='utf-8')
         assert '\nversion:' not in text
