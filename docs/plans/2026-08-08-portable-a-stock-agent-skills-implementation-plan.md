@@ -3,6 +3,7 @@ title: 可移植 A 股 Agent Skills Suite 实施计划
 status: completed
 created: 2026-08-08
 updated: 2026-08-11
+closed: 2026-08-11
 current_milestone: M8_completed
 release: v0.1.1
 spec: ../specs/2026-08-08-portable-a-stock-agent-skills-spec.md
@@ -1203,8 +1204,8 @@ Claude、Codex、Hermes 均继续发现和使用 canonical Skill。M8 不停用 
 - No promotion：M7 已由用户一次性 cutover 请求授权并完成；M8 按 2026-08-11 用户澄清完成，不包含任何客户端停用。
 - No placeholders：`<run-id>` 等仅是实施时由 `date` 生成的运行标识，不是未定义设计决策。
 
-# 5. 下一授权点
+# 5. 结案状态
 
-用户一次明确要求“按 Spec 开始实施”即批准一个持续 Goal 执行 **M0-M6**：冻结证据、canonical 仓库、runtime、三个 Skill、installer、fixture 状态工具和隔离的三端 shadow；阶段验收后自动进入下一阶段，不重复请求项目批准。
+M0-M8 已全部完成，`v0.1.1` 已部署，九个 active Skill 入口和旧 Skill 归档均已核验。本实施计划于 2026-08-11 结案，不再包含待执行里程碑。
 
-M7 的生产动作已按单独授权完成。M8 已按用户澄清后的 canonical 指向与归档条件完成；本计划无后续授权点。
+后续维护、P2 结构重构或任何需要新授权的生产变更均为独立工作，不重新打开本计划。

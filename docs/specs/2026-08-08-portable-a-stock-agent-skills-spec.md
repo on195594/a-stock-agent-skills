@@ -1,8 +1,10 @@
 ---
 title: 可移植 A 股 Agent Skills Suite 迁移规范
 status: accepted
+implementation_status: completed
 created: 2026-08-08
 updated: 2026-08-11
+closed: 2026-08-11
 owner: lin / Hermes
 risk_tier: active-layer
 ---
@@ -670,5 +672,6 @@ Hermes 额外完成生产候选 smoke；Claude Code 和 Codex 的验证使用隔
 - 三端 shadow Skill 安装：包含在 M0-M6 Goal 授权中，执行前自动备份
 - M7 production cutover：completed 2026-08-09（一次审批合并生产 DB、配置、active Skill、cron、Hermes smoke 和回滚步骤；证据见 `docs/migration/production-cutover/20260809-115052/`）
 - M8 canonical 收口与旧 Skill 归档：completed 2026-08-11；Claude、Codex、Hermes 均保留
+- Implementation closeout：completed 2026-08-11；全部验收条件已满足，无遗留迁移里程碑
 
-本文件的生成仅批准保存规范文档，不自动启动实施 Goal。用户后续一次明确要求“按 Spec 开始实施”即授权 M0-M6 Goal；该授权不包含生产 DB/配置/cron/Telegram 或 active Skill 切换。
+本规范已实施并结案，继续作为当前架构、安全边界和变更规则的基线。后续新增功能、投资规则、数据库 schema 或生产自动化变更不属于本次迁移，应按第 18 节重新审批。
