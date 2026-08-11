@@ -1481,6 +1481,7 @@ def test_check_holdings_normal(capsys, monkeypatch):
 def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
     """现价跌破15%止损线但未到20%时触发⚠️黄色预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(33.0, cache.cst_today(), '15:00:00'),
@@ -1494,6 +1495,7 @@ def test_check_holdings_warns_below_15pct(capsys, monkeypatch):
 def test_check_holdings_alerts_below_20pct(capsys, monkeypatch):
     """现价跌破20%止损线时触发🔴红色预警"""
     cache.cmd_add_holding(['600036', '40.0', '100', '测试'])  # 止损15%=34.0 20%=32.0
+    monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
     monkeypatch.setattr(
         cache, 'fetch_current_price_quote',
         lambda code: cache.PriceQuote(31.0, cache.cst_today(), '15:00:00'),

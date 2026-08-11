@@ -406,6 +406,7 @@ class TestCheckHoldingsBoundary:
 
     def test_price_exactly_at_15pct_stop_triggers_yellow(self, capsys, monkeypatch):
         self._add_holding_cost40()
+        monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
         monkeypatch.setattr(
             cache, 'fetch_current_price_quote',
             lambda code: cache.PriceQuote(34.0, cache.cst_today(), '15:00:00'),
@@ -417,6 +418,7 @@ class TestCheckHoldingsBoundary:
 
     def test_price_exactly_at_20pct_stop_triggers_red(self, capsys, monkeypatch):
         self._add_holding_cost40()
+        monkeypatch.setattr(cache, '_is_a_share_trading_hours', lambda _now: False)
         monkeypatch.setattr(
             cache, 'fetch_current_price_quote',
             lambda code: cache.PriceQuote(32.0, cache.cst_today(), '15:00:00'),
