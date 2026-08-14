@@ -12,7 +12,7 @@
 - [`specs/2026-08-09-audit-remediation-spec.md`](specs/2026-08-09-audit-remediation-spec.md) — completed safety, portability and release-gate repairs.
 - [`specs/2026-08-09-investment-framework-repair-spec.md`](specs/2026-08-09-investment-framework-repair-spec.md) — authorized investment-framework and fail-closed repairs.
 - [`specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md`](specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md) — product-cycle and thematic-catalyst analysis migration boundaries.
-- [`specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md`](specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md) — implemented Research/QA contract repairs; runtime deployment pending.
+- [`specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md`](specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md) — implemented and deployed Research/QA contract repairs.
 - [`plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md`](plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md) — milestone ledger, execution commands and rollback plan.
 - [`plans/2026-08-10-p2-structural-refactor-plan.md`](plans/2026-08-10-p2-structural-refactor-plan.md) — completed P2 structural refactor and evidence relocation.
 - [`migration/README.md`](migration/README.md) — provenance and redacted execution evidence.

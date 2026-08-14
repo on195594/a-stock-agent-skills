@@ -1,8 +1,8 @@
 # 药明康德投研复盘缺陷修复规范（2026-08-11）
 
-> 实施状态：canonical 变更已由 `ce9f834` 完成并通过仓库门禁。九个 active
-> Skill 入口因直接链接 `skills/` 已读取新契约；版本化 CLI runtime 仍为
-> `v0.1.2`，尚未包含本规范的 fetcher 字段，部署须另行授权。
+> 实施状态：canonical 变更已由 `ce9f834` 完成并通过仓库门禁；版本化 CLI
+> runtime 已于 2026-08-14 随 `v0.1.3` 部署。九个 active Skill 入口继续
+> 直接链接 `skills/`，数据库 schema、配置和 cron 均未改变。
 
 ## 背景
 

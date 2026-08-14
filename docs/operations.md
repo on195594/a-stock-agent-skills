@@ -86,19 +86,17 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.2` (`0.1.2-52aa56191174`), deployed on
-2026-08-11 with `a-stock-lib==0.5.0`. The deployment reused the versioned
+The current runtime is `v0.1.3` (`0.1.3-8ce03e794f8a`), deployed on
+2026-08-14 with `a-stock-lib==0.5.0`. The deployment reused the versioned
 installer and generated external rollback manifest
-`rollback-1786444512157914880.json`; the previous runtime remains installed.
+`rollback-1786698376819409000.json`; the previous runtime remains installed.
 Configuration and crontab SHA256 fingerprints were unchanged, and no database
 schema migration was performed.
 
-The active client Skill entries are symlinks to this repository, so their
-Research and QA text already includes the `v0.1.3` contract repairs. The
-immutable CLI target is still `v0.1.2` and lacks the matching fetcher fields.
-Until the separately authorized `v0.1.3` runtime release is deployed,
-`pe_static` or `pe_percentile_5y` absence must remain fail-closed; do not replace
-the missing 5-year input with the 10-year percentile.
+The nine active client Skill entries still resolve to the canonical repository.
+The installed fetcher exposes `pe_static` and `pe_percentile_5y`; CLI help and a
+production-config, notification-disabled, physically read-only `holdings` smoke
+completed successfully.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in

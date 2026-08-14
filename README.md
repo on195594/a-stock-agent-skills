@@ -12,20 +12,17 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The versioned CLI runtime remains deployed at `v0.1.2`. The canonical `v0.1.3`
-source includes the Research and QA 5-year PE and verdict repairs from
-`ce9f834`, while the installed `a-stock-fetch` runtime does not yet emit
-`pe_static` or `pe_percentile_5y`. This split exists because all nine active
-client Skill entries resolve directly to `skills/`, whereas the CLI uses an
-immutable versioned runtime. Until `v0.1.3` is deployed, reports must keep the
-affected 5-year valuation input `incomplete` rather than substitute the old
-10-year field.
+The `v0.1.3` runtime release is deployed. It aligns the installed fetcher with
+the canonical Research and QA contracts, including `pe_static`, the same-basis
+5-year PE percentile and deterministic QA verdict handling. All nine active
+client Skill entries continue to resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
 P2 structural refactor without changing the database schema, configuration or
-cron. Hermes is the production entry. Claude, Codex and Hermes remain supported
-clients; M8 does not retire Claude.
+cron. The 2026-08-14 `v0.1.3` deployment likewise changed no database schema,
+configuration or cron. Hermes is the production entry. Claude, Codex and Hermes
+remain supported clients; M8 does not retire Claude.
 
 Cutover evidence and the rollback manifest are indexed in
 [`docs/migration/`](docs/migration/README.md). The implementation plan remains
