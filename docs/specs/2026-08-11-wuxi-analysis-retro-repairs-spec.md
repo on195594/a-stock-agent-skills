@@ -1,5 +1,9 @@
 # 药明康德投研复盘缺陷修复规范（2026-08-11）
 
+> 实施状态：canonical 变更已由 `ce9f834` 完成并通过仓库门禁。九个 active
+> Skill 入口因直接链接 `skills/` 已读取新契约；版本化 CLI runtime 仍为
+> `v0.1.2`，尚未包含本规范的 fetcher 字段，部署须另行授权。
+
 ## 背景
 
 603259 首次研究暴露出六个可复现缺陷：A 框架缺少结构化近 5 年 PE 分位；缓存字段 `pe_ttm` 实为静态 PE；Research 的 fetch/check 顺序容易被并行误读；Skill 引用文件虽存在但未被 `skill_view` 显式发现；QA 将 Important FAIL 汇总成 PARTIAL，且把缺少完整报告的无效运行误报为 NON_COMPLIANT；A 框架满分无法表达经正式披露确认的重大跨境/客户集中风险。

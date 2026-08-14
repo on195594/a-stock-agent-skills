@@ -25,16 +25,20 @@ guesses a sibling home-directory path. Tests locate it at `~/a-stock-lib` or at
 
 ## Validation matrix
 
-Run the smallest relevant check while iterating, then run the full matrix
-before committing. `scripts/check.sh` runs all of it in one command; this
-repository has no git remote, so that script is the only gate there is.
+Run the smallest relevant check while iterating, then run the full automated
+matrix before committing. `scripts/check.sh` runs this matrix in one command;
+this repository has no git remote, so there is no hosted CI gate.
 
 ```bash
 uv run pytest -q
 uv run ruff check .
 uv run python scripts/validate.py
 python3 -I tests/qa/standalone_smoke.py
+A_STOCK_NOTIFY_MODE=disabled bash tests/test_check_holdings_cron.sh
 ```
+
+Then run `git diff --check` and review the final diff before committing; those
+worktree checks are deliberately separate from the automated matrix.
 
 Useful focused checks:
 
@@ -46,8 +50,7 @@ bash tests/test_check_holdings_cron.sh
 ```
 
 `uv run ruff format --check .` is optional until the historical runtime and
-test files are formatter-clean; the current baseline reports 33 files. This
-documentation-only change does not reformat behavior code.
+test files are formatter-clean; the current baseline reports 33 files.
 
 The QA standalone smoke intentionally runs with `python3 -I` and no installed
 runtime. It proves that the QA Skill can be discovered and evaluated from

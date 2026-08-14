@@ -93,6 +93,13 @@ installer and generated external rollback manifest
 Configuration and crontab SHA256 fingerprints were unchanged, and no database
 schema migration was performed.
 
+The active client Skill entries are symlinks to this repository, so their
+Research and QA text already includes the `v0.1.3` contract repairs. The
+immutable CLI target is still `v0.1.2` and lacks the matching fetcher fields.
+Until the separately authorized `v0.1.3` runtime release is deployed,
+`pe_static` or `pe_percentile_5y` absence must remain fail-closed; do not replace
+the missing 5-year input with the 10-year percentile.
+
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in
 [`migration/production-cutover/20260809-115052/`](migration/production-cutover/20260809-115052/).

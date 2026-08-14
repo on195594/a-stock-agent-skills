@@ -12,16 +12,25 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The `v0.1.2` runtime release is deployed. The original M7 production cutover
-completed on 2026-08-09; the 2026-08-11 maintenance deployments upgraded
-`a-stock-lib` to 0.5.0 and then deployed the P2 structural refactor without
-changing the database schema, configuration or cron. Hermes is the production
-entry and the three client Skill links point to the same canonical source.
-Claude, Codex and Hermes remain supported clients; M8 does not retire Claude.
+The versioned CLI runtime remains deployed at `v0.1.2`. The canonical `v0.1.3`
+source includes the Research and QA 5-year PE and verdict repairs from
+`ce9f834`, while the installed `a-stock-fetch` runtime does not yet emit
+`pe_static` or `pe_percentile_5y`. This split exists because all nine active
+client Skill entries resolve directly to `skills/`, whereas the CLI uses an
+immutable versioned runtime. Until `v0.1.3` is deployed, reports must keep the
+affected 5-year valuation input `incomplete` rather than substitute the old
+10-year field.
+
+The original M7 production cutover completed on 2026-08-09; the 2026-08-11
+maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
+P2 structural refactor without changing the database schema, configuration or
+cron. Hermes is the production entry. Claude, Codex and Hermes remain supported
+clients; M8 does not retire Claude.
 
 Cutover evidence and the rollback manifest are indexed in
 [`docs/migration/`](docs/migration/README.md). The implementation plan remains
-the source of truth for milestone state:
+the source of truth for the completed M0-M8 migration milestones; dated specs
+and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 [`docs/plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md`](docs/plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md).
 
 ## Install or update
@@ -77,7 +86,7 @@ credential, runtime log or Telegram token in the repository.
 
 ## Development checks
 
-Run every gate with one command:
+Run the automated test and validation gates with one command:
 
 ```bash
 bash scripts/check.sh
@@ -94,6 +103,8 @@ uv run ruff check .
 uv run python scripts/validate.py
 python3 -I tests/qa/standalone_smoke.py
 ```
+
+Before committing, also run `git diff --check` and review the final diff.
 
 Use fixture state and `A_STOCK_NOTIFY_MODE=disabled` for local or shadow
 checks. See [`docs/development.md`](docs/development.md) for the validation

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.3 - 2026-08-14
+
 ### Added
 
 - Runtime fetcher now emits a same-basis 5-year PE percentile with explicit window/basis provenance.
