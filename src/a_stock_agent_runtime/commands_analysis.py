@@ -184,11 +184,6 @@ def cmd_get_analysis(args: list[str]) -> None:
     print(f"[缓存命中 {domain.format_timestamp_cst(created_at)}]\n{result}")
 
 
-def _framework_tokens() -> set[str]:
-    """Return accepted short and full framework tokens."""
-    return set(domain.FRAMEWORK_ALIASES)
-
-
 def _parse_set_analysis_args(args: list[str]) -> tuple[str, int | None, str]:
     """Strictly parse framework and optional score without silent ignores."""
     if not args:

@@ -64,12 +64,6 @@ def artifact_dir() -> Path:
     return Path(_setting("A_STOCK_ARTIFACT_DIR", state_dir() / "artifacts")).expanduser()
 
 
-def ensure_state_dirs() -> None:
-    for path in (state_dir(), log_dir(), lock_dir(), artifact_dir()):
-        path.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path.chmod(0o700)
-
-
 def ensure_db_parent(path: str | Path) -> None:
     """Create only the selected database parent, preserving read-only probes."""
     parent = Path(path).expanduser().resolve().parent
@@ -84,8 +78,3 @@ DEFAULT_CACHE_DB_PATH = cache_db_path()
 DEFAULT_LOG_DIR = log_dir()
 DEFAULT_LOCK_DIR = lock_dir()
 DEFAULT_ARTIFACT_DIR = artifact_dir()
-
-
-def configured_value(name: str, default: str = "") -> str:
-    """Return a non-secret setting using CLI/env/config precedence upstream."""
-    return _setting(name, default)
