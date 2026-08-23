@@ -1,8 +1,8 @@
 # Research 数据能力补齐与 Skill 渐进披露规范（2026-08-23）
 
-状态：accepted for isolated implementation
+状态：implemented and deployed
 用户授权：2026-08-23 明确要求按顺序执行复盘、PS、最新财报快照与 Skill 拆分
-生产状态：未授权切换；实现、制品、影子兼容与生产部署必须分开
+生产状态：2026-08-23 经用户单独批准后切换至 suite `0.1.4` / lib `0.5.1`
 
 ## 目标
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.4 - 2026-08-23
+
 ### Added
 
 - Fetcher now exposes same-basis `ps_ttm` and 5-year month-end `ps_percentile_5y` from TuShare `daily_basic`, with a 60-valid-month fail-closed gate.

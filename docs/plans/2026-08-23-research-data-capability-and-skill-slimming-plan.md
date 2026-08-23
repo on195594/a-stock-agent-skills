@@ -1,6 +1,6 @@
 # Research 数据能力与 Skill 拆分实施计划（2026-08-23）
 
-状态：ready_for_landing
+状态：completed
 规范：`../specs/2026-08-23-research-data-capability-and-skill-slimming-spec.md`
 
 ## minimum_landing_change
@@ -17,7 +17,7 @@
 | 3 最新报告 | completed | lib字段 + consumer snapshot | 双仓 RED/GREEN、2026半年报快照回读 |
 | 4 Skill 拆分 | completed | 3个 reference，主边界保留 | contract/validator/QA smoke |
 | 5 集成审查 | completed | 版本、docs、wheel、影子兼容 | lib 104 tests；suite 641 tests；真实临时 smoke；规格审查 APPROVE_LANDING |
-| 6 landing/cutover | not_started | 合并与生产发布 | 另行生产批准 |
+| 6 landing/cutover | completed | 合并与生产发布 | 用户批准；0.1.4/0.5.1回读；配置/cron指纹不变；临时状态真实fetch通过 |
 
 ## 执行任务
 

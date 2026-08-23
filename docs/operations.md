@@ -86,17 +86,19 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.3` (`0.1.3-8ce03e794f8a`), deployed on
-2026-08-14 with `a-stock-lib==0.5.0`. The deployment reused the versioned
+The current runtime is `v0.1.4` (`0.1.4-34ac4f90e83e`), deployed on
+2026-08-23 with `a-stock-lib==0.5.1`. The deployment reused the versioned
 installer and generated external rollback manifest
-`rollback-1786698376819409000.json`; the previous runtime remains installed.
+`rollback-1787454754851527960.json`; the previous `v0.1.3` runtime remains installed.
 Configuration and crontab SHA256 fingerprints were unchanged, and no database
 schema migration was performed.
 
 The nine active client Skill entries still resolve to the canonical repository.
-The installed fetcher exposes `pe_static` and `pe_percentile_5y`; CLI help and a
-production-config, notification-disabled, physically read-only `holdings` smoke
-completed successfully.
+The installed fetcher exposes `pe_static`, `pe_percentile_5y`, same-basis
+`ps_ttm`/`ps_percentile_5y`, and the non-scoring `latest_report_snapshot`.
+CLI help, production-config notification-disabled `holdings`, and a temporary-state
+live fetch smoke completed successfully. Configuration and crontab fingerprints
+matched their pre-cutover values; no database schema migration ran.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in
