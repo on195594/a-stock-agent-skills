@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5 - 2026-08-23
 
 - Added the read-only `a-stock-cache score-fundamentals` bridge to the A—F deterministic 60-point scorer in `a-stock-lib==0.6.0`.
 - Research now treats the scorer subtotal, rule version/hash, missing inputs and red lines as authoritative; manual fundamental-score fallback is retired.

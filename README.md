@@ -12,11 +12,10 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The `v0.1.4` runtime release uses `a-stock-lib==0.5.3`. It adds
-same-basis 5-year PS and latest-report snapshot capabilities while retaining
-the canonical Research and QA contracts, including `pe_static`, the same-basis
-5-year PE percentile and deterministic QA verdict handling. All nine active
-client Skill entries continue to resolve directly to `skills/`.
+The `v0.1.5` runtime release uses `a-stock-lib==0.6.0`. Research now routes
+A—F fundamental scoring through the read-only deterministic scorer while
+retaining the existing timing, QA and write-confirmation contracts. All nine
+active client Skill entries continue to resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
@@ -33,8 +32,8 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 
 ## Install or update
 
-Requirements for `v0.1.4`: Python 3.13+, `uv`, and an explicit checkout or wheel for
-`a-stock-lib==0.5.3`. The installer itself uses only the Python
+Requirements for `v0.1.5`: Python 3.13+, `uv`, and an explicit checkout or wheel for
+`a-stock-lib==0.6.0`. The installer itself uses only the Python
 standard library, so it can bootstrap the runtime:
 
 ```bash
@@ -54,6 +53,7 @@ The installer exposes these stable commands through `PATH`:
 
 ```text
 a-stock-cache    shared cache, holdings and portfolio-risk CLI
+a-stock-cache score-fundamentals  read-only deterministic A—F fundamental scorer
 a-stock-fetch    structured market-data fetch CLI
 a-stock-install  installer entrypoint
 ```
