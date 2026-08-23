@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Standard-library bootstrap entrypoint for the suite installer."""
+
 from __future__ import annotations
 
 import sys

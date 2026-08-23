@@ -1,4 +1,5 @@
 """SQLite connection ownership and read-only request scope."""
+
 from __future__ import annotations
 
 import os
@@ -34,7 +35,9 @@ def read_only_scope(enabled: bool = True) -> Iterator[None]:
 def _read_only_connection(timeout: float) -> sqlite3.Connection:
     database_path = paths.cache_db_path().resolve()
     connection = sqlite3.connect(
-        f"file:{os.path.abspath(database_path)}?mode=ro", uri=True, timeout=timeout,
+        f"file:{os.path.abspath(database_path)}?mode=ro",
+        uri=True,
+        timeout=timeout,
     )
     connection.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
     return connection

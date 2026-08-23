@@ -1,4 +1,5 @@
 """Regression tests for cache boundaries, corrupt legacy rows and write races."""
+
 from __future__ import annotations
 
 import json
@@ -18,48 +19,62 @@ from tests.helpers import valid_fundamentals_payload
 
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
-    db_file = tmp_path / 'concurrency-resilience.db'
-    monkeypatch.setenv('CACHE_DB_PATH', str(db_file))
+    db_file = tmp_path / "concurrency-resilience.db"
+    monkeypatch.setenv("CACHE_DB_PATH", str(db_file))
     yield db_file
 
 
 def test_quote_snapshot_max_age_exact_boundary(monkeypatch) -> None:
     now = cache.utc_now()
-    monkeypatch.setattr(domain, 'utc_now', lambda: now)
+    monkeypatch.setattr(domain, "utc_now", lambda: now)
     cache.record_quote_snapshot(
-        'BOUNDARY', 10.0, cache.cst_today(), '10:00:00', 'sina',
-        {'sina': {'price': 10.0}}, False,
+        "BOUNDARY",
+        10.0,
+        cache.cst_today(),
+        "10:00:00",
+        "sina",
+        {"sina": {"price": 10.0}},
+        False,
         fetched_at=(now - timedelta(minutes=30)).isoformat(),
     )
     cache.record_quote_snapshot(
-        'TOO_OLD', 10.0, cache.cst_today(), '10:00:00', 'sina',
-        {'sina': {'price': 10.0}}, False,
+        "TOO_OLD",
+        10.0,
+        cache.cst_today(),
+        "10:00:00",
+        "sina",
+        {"sina": {"price": 10.0}},
+        False,
         fetched_at=(now - timedelta(minutes=30, microseconds=1)).isoformat(),
     )
 
-    assert cache.get_latest_quote_snapshot(
-        'BOUNDARY', max_age=cache.QUOTE_SNAPSHOT_MAX_AGE
-    ) is not None
-    assert cache.get_latest_quote_snapshot(
-        'TOO_OLD', max_age=cache.QUOTE_SNAPSHOT_MAX_AGE
-    ) is None
+    assert (
+        cache.get_latest_quote_snapshot(
+            "BOUNDARY", max_age=cache.QUOTE_SNAPSHOT_MAX_AGE
+        )
+        is not None
+    )
+    assert (
+        cache.get_latest_quote_snapshot("TOO_OLD", max_age=cache.QUOTE_SNAPSHOT_MAX_AGE)
+        is None
+    )
 
 
 def test_qualitative_only_status_survives_unknown_then_clears_on_known_bank() -> None:
-    cache.update_qualitative_only_security('601318', '保险公司', '保险')
-    cache.update_qualitative_only_security('601318', '未知名称', '未知')
+    cache.update_qualitative_only_security("601318", "保险公司", "保险")
+    cache.update_qualitative_only_security("601318", "未知名称", "未知")
 
     with cache.db_session() as conn:
         retained = conn.execute(
-            'SELECT name, industry FROM qualitative_only_securities WHERE code=?',
-            ('601318',),
+            "SELECT name, industry FROM qualitative_only_securities WHERE code=?",
+            ("601318",),
         ).fetchone()
-    assert retained == ('保险公司', '保险')
+    assert retained == ("保险公司", "保险")
 
-    cache.update_qualitative_only_security('601318', '测试银行', '股份制银行')
+    cache.update_qualitative_only_security("601318", "测试银行", "股份制银行")
     with cache.db_session() as conn:
         cleared = conn.execute(
-            'SELECT 1 FROM qualitative_only_securities WHERE code=?', ('601318',)
+            "SELECT 1 FROM qualitative_only_securities WHERE code=?", ("601318",)
         ).fetchone()
     assert cleared is None
 
@@ -71,17 +86,17 @@ def test_cleanup_compare_and_delete_preserves_concurrently_refreshed_rows(
     old = (now - timedelta(days=30)).isoformat()
     fresh = now.isoformat()
     cache.set_fundamentals(
-        '600000', '测试公司', '制造', valid_fundamentals_payload({'roe': 10}), ttl=1
+        "600000", "测试公司", "制造", valid_fundamentals_payload({"roe": 10}), ttl=1
     )
     with cache.db_session() as conn:
         conn.execute(
-            'UPDATE stock_fundamentals SET updated_at=? WHERE code=?',
-            (old, '600000'),
+            "UPDATE stock_fundamentals SET updated_at=? WHERE code=?",
+            (old, "600000"),
         )
         conn.execute(
-            '''INSERT INTO analysis_results
+            """INSERT INTO analysis_results
                (code, date, result, created_at)
-               VALUES ('600000','2026-01-01','old',?)''',
+               VALUES ('600000','2026-01-01','old',?)""",
             (old,),
         )
         conn.commit()
@@ -93,17 +108,23 @@ def test_cleanup_compare_and_delete_preserves_concurrently_refreshed_rows(
             self.analysis_refreshed = False
 
         def execute(self, sql, params=()):
-            normalized = ' '.join(sql.split())
-            if normalized.startswith('DELETE FROM stock_fundamentals') and not self.fund_refreshed:
+            normalized = " ".join(sql.split())
+            if (
+                normalized.startswith("DELETE FROM stock_fundamentals")
+                and not self.fund_refreshed
+            ):
                 self.conn.execute(
-                    'UPDATE stock_fundamentals SET updated_at=? WHERE code=?',
-                    (fresh, '600000'),
+                    "UPDATE stock_fundamentals SET updated_at=? WHERE code=?",
+                    (fresh, "600000"),
                 )
                 self.fund_refreshed = True
-            if normalized.startswith('DELETE FROM analysis_results') and not self.analysis_refreshed:
+            if (
+                normalized.startswith("DELETE FROM analysis_results")
+                and not self.analysis_refreshed
+            ):
                 self.conn.execute(
-                    '''UPDATE analysis_results SET result='fresh', created_at=?
-                       WHERE code='600000' AND date='2026-01-01' ''',
+                    """UPDATE analysis_results SET result='fresh', created_at=?
+                       WHERE code='600000' AND date='2026-01-01' """,
                     (fresh,),
                 )
                 self.analysis_refreshed = True
@@ -120,37 +141,37 @@ def test_cleanup_compare_and_delete_preserves_concurrently_refreshed_rows(
         finally:
             conn.close()
 
-    monkeypatch.setattr(db, 'db_session', hooked_session)
+    monkeypatch.setattr(db, "db_session", hooked_session)
     cache.cmd_cleanup()
 
     with closing(cache.get_db()) as conn:
         fund = conn.execute(
-            'SELECT updated_at FROM stock_fundamentals WHERE code=?', ('600000',)
+            "SELECT updated_at FROM stock_fundamentals WHERE code=?", ("600000",)
         ).fetchone()
         analysis = conn.execute(
-            '''SELECT result, created_at FROM analysis_results
-               WHERE code='600000' AND date='2026-01-01' '''
+            """SELECT result, created_at FROM analysis_results
+               WHERE code='600000' AND date='2026-01-01' """
         ).fetchone()
     assert fund == (fresh,)
-    assert analysis == ('fresh', fresh)
+    assert analysis == ("fresh", fresh)
 
 
 def test_cleanup_retains_unparseable_legacy_analysis_timestamp(capsys) -> None:
     with cache.db_session() as conn:
         conn.execute(
-            '''INSERT INTO analysis_results
+            """INSERT INTO analysis_results
                (code, date, result, created_at)
-               VALUES ('LEGACY','2020-01-01','legacy','not-an-iso-timestamp')'''
+               VALUES ('LEGACY','2020-01-01','legacy','not-an-iso-timestamp')"""
         )
         conn.commit()
 
     cache.cmd_cleanup()
 
-    assert '无需清理' in capsys.readouterr().out
+    assert "无需清理" in capsys.readouterr().out
     with cache.db_session() as conn:
         assert conn.execute(
             "SELECT result FROM analysis_results WHERE code='LEGACY'"
-        ).fetchone() == ('legacy',)
+        ).fetchone() == ("legacy",)
 
 
 def test_cleanup_prunes_preexisting_quote_snapshot_overflow(capsys) -> None:
@@ -158,16 +179,16 @@ def test_cleanup_prunes_preexisting_quote_snapshot_overflow(capsys) -> None:
     overflow = cache.QUOTE_SNAPSHOT_RETENTION_PER_CODE + 9
     with cache.db_session() as conn:
         conn.executemany(
-            '''INSERT INTO quote_snapshots
+            """INSERT INTO quote_snapshots
                (code, price, quote_date, quote_time, fetched_at, source,
                 verification_sources, degraded, valid)
-               VALUES ('OVERFLOW',10.0,?,?,?,?,?,0,1)''',
+               VALUES ('OVERFLOW',10.0,?,?,?,?,?,0,1)""",
             [
                 (
                     cache.cst_today(),
-                    '10:00:00',
+                    "10:00:00",
                     (now - timedelta(seconds=index)).isoformat(),
-                    'sina',
+                    "sina",
                     '{"sina":{"price":10.0}}',
                 )
                 for index in range(overflow)
@@ -177,26 +198,29 @@ def test_cleanup_prunes_preexisting_quote_snapshot_overflow(capsys) -> None:
 
     cache.cmd_cleanup()
 
-    assert '超限行情快照' in capsys.readouterr().out
+    assert "超限行情快照" in capsys.readouterr().out
     with cache.db_session() as conn:
-        assert conn.execute(
-            "SELECT COUNT(*) FROM quote_snapshots WHERE code='OVERFLOW'"
-        ).fetchone()[0] == cache.QUOTE_SNAPSHOT_RETENTION_PER_CODE
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM quote_snapshots WHERE code='OVERFLOW'"
+            ).fetchone()[0]
+            == cache.QUOTE_SNAPSHOT_RETENTION_PER_CODE
+        )
 
 
 def test_watchlist_tolerates_corrupt_legacy_json_fields() -> None:
     now = cache.utc_now_iso()
     with cache.db_session() as conn:
         conn.execute(
-            '''INSERT INTO stock_fundamentals
+            """INSERT INTO stock_fundamentals
                (code, name, industry, data, updated_at, ttl_hours)
-               VALUES ('CORRUPT','损坏缓存','制造','{bad-json',?,24)''',
+               VALUES ('CORRUPT','损坏缓存','制造','{bad-json',?,24)""",
             (now,),
         )
         conn.execute(
-            '''INSERT INTO analysis_results
+            """INSERT INTO analysis_results
                (code, date, result, created_at, flags, score_breakdown)
-               VALUES ('CORRUPT',?,'legacy',?,'{bad-flags','[wrong-type]')''',
+               VALUES ('CORRUPT',?,'legacy',?,'{bad-flags','[wrong-type]')""",
             (cache.cst_today(), now),
         )
         conn.commit()
@@ -204,10 +228,10 @@ def test_watchlist_tolerates_corrupt_legacy_json_fields() -> None:
     rows = cache.get_watchlist_rows()
 
     assert len(rows) == 1
-    assert rows[0]['code'] == 'CORRUPT'
-    assert rows[0]['flags'] == []
-    assert rows[0]['score_breakdown'] is None
-    assert rows[0]['pe_ttm'] is None
+    assert rows[0]["code"] == "CORRUPT"
+    assert rows[0]["flags"] == []
+    assert rows[0]["score_breakdown"] is None
+    assert rows[0]["pe_ttm"] is None
 
 
 def test_close_holding_rejects_invalid_date_without_mutation() -> None:
@@ -218,7 +242,7 @@ def test_close_holding_rejects_invalid_date_without_mutation() -> None:
         conn.commit()
 
     with pytest.raises(SystemExit):
-        cache.cmd_close_holding(['600519', '120', '2026-02-30'])
+        cache.cmd_close_holding(["600519", "120", "2026-02-30"])
 
     with cache.db_session() as conn:
         row = conn.execute(
@@ -238,8 +262,13 @@ def test_concurrent_quote_snapshot_writes_are_lossless_and_latest_wins() -> None
         try:
             barrier.wait(timeout=5)
             cache.record_quote_snapshot(
-                '600000', 100.0 + index, cache.cst_today(), '10:00:00', 'sina',
-                {'sina': {'price': 100.0 + index}}, False,
+                "600000",
+                100.0 + index,
+                cache.cst_today(),
+                "10:00:00",
+                "sina",
+                {"sina": {"price": 100.0 + index}},
+                False,
                 fetched_at=(now + timedelta(microseconds=index)).isoformat(),
             )
         except BaseException as exc:
@@ -261,15 +290,15 @@ def test_concurrent_quote_snapshot_writes_are_lossless_and_latest_wins() -> None
             "SELECT COUNT(*) FROM quote_snapshots WHERE code='600000'"
         ).fetchone()[0]
     assert count == worker_count
-    assert cache.get_latest_quote_snapshot('600000')['price'] == 107.0
+    assert cache.get_latest_quote_snapshot("600000")["price"] == 107.0
 
 
 def test_concurrent_flag_appends_are_lossless_under_contention() -> None:
     now = cache.utc_now_iso()
     with cache.db_session() as conn:
         conn.execute(
-            '''INSERT INTO analysis_results (code, date, result, created_at)
-               VALUES ('600036',?,'report',?)''',
+            """INSERT INTO analysis_results (code, date, result, created_at)
+               VALUES ('600036',?,'report',?)""",
             (cache.cst_today(), now),
         )
         conn.commit()
@@ -280,7 +309,7 @@ def test_concurrent_flag_appends_are_lossless_under_contention() -> None:
     def append_flag(index: int) -> None:
         try:
             barrier.wait(timeout=5)
-            cache.cmd_set_flag(['600036', 'yellow', f'flag-{index}'])
+            cache.cmd_set_flag(["600036", "yellow", f"flag-{index}"])
         except BaseException as exc:
             errors.append(exc)
 
@@ -301,8 +330,8 @@ def test_concurrent_flag_appends_are_lossless_under_contention() -> None:
         ).fetchone()[0]
     flags = json.loads(raw)
     assert len(flags) == worker_count
-    assert {flag['reason'] for flag in flags} == {
-        f'flag-{index}' for index in range(worker_count)
+    assert {flag["reason"] for flag in flags} == {
+        f"flag-{index}" for index in range(worker_count)
     }
 
 
@@ -310,10 +339,10 @@ def test_many_concurrent_close_requests_consume_distinct_lots() -> None:
     worker_count = 8
     with cache.db_session() as conn:
         conn.executemany(
-            '''INSERT INTO holdings (code, cost_price, buy_date)
-               VALUES ('600519', ?, ?)''',
+            """INSERT INTO holdings (code, cost_price, buy_date)
+               VALUES ('600519', ?, ?)""",
             [
-                (100.0 + index, f'2026-01-{index + 1:02d}')
+                (100.0 + index, f"2026-01-{index + 1:02d}")
                 for index in range(worker_count)
             ],
         )
@@ -324,7 +353,7 @@ def test_many_concurrent_close_requests_consume_distinct_lots() -> None:
     def close_lot(index: int) -> None:
         try:
             barrier.wait(timeout=5)
-            cache.cmd_close_holding(['600519', str(120.0 + index)])
+            cache.cmd_close_holding(["600519", str(120.0 + index)])
         except BaseException as exc:
             errors.append(exc)
 
@@ -341,8 +370,8 @@ def test_many_concurrent_close_requests_consume_distinct_lots() -> None:
     assert all(not thread.is_alive() for thread in threads)
     with cache.db_session() as conn:
         rows = conn.execute(
-            '''SELECT exit_price, exit_date FROM holdings
-               WHERE code='600519' ORDER BY id'''
+            """SELECT exit_price, exit_date FROM holdings
+               WHERE code='600519' ORDER BY id"""
         ).fetchall()
     assert all(exit_date is not None for _, exit_date in rows)
     assert {exit_price for exit_price, _ in rows} == {
@@ -351,9 +380,9 @@ def test_many_concurrent_close_requests_consume_distinct_lots() -> None:
 
 
 def test_schema_migration_is_safe_across_processes(tmp_path) -> None:
-    db_path = tmp_path / 'cross-process-migration.db'
+    db_path = tmp_path / "cross-process-migration.db"
     with closing(sqlite3.connect(db_path)) as conn:
-        conn.executescript('''
+        conn.executescript("""
             CREATE TABLE stock_fundamentals (
                 code TEXT PRIMARY KEY, name TEXT, industry TEXT, data JSON,
                 updated_at TEXT, ttl_hours INTEGER DEFAULT 24);
@@ -366,14 +395,14 @@ def test_schema_migration_is_safe_across_processes(tmp_path) -> None:
                 stop_loss_20 REAL, notes TEXT, updated_at TEXT,
                 exit_price REAL, exit_date TEXT);
             INSERT INTO holdings (code, cost_price) VALUES ('600519', 1800.0);
-        ''')
+        """)
 
     env = os.environ.copy()
-    env['CACHE_DB_PATH'] = str(db_path)
+    env["CACHE_DB_PATH"] = str(db_path)
     command = [
         sys.executable,
-        '-c',
-        'from a_stock_agent_runtime import cache; connection = cache.get_db(); connection.close()',
+        "-c",
+        "from a_stock_agent_runtime import cache; connection = cache.get_db(); connection.close()",
     ]
     processes = [
         subprocess.Popen(
@@ -396,15 +425,15 @@ def test_schema_migration_is_safe_across_processes(tmp_path) -> None:
     assert not failures
     with closing(sqlite3.connect(db_path)) as conn:
         columns = {
-            row[1] for row in conn.execute('PRAGMA table_info(holdings)').fetchall()
+            row[1] for row in conn.execute("PRAGMA table_info(holdings)").fetchall()
         }
         holding = conn.execute(
             "SELECT cost_price FROM holdings WHERE code='600519'"
         ).fetchone()
         qualitative_table = conn.execute(
-            '''SELECT 1 FROM sqlite_master
-               WHERE type='table' AND name='qualitative_only_securities' '''
+            """SELECT 1 FROM sqlite_master
+               WHERE type='table' AND name='qualitative_only_securities' """
         ).fetchone()
-    assert 'id' in columns
+    assert "id" in columns
     assert holding == (1800.0,)
     assert qualitative_table == (1,)

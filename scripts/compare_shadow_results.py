@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compare deterministic shadow invariants without comparing prose."""
+
 from __future__ import annotations
 
 import argparse

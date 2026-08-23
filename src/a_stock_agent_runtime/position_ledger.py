@@ -31,13 +31,13 @@ def _finite_event_amount(value: object, field: str) -> float:
     if value is None:
         return 0.0
     if isinstance(value, bool) or not isinstance(value, (str, int, float)):
-        raise ValueError(f'账本字段 {field} 非法')
+        raise ValueError(f"账本字段 {field} 非法")
     try:
         parsed = float(value)
     except (ValueError, OverflowError) as exc:
-        raise ValueError(f'账本字段 {field} 非法') from exc
+        raise ValueError(f"账本字段 {field} 非法") from exc
     if not math.isfinite(parsed):
-        raise ValueError(f'账本字段 {field} 非有限数值')
+        raise ValueError(f"账本字段 {field} 非有限数值")
     return parsed
 
 
@@ -56,60 +56,69 @@ def calculate_lifecycle_return(
     is already represented by ``remaining_shares`` and later sell events.
     """
     if not events:
-        raise ValueError('当前持仓生命周期无交易事件')
+        raise ValueError("当前持仓生命周期无交易事件")
     if (
         isinstance(remaining_shares, bool)
         or not isinstance(remaining_shares, int)
         or remaining_shares < 0
     ):
-        raise ValueError('当前持仓剩余股数非法')
+        raise ValueError("当前持仓剩余股数非法")
 
     dates: list[date] = []
     invested = sale_cash = dividends = 0.0
     contains_inferred = False
-    for event_type, event_date, shares, price, fees, tax, cash_amount, inferred in events:
+    for (
+        event_type,
+        event_date,
+        shares,
+        price,
+        fees,
+        tax,
+        cash_amount,
+        inferred,
+    ) in events:
         try:
             dates.append(date.fromisoformat(event_date))
         except (TypeError, ValueError) as exc:
-            raise ValueError('账本事件日期非法') from exc
+            raise ValueError("账本事件日期非法") from exc
         contains_inferred = contains_inferred or bool(inferred)
-        if event_type in ('buy', 'sell'):
-            quantity = _finite_event_amount(shares, 'shares')
-            unit_price = _finite_event_amount(price, 'price')
+        if event_type in ("buy", "sell"):
+            quantity = _finite_event_amount(shares, "shares")
+            unit_price = _finite_event_amount(price, "price")
             if quantity <= 0 or quantity != int(quantity) or unit_price <= 0:
-                raise ValueError('账本买卖事件缺少有效股数或价格')
+                raise ValueError("账本买卖事件缺少有效股数或价格")
             cash = quantity * unit_price
-            fees_value = _finite_event_amount(fees, 'fees')
-            tax_value = _finite_event_amount(tax, 'tax')
+            fees_value = _finite_event_amount(fees, "fees")
+            tax_value = _finite_event_amount(tax, "tax")
             if fees_value < 0 or tax_value < 0:
-                raise ValueError('账本费用或税费不能为负数')
-            if event_type == 'buy':
+                raise ValueError("账本费用或税费不能为负数")
+            if event_type == "buy":
                 invested += cash + fees_value + tax_value
             else:
                 sale_cash += cash - fees_value - tax_value
-        elif event_type == 'dividend':
-            dividend = _finite_event_amount(cash_amount, 'cash_amount')
+        elif event_type == "dividend":
+            dividend = _finite_event_amount(cash_amount, "cash_amount")
             if dividend < 0:
-                raise ValueError('账本分红不能为负数')
+                raise ValueError("账本分红不能为负数")
             dividends += dividend
 
     if invested <= 0:
-        raise ValueError('账本没有有效买入现金流')
+        raise ValueError("账本没有有效买入现金流")
     try:
         first_day = min(dates)
         last_day = date.fromisoformat(end_date)
     except (TypeError, ValueError) as exc:
-        raise ValueError('持仓结束日期非法') from exc
+        raise ValueError("持仓结束日期非法") from exc
     if last_day < first_day:
-        raise ValueError('持仓结束日期早于首笔账本事件')
+        raise ValueError("持仓结束日期早于首笔账本事件")
 
     market_value = 0.0
     if remaining_shares:
         if current_price is None:
-            raise ValueError('仍有持仓但无法取得有效当前价')
-        price_value = _finite_event_amount(current_price, 'current_price')
+            raise ValueError("仍有持仓但无法取得有效当前价")
+        price_value = _finite_event_amount(current_price, "current_price")
         if price_value <= 0:
-            raise ValueError('仍有持仓但无法取得有效当前价')
+            raise ValueError("仍有持仓但无法取得有效当前价")
         market_value = remaining_shares * price_value
     pnl = sale_cash + dividends + market_value - invested
     return LifecycleReturn(

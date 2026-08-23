@@ -49,9 +49,13 @@ def test_read_only_scope_resets_after_exception() -> None:
 def test_missing_w1_confirmation_keeps_fixture_hash(tmp_path, monkeypatch) -> None:
     database = tmp_path / "cache.db"
     monkeypatch.setenv("CACHE_DB_PATH", str(database))
-    before = hashlib.sha256(database.read_bytes()).hexdigest() if database.exists() else None
-    assert cache.main(["set", "000001", "名称", "行业", "{}"] ) == 3
-    after = hashlib.sha256(database.read_bytes()).hexdigest() if database.exists() else None
+    before = (
+        hashlib.sha256(database.read_bytes()).hexdigest() if database.exists() else None
+    )
+    assert cache.main(["set", "000001", "名称", "行业", "{}"]) == 3
+    after = (
+        hashlib.sha256(database.read_bytes()).hexdigest() if database.exists() else None
+    )
     assert before == after
 
 
@@ -65,9 +69,10 @@ def test_r0_command_never_bootstraps_or_changes_database(tmp_path, monkeypatch) 
 
     assert hashlib.sha256(database.read_bytes()).hexdigest() == before
     with sqlite3.connect(database) as conn:
-        assert conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall() == []
+        assert (
+            conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            == []
+        )
 
 
 def test_populated_r0_commands_keep_fixture_hash(tmp_path, monkeypatch) -> None:

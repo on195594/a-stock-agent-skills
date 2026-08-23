@@ -1,4 +1,5 @@
 """framework_metadata.py 单元测试：纯数据结构，不依赖 checklist.py/cache.py。"""
+
 import sys
 from pathlib import Path
 
@@ -17,7 +18,7 @@ def test_framework_registry_starts_empty_without_checklist_import():
 
     script = "from a_stock_agent_runtime import framework_metadata; assert framework_metadata.FRAMEWORK_REGISTRY == {}"
     result = subprocess.run(
-        [sys.executable, '-c', script],
+        [sys.executable, "-c", script],
         cwd=str(Path(__file__).resolve().parent.parent),
         capture_output=True,
         text=True,
@@ -26,20 +27,20 @@ def test_framework_registry_starts_empty_without_checklist_import():
 
 
 def test_skipped_checklist_item_holds_label_and_reason():
-    item = framework_metadata.SkippedChecklistItem(label='测试项', reason='测试原因')
-    assert item.label == '测试项'
-    assert item.reason == '测试原因'
+    item = framework_metadata.SkippedChecklistItem(label="测试项", reason="测试原因")
+    assert item.label == "测试项"
+    assert item.reason == "测试原因"
 
 
 def test_framework_metadata_required_fields_and_defaults():
     metadata = framework_metadata.FrameworkMetadata(
-        key='A',
-        checklist_name='测试框架',
-        subjective_items=['护城河'],
+        key="A",
+        checklist_name="测试框架",
+        subjective_items=["护城河"],
         skipped_items=[],
         checklist_definitions=[],
     )
-    assert metadata.key == 'A'
+    assert metadata.key == "A"
     assert metadata.custom_builder is None
     assert metadata.portfolio_label is None
     assert metadata.industry_keywords == ()
@@ -50,8 +51,11 @@ def test_framework_metadata_is_frozen():
     """frozen=True 只冻结字段绑定（不能重新赋值），不冻结 list 内容——
     这个测试只验证字段绑定层面的不可变，避免后续有人误以为整个对象深度不可变。"""
     metadata = framework_metadata.FrameworkMetadata(
-        key='A', checklist_name='测试框架', subjective_items=[], skipped_items=[],
+        key="A",
+        checklist_name="测试框架",
+        subjective_items=[],
+        skipped_items=[],
         checklist_definitions=[],
     )
     with pytest.raises(Exception):  # dataclasses.FrozenInstanceError
-        metadata.key = 'B'
+        metadata.key = "B"

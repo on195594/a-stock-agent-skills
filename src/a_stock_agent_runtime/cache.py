@@ -178,47 +178,47 @@ get_watchlist_rows = commands_admin.get_watchlist_rows
 check = cmd_check
 
 COMMANDS = {
-    'check': cmd_check,
-    'get': cmd_get,
-    'set': cmd_set,
-    'get-analysis': cmd_get_analysis,
-    'set-analysis': cmd_set_analysis,
-    'set-score': cmd_set_score,
-    'set-score-breakdown': cmd_set_score_breakdown,
-    'score-fundamentals': cmd_score_fundamentals,
-    'set-flag': cmd_set_flag,
-    'clear-flag': cmd_clear_flag,
-    'alert-open': cmd_alert_open,
-    'alert-pending': cmd_alert_pending,
-    'alert-resolve': cmd_alert_resolve,
-    'alerts': cmd_alerts,
-    'l3-add': cmd_l3_add,
-    'l3-update': cmd_l3_update,
-    'l3-list': cmd_l3_list,
-    'tier-config': cmd_tier_config,
-    'tier-update': cmd_tier_update,
-    'holding-framework': cmd_holding_framework,
-    'add-holding': cmd_add_holding,
-    'buy-holding': cmd_buy_holding,
-    'sell-holding': cmd_sell_holding,
-    'record-dividend': cmd_record_dividend,
-    'corporate-action': cmd_corporate_action,
-    'close-holding': cmd_close_holding,
-    'retro-add': cmd_retro_add,
-    'retro-pending': cmd_retro_pending,
-    'retro-stats': cmd_retro_stats,
-    'retro-outliers': cmd_retro_outliers,
-    'holdings': cmd_holdings,
-    'remove-holding': cmd_remove_holding,
-    'update-return': cmd_update_return,
-    'position-return': cmd_position_return,
-    'portfolio-risk': cmd_portfolio_risk,
-    'check-holdings': cmd_check_holdings,
-    'watchlist': cmd_watchlist,
-    'list': cmd_list,
-    'cleanup': cmd_cleanup,
-    'clear': cmd_clear,
-    'checklist': cmd_checklist,
+    "check": cmd_check,
+    "get": cmd_get,
+    "set": cmd_set,
+    "get-analysis": cmd_get_analysis,
+    "set-analysis": cmd_set_analysis,
+    "set-score": cmd_set_score,
+    "set-score-breakdown": cmd_set_score_breakdown,
+    "score-fundamentals": cmd_score_fundamentals,
+    "set-flag": cmd_set_flag,
+    "clear-flag": cmd_clear_flag,
+    "alert-open": cmd_alert_open,
+    "alert-pending": cmd_alert_pending,
+    "alert-resolve": cmd_alert_resolve,
+    "alerts": cmd_alerts,
+    "l3-add": cmd_l3_add,
+    "l3-update": cmd_l3_update,
+    "l3-list": cmd_l3_list,
+    "tier-config": cmd_tier_config,
+    "tier-update": cmd_tier_update,
+    "holding-framework": cmd_holding_framework,
+    "add-holding": cmd_add_holding,
+    "buy-holding": cmd_buy_holding,
+    "sell-holding": cmd_sell_holding,
+    "record-dividend": cmd_record_dividend,
+    "corporate-action": cmd_corporate_action,
+    "close-holding": cmd_close_holding,
+    "retro-add": cmd_retro_add,
+    "retro-pending": cmd_retro_pending,
+    "retro-stats": cmd_retro_stats,
+    "retro-outliers": cmd_retro_outliers,
+    "holdings": cmd_holdings,
+    "remove-holding": cmd_remove_holding,
+    "update-return": cmd_update_return,
+    "position-return": cmd_position_return,
+    "portfolio-risk": cmd_portfolio_risk,
+    "check-holdings": cmd_check_holdings,
+    "watchlist": cmd_watchlist,
+    "list": cmd_list,
+    "cleanup": cmd_cleanup,
+    "clear": cmd_clear,
+    "checklist": cmd_checklist,
 }
 
 # One source of truth for the side-effect boundary.  R0 is local read-only,
@@ -227,25 +227,52 @@ COMMANDS = {
 COMMAND_CLASSIFICATION = {
     **dict.fromkeys(
         (
-            'get', 'get-analysis', 'holdings', 'position-return',
-            'retro-pending', 'retro-stats', 'retro-outliers',
-            'alerts', 'l3-list', 'watchlist', 'list', 'checklist',
-            'score-fundamentals',
+            "get",
+            "get-analysis",
+            "holdings",
+            "position-return",
+            "retro-pending",
+            "retro-stats",
+            "retro-outliers",
+            "alerts",
+            "l3-list",
+            "watchlist",
+            "list",
+            "checklist",
+            "score-fundamentals",
         ),
-        'R0',
+        "R0",
     ),
-    **dict.fromkeys(('check', 'check-holdings', 'portfolio-risk'), 'R1'),
+    **dict.fromkeys(("check", "check-holdings", "portfolio-risk"), "R1"),
     **dict.fromkeys(
         (
-            'set', 'set-analysis', 'set-score', 'set-score-breakdown',
-            'set-flag', 'clear-flag', 'alert-open', 'alert-pending',
-            'alert-resolve', 'l3-add', 'l3-update', 'tier-config',
-            'tier-update', 'holding-framework', 'add-holding', 'buy-holding',
-            'sell-holding', 'record-dividend', 'corporate-action',
-            'close-holding', 'retro-add', 'remove-holding', 'update-return',
-            'cleanup', 'clear',
+            "set",
+            "set-analysis",
+            "set-score",
+            "set-score-breakdown",
+            "set-flag",
+            "clear-flag",
+            "alert-open",
+            "alert-pending",
+            "alert-resolve",
+            "l3-add",
+            "l3-update",
+            "tier-config",
+            "tier-update",
+            "holding-framework",
+            "add-holding",
+            "buy-holding",
+            "sell-holding",
+            "record-dividend",
+            "corporate-action",
+            "close-holding",
+            "retro-add",
+            "remove-holding",
+            "update-return",
+            "cleanup",
+            "clear",
         ),
-        'W1',
+        "W1",
     ),
 }
 
@@ -257,95 +284,118 @@ class _CLIParser(argparse.ArgumentParser):
 
 
 _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
-    'check': (('代码', '?'),),
-    'get': (('代码', '?'),),
-    'set': (('代码', None), ('名称', None), ('行业', None), ('JSON', None), ('TTL', '?')),
-    'get-analysis': (('代码', '?'),),
-    'set-analysis': (('代码', None), ('框架', None), ('得分', '?')),
-    'set-score': (('代码', None), ('分数', None)),
-    'set-score-breakdown': (('代码', None), ('JSON', None)),
-    'set-flag': (('代码', None), ('级别', None), ('原因', None)),
-    'clear-flag': (('代码', None),),
-    'alert-open': (
-        ('代码', None), ('级别', None), ('类别', None), ('reason_code', None),
-        ('复核日期', None), ('原因', None), ('证据', '?'),
+    "check": (("代码", "?"),),
+    "get": (("代码", "?"),),
+    "set": (
+        ("代码", None),
+        ("名称", None),
+        ("行业", None),
+        ("JSON", None),
+        ("TTL", "?"),
     ),
-    'alert-pending': (('代码', None), ('reason_code', None), ('说明', None)),
-    'alert-resolve': (('代码', None), ('reason_code', None), ('证据', None)),
-    'alerts': (('代码', None),),
-    'l3-add': (('代码', None), ('来源', None), ('条件', None), ('临时规则', '?')),
-    'l3-update': (
-        ('条件id', None), ('状态', None), ('as-of', None), ('证据', None),
-        ('下次复核', '?'),
+    "get-analysis": (("代码", "?"),),
+    "set-analysis": (("代码", None), ("框架", None), ("得分", "?")),
+    "set-score": (("代码", None), ("分数", None)),
+    "set-score-breakdown": (("代码", None), ("JSON", None)),
+    "set-flag": (("代码", None), ("级别", None), ("原因", None)),
+    "clear-flag": (("代码", None),),
+    "alert-open": (
+        ("代码", None),
+        ("级别", None),
+        ("类别", None),
+        ("reason_code", None),
+        ("复核日期", None),
+        ("原因", None),
+        ("证据", "?"),
     ),
-    'l3-list': (('代码', None),),
-    'tier-config': (
-        ('代码', None), ('路径', None), ('目标涨幅', '?'), ('豁免框架', '?'),
+    "alert-pending": (("代码", None), ("reason_code", None), ("说明", None)),
+    "alert-resolve": (("代码", None), ("reason_code", None), ("证据", None)),
+    "alerts": (("代码", None),),
+    "l3-add": (("代码", None), ("来源", None), ("条件", None), ("临时规则", "?")),
+    "l3-update": (
+        ("条件id", None),
+        ("状态", None),
+        ("as-of", None),
+        ("证据", None),
+        ("下次复核", "?"),
     ),
-    'tier-update': (('代码', None), ('Tier', None), ('状态', None)),
-    'holding-framework': (('代码', None), ('框架', None)),
-    'add-holding': (('代码', None), ('成交价', None), ('股数', '?')),
-    'buy-holding': (('代码', None), ('买入价', None), ('股数', None)),
-    'sell-holding': (('代码', None), ('卖出价', None), ('股数或all', None)),
-    'record-dividend': (('代码', None), ('现金总额', None), ('日期', '?')),
-    'corporate-action': (
-        ('代码', None), ('每股现金分红', None), ('转增比例', None), ('日期', '?'),
+    "l3-list": (("代码", None),),
+    "tier-config": (
+        ("代码", None),
+        ("路径", None),
+        ("目标涨幅", "?"),
+        ("豁免框架", "?"),
     ),
-    'close-holding': (('代码', None), ('卖出价', None), ('日期', '?')),
-    'retro-add': (('代码', None), ('error_tags', None)),
-    'retro-pending': (),
-    'retro-stats': (('框架', '?'),),
-    'retro-outliers': (),
-    'holdings': (),
-    'remove-holding': (('代码', None),),
-    'update-return': (('代码', None), ('回报率', None)),
-    'position-return': (('代码', None), ('当前价', '?')),
-    'portfolio-risk': (),
-    'check-holdings': (),
-    'watchlist': (),
-    'list': (),
-    'cleanup': (),
-    'clear': (('代码', '?'),),
-    'checklist': (('代码', None), ('框架', None)),
-    'score-fundamentals': (('代码', None), ('框架', None), ('补充指标JSON', None)),
+    "tier-update": (("代码", None), ("Tier", None), ("状态", None)),
+    "holding-framework": (("代码", None), ("框架", None)),
+    "add-holding": (("代码", None), ("成交价", None), ("股数", "?")),
+    "buy-holding": (("代码", None), ("买入价", None), ("股数", None)),
+    "sell-holding": (("代码", None), ("卖出价", None), ("股数或all", None)),
+    "record-dividend": (("代码", None), ("现金总额", None), ("日期", "?")),
+    "corporate-action": (
+        ("代码", None),
+        ("每股现金分红", None),
+        ("转增比例", None),
+        ("日期", "?"),
+    ),
+    "close-holding": (("代码", None), ("卖出价", None), ("日期", "?")),
+    "retro-add": (("代码", None), ("error_tags", None)),
+    "retro-pending": (),
+    "retro-stats": (("框架", "?"),),
+    "retro-outliers": (),
+    "holdings": (),
+    "remove-holding": (("代码", None),),
+    "update-return": (("代码", None), ("回报率", None)),
+    "position-return": (("代码", None), ("当前价", "?")),
+    "portfolio-risk": (),
+    "check-holdings": (),
+    "watchlist": (),
+    "list": (),
+    "cleanup": (),
+    "clear": (("代码", "?"),),
+    "checklist": (("代码", None), ("框架", None)),
+    "score-fundamentals": (("代码", None), ("框架", None), ("补充指标JSON", None)),
 }
 
 _CLI_VALUE_OPTIONS = {
-    'add-holding': ('--notes', '--fee', '--date'),
-    'buy-holding': ('--fee', '--date'),
-    'sell-holding': ('--fee', '--tax', '--date'),
-    'retro-add': ('--note', '--thesis', '--gap'),
-    'retro-outliers': ('--loss',),
-    'portfolio-risk': ('--portfolio-value', '--max-position-risk-pct'),
+    "add-holding": ("--notes", "--fee", "--date"),
+    "buy-holding": ("--fee", "--date"),
+    "sell-holding": ("--fee", "--tax", "--date"),
+    "retro-add": ("--note", "--thesis", "--gap"),
+    "retro-outliers": ("--loss",),
+    "portfolio-risk": ("--portfolio-value", "--max-position-risk-pct"),
 }
 
 
 def _build_cli_parser() -> argparse.ArgumentParser:
     parser = _CLIParser(
-        prog='a-stock-cache',
-        description='A股投研数据缓存管理器',
+        prog="a-stock-cache",
+        description="A股投研数据缓存管理器",
     )
     parser.add_argument(
-        '--confirm-write', action='store_true',
-        help='确认执行会修改本地投资状态的 W1 子命令（必须位于子命令前）',
+        "--confirm-write",
+        action="store_true",
+        help="确认执行会修改本地投资状态的 W1 子命令（必须位于子命令前）",
     )
-    subparsers = parser.add_subparsers(dest='command', metavar='<子命令>')
+    subparsers = parser.add_subparsers(dest="command", metavar="<子命令>")
     for command, positionals in _CLI_POSITIONALS.items():
-        handler_doc = COMMANDS[command].__doc__ or ''
+        handler_doc = COMMANDS[command].__doc__ or ""
         command_parser = subparsers.add_parser(
             command,
-            help=handler_doc.splitlines()[0].replace('%', '%%') if handler_doc else None,
+            help=handler_doc.splitlines()[0].replace("%", "%%")
+            if handler_doc
+            else None,
         )
         for index, (metavar, nargs) in enumerate(positionals, start=1):
             if nargs is None:
-                command_parser.add_argument(f'arg{index}', metavar=metavar)
+                command_parser.add_argument(f"arg{index}", metavar=metavar)
             else:
-                command_parser.add_argument(f'arg{index}', metavar=metavar, nargs=nargs)
+                command_parser.add_argument(f"arg{index}", metavar=metavar, nargs=nargs)
         for option in _CLI_VALUE_OPTIONS.get(command, ()):
-            command_parser.add_argument(option, metavar='值')
-        if command == 'watchlist':
-            command_parser.add_argument('--json', action='store_true')
-            command_parser.add_argument('--breakdown', action='store_true')
+            command_parser.add_argument(option, metavar="值")
+        if command == "watchlist":
+            command_parser.add_argument("--json", action="store_true")
+            command_parser.add_argument("--breakdown", action="store_true")
     return parser
 
 
@@ -355,16 +405,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args:
         parser.print_help()
         return 0
-    confirm_write = bool(args and args[0] == '--confirm-write')
+    confirm_write = bool(args and args[0] == "--confirm-write")
     if confirm_write:
         args.pop(0)
-    if not confirm_write and args and args[0].startswith('--') and args != ['--help']:
-        print('错误：仅支持位于子命令前的全局 --confirm-write', file=sys.stderr)
+    if not confirm_write and args and args[0].startswith("--") and args != ["--help"]:
+        print("错误：仅支持位于子命令前的全局 --confirm-write", file=sys.stderr)
         return 2
     if not args:
         parser.print_help()
         return 0
-    if args == ['--help']:
+    if args == ["--help"]:
         try:
             parser.parse_args(args)
         except SystemExit as exc:
@@ -372,18 +422,18 @@ def main(argv: list[str] | None = None) -> int:
     command, remaining = args[0], args[1:]
     classification = COMMAND_CLASSIFICATION.get(command)
     if command not in COMMANDS or classification is None:
-        print(f'错误：未知命令 {command}', file=sys.stderr)
+        print(f"错误：未知命令 {command}", file=sys.stderr)
         parser.print_help(sys.stderr)
         return 1
-    if remaining == ['--help']:
+    if remaining == ["--help"]:
         try:
             parser.parse_args(args)
         except SystemExit as exc:
             return int(exc.code or 0)
-    if classification == 'W1' and not confirm_write:
+    if classification == "W1" and not confirm_write:
         print(
-            f'需要明确确认：{command} 将修改本地投资状态；'
-            '请在子命令前提供 --confirm-write。',
+            f"需要明确确认：{command} 将修改本地投资状态；"
+            "请在子命令前提供 --confirm-write。",
             file=sys.stderr,
         )
         return 3
@@ -392,19 +442,20 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code or 0)
     database_path = paths.cache_db_path()
-    if classification == 'R0' and not database_path.exists():
-        print(f'状态数据库不存在：{database_path}', file=sys.stderr)
+    if classification == "R0" and not database_path.exists():
+        print(f"状态数据库不存在：{database_path}", file=sys.stderr)
         return 0
-    print(f'[a-stock-cache] 操作数据库: {database_path}', file=sys.stderr)
+    print(f"[a-stock-cache] 操作数据库: {database_path}", file=sys.stderr)
     try:
-        with db.read_only_scope(classification == 'R0'):
+        with db.read_only_scope(classification == "R0"):
             COMMANDS[command](remaining)
     except SystemExit as exc:
         return int(exc.code or 0)
     except sqlite3.Error as exc:
-        print(f'数据库查询失败：{exc}', file=sys.stderr)
+        print(f"数据库查询失败：{exc}", file=sys.stderr)
         return 1
     return 0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     raise SystemExit(main())

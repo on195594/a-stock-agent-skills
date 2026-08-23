@@ -24,7 +24,7 @@ UV_CACHE_DIR = os.environ.get("UV_CACHE_DIR") or str(
 # explicit checkout or wheel and records its provenance.  Tests locate it the same
 # way an operator would, and skip rather than fail when it is not provisioned here.
 LIB_ROOT = Path(os.environ.get("A_STOCK_LIB_SOURCE") or Path.home() / "a-stock-lib")
-LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.6.0-py3-none-any.whl"
+LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.6.1-py3-none-any.whl"
 
 _MISSING = f"a-stock-lib not provisioned at {LIB_ROOT}; set A_STOCK_LIB_SOURCE"
 requires_lib_wheel = pytest.mark.skipif(not LIB_WHEEL.is_file(), reason=_MISSING)
@@ -43,26 +43,67 @@ def _run(args, home):
         "UV_OFFLINE": "1",
         "UV_CACHE_DIR": UV_CACHE_DIR,
     }
-    return subprocess.run([sys.executable, "scripts/install.py", *args], env=env, capture_output=True, text=True, check=False)
+    return subprocess.run(
+        [sys.executable, "scripts/install.py", *args],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 @requires_lib_wheel
 def test_dry_run_has_no_files(tmp_path) -> None:
-    result = _run(["--client", "all", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", str(LIB_WHEEL), "--dry-run"], tmp_path)
+    result = _run(
+        [
+            "--client",
+            "all",
+            "--source",
+            ".",
+            "--target-root",
+            str(tmp_path),
+            "--a-stock-lib-wheel",
+            str(LIB_WHEEL),
+            "--dry-run",
+        ],
+        tmp_path,
+    )
     assert result.returncode == 0, result.stderr
     assert list(tmp_path.iterdir()) == []
 
 
 @requires_lib_wheel
 def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
-    result = _run(["--client", "codex", "--mode", "copy", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", str(LIB_WHEEL)], tmp_path)
+    result = _run(
+        [
+            "--client",
+            "codex",
+            "--mode",
+            "copy",
+            "--source",
+            ".",
+            "--target-root",
+            str(tmp_path),
+            "--a-stock-lib-wheel",
+            str(LIB_WHEEL),
+        ],
+        tmp_path,
+    )
     assert result.returncode == 0, result.stderr
-    manifest = next((tmp_path / ".agents/skills/a-stock-research").glob(".a-stock-suite-manifest.json"))
+    manifest = next(
+        (tmp_path / ".agents/skills/a-stock-research").glob(
+            ".a-stock-suite-manifest.json"
+        )
+    )
     assert json.loads(manifest.read_text(encoding="utf-8"))["source_hash"]
     assert (tmp_path / ".local/bin/a-stock-cache").is_symlink()
     runtime = next((tmp_path / ".local/share/a-stock-agent/runtime").iterdir())
     module_path = subprocess.check_output(
-        [str(runtime / "venv/bin/python"), "-c", "import a_stock_agent_runtime; print(a_stock_agent_runtime.__file__)"],
+        [
+            str(runtime / "venv/bin/python"),
+            "-c",
+            "import a_stock_agent_runtime; print(a_stock_agent_runtime.__file__)",
+        ],
         text=True,
     ).strip()
     assert str(Path.cwd()) not in module_path
@@ -70,12 +111,28 @@ def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
 
 @requires_lib_checkout
 def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
-    result = _run(["--client", "claude", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-source", str(LIB_ROOT)], tmp_path)
+    result = _run(
+        [
+            "--client",
+            "claude",
+            "--source",
+            ".",
+            "--target-root",
+            str(tmp_path),
+            "--a-stock-lib-source",
+            str(LIB_ROOT),
+        ],
+        tmp_path,
+    )
     assert result.returncode == 0, result.stderr
-    metadata = next((tmp_path / ".local/share/a-stock-agent/runtime").glob("*/a-stock-lib-install.json"))
+    metadata = next(
+        (tmp_path / ".local/share/a-stock-agent/runtime").glob(
+            "*/a-stock-lib-install.json"
+        )
+    )
     payload = json.loads(metadata.read_text(encoding="utf-8"))
     assert payload["name"] == "a-stock-lib"
-    assert payload["version"] == "0.6.0"
+    assert payload["version"] == "0.6.1"
     assert len(payload["wheel_sha256"]) == 64
     wheel = Path(payload["wheel"])
     assert wheel.is_file()
@@ -87,7 +144,19 @@ def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
 def test_existing_skill_is_rejected_before_runtime_install(tmp_path) -> None:
     target = tmp_path / ".agents/skills/a-stock-research"
     target.mkdir(parents=True)
-    result = _run(["--client", "codex", "--source", ".", "--target-root", str(tmp_path), "--a-stock-lib-wheel", str(LIB_WHEEL)], tmp_path)
+    result = _run(
+        [
+            "--client",
+            "codex",
+            "--source",
+            ".",
+            "--target-root",
+            str(tmp_path),
+            "--a-stock-lib-wheel",
+            str(LIB_WHEEL),
+        ],
+        tmp_path,
+    )
     assert result.returncode == 1
     assert not (tmp_path / ".local/share/a-stock-agent/runtime").exists()
 

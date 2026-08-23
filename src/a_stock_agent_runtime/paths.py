@@ -1,4 +1,5 @@
 """Portable XDG paths and external configuration for the runtime."""
+
 from __future__ import annotations
 
 import os
@@ -45,7 +46,9 @@ def _data_home() -> Path:
 
 
 def state_dir() -> Path:
-    return Path(_setting("A_STOCK_STATE_DIR", _data_home() / "a-stock-agent")).expanduser()
+    return Path(
+        _setting("A_STOCK_STATE_DIR", _data_home() / "a-stock-agent")
+    ).expanduser()
 
 
 def cache_db_path() -> Path:
@@ -61,7 +64,9 @@ def lock_dir() -> Path:
 
 
 def artifact_dir() -> Path:
-    return Path(_setting("A_STOCK_ARTIFACT_DIR", state_dir() / "artifacts")).expanduser()
+    return Path(
+        _setting("A_STOCK_ARTIFACT_DIR", state_dir() / "artifacts")
+    ).expanduser()
 
 
 def ensure_db_parent(path: str | Path) -> None:

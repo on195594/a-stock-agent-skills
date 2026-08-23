@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """SQLite Online Backup API migration and invariant report."""
+
 from __future__ import annotations
 
 import argparse
@@ -24,14 +25,17 @@ def _read_only(path: Path) -> sqlite3.Connection:
 
 def _snapshot(conn: sqlite3.Connection) -> dict[str, object]:
     schema = {
-        row[0]: row[1] for row in conn.execute(
+        row[0]: row[1]
+        for row in conn.execute(
             "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
         )
     }
     tables = list(schema)
     counts: dict[str, int] = {}
     for table in tables:
-        counts[table] = int(conn.execute(f"SELECT COUNT(*) FROM \"{table}\"").fetchone()[0])
+        counts[table] = int(
+            conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+        )
     sample: list[dict[str, object]] = []
     if "holdings" in tables:
         columns = [row[1] for row in conn.execute("PRAGMA table_info(holdings)")]
@@ -49,19 +53,26 @@ def _snapshot(conn: sqlite3.Connection) -> dict[str, object]:
     }
 
 
-def _invariant_mismatches(source: dict[str, object], target: dict[str, object]) -> list[str]:
+def _invariant_mismatches(
+    source: dict[str, object], target: dict[str, object]
+) -> list[str]:
     return [
-        field for field in ("schema", "counts", "user_version", "holdings_sample")
+        field
+        for field in ("schema", "counts", "user_version", "holdings_sample")
         if source[field] != target[field]
     ]
 
 
-def migrate(source: Path, target: Path, report: Path, expected_tables: list[str], dry_run: bool) -> int:
+def migrate(
+    source: Path, target: Path, report: Path, expected_tables: list[str], dry_run: bool
+) -> int:
     if not source.is_file():
         print(f"source database does not exist: {source}", file=sys.stderr)
         return 2
     if dry_run:
-        print(json.dumps({"source": str(source), "target": str(target), "dry_run": True}))
+        print(
+            json.dumps({"source": str(source), "target": str(target), "dry_run": True})
+        )
         return 0
     if target.exists():
         print(f"refusing to overwrite target database: {target}", file=sys.stderr)
@@ -83,13 +94,27 @@ def migrate(source: Path, target: Path, report: Path, expected_tables: list[str]
         "invariant_mismatches": mismatches,
     }
     report.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    report.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    failed = source_before["integrity"] != "ok" or target_after["integrity"] != "ok" or bool(missing or mismatches)
-    print(json.dumps({
-        "source": str(source), "target": str(target), "report": str(report),
-        "missing_expected_tables": missing, "invariant_mismatches": mismatches,
-        "status": "failed" if failed else "ok",
-    }, ensure_ascii=False))
+    report.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    failed = (
+        source_before["integrity"] != "ok"
+        or target_after["integrity"] != "ok"
+        or bool(missing or mismatches)
+    )
+    print(
+        json.dumps(
+            {
+                "source": str(source),
+                "target": str(target),
+                "report": str(report),
+                "missing_expected_tables": missing,
+                "invariant_mismatches": mismatches,
+                "status": "failed" if failed else "ok",
+            },
+            ensure_ascii=False,
+        )
+    )
     if failed:
         print("migration invariant failed", file=sys.stderr)
         return 1
@@ -104,7 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--expected-table", action="append", default=[])
     args = parser.parse_args(argv)
-    return migrate(args.source_db, args.target_db, args.report, args.expected_table, args.dry_run)
+    return migrate(
+        args.source_db, args.target_db, args.report, args.expected_table, args.dry_run
+    )
 
 
 if __name__ == "__main__":

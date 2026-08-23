@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate portable Skill contracts without importing the runtime."""
+
 from __future__ import annotations
 
 import argparse
@@ -43,7 +44,9 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
             continue
         if fields.get("name") != skill:
             errors.append(f"{path}: name must equal directory")
-        if not fields.get("description") or not re.search(r"use|when|触发|用于", fields["description"], re.I):
+        if not fields.get("description") or not re.search(
+            r"use|when|触发|用于", fields["description"], re.I
+        ):
             errors.append(f"{path}: description lacks trigger language")
         for required in ("license", "compatibility"):
             if not fields.get(required):
@@ -72,7 +75,9 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
                 r"(?:\bagy\s+--|\bcodex:|\bclaude:|\bhermes:)", text, re.I
             ):
                 errors.append(f"{path}: client-specific tool invocation")
-            if re.search(r"(?:cache\.db(?:-(?:wal|shm))?|\.env|/logs/|/locks/)", path.name):
+            if re.search(
+                r"(?:cache\.db(?:-(?:wal|shm))?|\.env|/logs/|/locks/)", path.name
+            ):
                 errors.append(f"mutable file packaged: {path}")
     return errors
 

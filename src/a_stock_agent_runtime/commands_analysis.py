@@ -274,7 +274,7 @@ def _validate_cycle_stage_for_framework(result: str, framework: str) -> None:
 
 
 def cmd_score_fundamentals(args: list[str]) -> None:
-    """用 a-stock-lib 0.6.0 对缓存与显式补充指标执行只读基本面评分。"""
+    """用 a-stock-lib 对缓存与显式补充指标执行只读基本面评分。"""
     if len(args) != 3:
         print("错误：需要参数 <代码> <框架A-F> <补充指标JSON>", file=sys.stderr)
         sys.exit(1)

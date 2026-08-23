@@ -1,4 +1,5 @@
 """Reversible, standard-library installer for the portable Skill suite."""
+
 from __future__ import annotations
 
 import argparse
@@ -21,7 +22,7 @@ CLIENT_ROOTS = {
 }
 SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
 CONSOLE_SCRIPTS = ("a-stock-cache", "a-stock-fetch", "a-stock-install")
-REQUIRED_A_STOCK_LIB_VERSION = "0.6.0"
+REQUIRED_A_STOCK_LIB_VERSION = "0.6.1"
 
 
 def _sha256(path: Path) -> str:
@@ -74,12 +75,26 @@ def _build_lib_wheel(source: Path, destination: Path) -> Path:
     else:
         source_python = source / ".venv" / "bin" / "python"
         if source_python.is_file():
-            command = [str(source_python), "-m", "build", str(source), "--wheel", "--outdir", str(destination)]
+            command = [
+                str(source_python),
+                "-m",
+                "build",
+                str(source),
+                "--wheel",
+                "--outdir",
+                str(destination),
+            ]
         else:
             command = []
     if command:
         try:
-            subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            subprocess.run(
+                command,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
         except (OSError, subprocess.CalledProcessError):
             # A checked-in/generated dist wheel is an explicit source checkout
             # fallback when bootstrap networking is unavailable.
@@ -102,7 +117,10 @@ def _build_suite_wheel(source: Path, destination: Path) -> Path:
     shutil.copytree(source / "src", build_source / "src")
     subprocess.run(
         [uv, "build", str(build_source), "--wheel", "--out-dir", str(destination)],
-        check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     wheels = sorted(destination.glob("a_stock_agent_skills-*.whl"))
     if not wheels:
@@ -128,7 +146,10 @@ def _backup(path: Path, root: Path) -> Path:
 
 
 def _install_runtime(
-    source: Path, root: Path, lib_source: Path | None, lib_wheel: Path | None,
+    source: Path,
+    root: Path,
+    lib_source: Path | None,
+    lib_wheel: Path | None,
     suite_wheel: Path,
 ) -> tuple[Path, str]:
     release = _release(source)
@@ -152,7 +173,9 @@ def _install_runtime(
             temp_dir = tempfile.TemporaryDirectory(prefix="a-stock-lib-wheel-")
             wheel = _build_lib_wheel(lib_source, Path(temp_dir.name))
         if wheel is None:
-            raise ValueError("one of --a-stock-lib-source or --a-stock-lib-wheel is required")
+            raise ValueError(
+                "one of --a-stock-lib-source or --a-stock-lib-wheel is required"
+            )
         lib_version = wheel.name.split("-", 2)[1].replace("_", "-")
         if lib_version != REQUIRED_A_STOCK_LIB_VERSION:
             raise RuntimeError(
@@ -169,20 +192,43 @@ def _install_runtime(
         if installer is None:
             raise RuntimeError("uv is required for immutable runtime installation")
         install_cmd = [
-            installer, "pip", "install", "--python", str(python),
-            "--no-deps", "--force-reinstall",
+            installer,
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            "--no-deps",
+            "--force-reinstall",
         ]
-        subprocess.run([*install_cmd, str(wheel)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        subprocess.run([*install_cmd, str(suite_wheel)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        subprocess.run(
+            [*install_cmd, str(wheel)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        subprocess.run(
+            [*install_cmd, str(suite_wheel)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
     installed = subprocess.check_output(
-        [str(python), "-c", "import importlib.metadata as m; print(m.version('a-stock-lib'))"],
+        [
+            str(python),
+            "-c",
+            "import importlib.metadata as m; print(m.version('a-stock-lib'))",
+        ],
         text=True,
     ).strip()
     if installed != lib_version:
-        raise RuntimeError(f"a-stock-lib version mismatch: expected {lib_version}, got {installed}")
+        raise RuntimeError(
+            f"a-stock-lib version mismatch: expected {lib_version}, got {installed}"
+        )
     metadata = {
         "name": "a-stock-lib",
         "version": lib_version,
@@ -205,7 +251,9 @@ def _install_runtime(
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Install the portable A-stock Skills suite")
+    parser = argparse.ArgumentParser(
+        description="Install the portable A-stock Skills suite"
+    )
     parser.add_argument("--client", choices=[*CLIENT_ROOTS, "all"], default="all")
     parser.add_argument("--mode", choices=("symlink", "copy"), default="symlink")
     parser.add_argument("--source", type=Path, default=Path.cwd())
@@ -225,10 +273,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"source is not a canonical suite: {source}", file=sys.stderr)
         return 2
     if bool(args.a_stock_lib_source) == bool(args.a_stock_lib_wheel):
-        print("exactly one of --a-stock-lib-source or --a-stock-lib-wheel is required", file=sys.stderr)
+        print(
+            "exactly one of --a-stock-lib-source or --a-stock-lib-wheel is required",
+            file=sys.stderr,
+        )
         return 2
-    lib_source = args.a_stock_lib_source.expanduser().resolve() if args.a_stock_lib_source else None
-    lib_wheel = args.a_stock_lib_wheel.expanduser().resolve() if args.a_stock_lib_wheel else None
+    lib_source = (
+        args.a_stock_lib_source.expanduser().resolve()
+        if args.a_stock_lib_source
+        else None
+    )
+    lib_wheel = (
+        args.a_stock_lib_wheel.expanduser().resolve()
+        if args.a_stock_lib_wheel
+        else None
+    )
     if lib_source and not (lib_source / "pyproject.toml").is_file():
         print(f"invalid a-stock-lib source: {lib_source}", file=sys.stderr)
         return 2
@@ -239,26 +298,50 @@ def main(argv: list[str] | None = None) -> int:
         print("uv is required for immutable runtime installation", file=sys.stderr)
         return 2
     clients = list(CLIENT_ROOTS) if args.client == "all" else [args.client]
-    if root.joinpath(".local", "bin").as_posix() not in os.environ.get("PATH", "").split(os.pathsep):
-        print(f"PATH must contain {root / '.local' / 'bin'} for stable CLI discovery", file=sys.stderr)
+    if root.joinpath(".local", "bin").as_posix() not in os.environ.get(
+        "PATH", ""
+    ).split(os.pathsep):
+        print(
+            f"PATH must contain {root / '.local' / 'bin'} for stable CLI discovery",
+            file=sys.stderr,
+        )
         return 2
     release = _release(source)
-    print(json.dumps({"source": str(source), "release": release, "clients": clients, "mode": args.mode}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "source": str(source),
+                "release": release,
+                "clients": clients,
+                "mode": args.mode,
+            },
+            ensure_ascii=False,
+        )
+    )
     if args.dry_run:
         for client in clients:
             for skill in SKILLS:
-                print(f"DRY-RUN {args.mode} {source / 'skills' / skill} -> {_target(root, client, skill)}")
-        print(f"DRY-RUN runtime -> {root / '.local/share/a-stock-agent/runtime' / release / 'venv'}")
+                print(
+                    f"DRY-RUN {args.mode} {source / 'skills' / skill} -> {_target(root, client, skill)}"
+                )
+        print(
+            f"DRY-RUN runtime -> {root / '.local/share/a-stock-agent/runtime' / release / 'venv'}"
+        )
         return 0
     targets = [
         (source / "skills" / skill, _target(root, client, skill))
-        for client in clients for skill in SKILLS
+        for client in clients
+        for skill in SKILLS
     ]
     for source_skill, _ in targets:
         if not (source_skill / "SKILL.md").is_file():
             print(f"invalid source skill: {source_skill}", file=sys.stderr)
             return 2
-    existing = [destination for _, destination in targets if destination.exists() or destination.is_symlink()]
+    existing = [
+        destination
+        for _, destination in targets
+        if destination.exists() or destination.is_symlink()
+    ]
     if existing and not args.force:
         print(f"refusing to replace existing path: {existing[0]}", file=sys.stderr)
         return 1
@@ -269,9 +352,18 @@ def main(argv: list[str] | None = None) -> int:
         for destination in existing:
             backup = _backup(destination, root)
             rollback.append({"target": str(destination), "backup": str(backup)})
-        manifest_path = root / ".local" / "share" / "a-stock-agent" / f"rollback-{time.time_ns()}.json"
+        manifest_path = (
+            root
+            / ".local"
+            / "share"
+            / "a-stock-agent"
+            / f"rollback-{time.time_ns()}.json"
+        )
         manifest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        manifest_path.write_text(json.dumps({"release": release, "entries": rollback}, indent=2), encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps({"release": release, "entries": rollback}, indent=2),
+            encoding="utf-8",
+        )
 
         _install_runtime(source, root, lib_source, lib_wheel, suite_wheel)
         for source_skill, destination in targets:
@@ -297,7 +389,9 @@ def main(argv: list[str] | None = None) -> int:
         for client in clients:
             for skill in SKILLS:
                 if not (_target(root, client, skill) / "SKILL.md").is_file():
-                    raise RuntimeError(f"client discovery validation failed: {_target(root, client, skill)}")
+                    raise RuntimeError(
+                        f"client discovery validation failed: {_target(root, client, skill)}"
+                    )
         print(f"installed release {release}; rollback manifest: {manifest_path}")
         return 0
     except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as exc:

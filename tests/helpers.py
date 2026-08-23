@@ -1,4 +1,5 @@
 """Test factories for strict cache write contracts."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -6,29 +7,31 @@ from typing import Any
 from a_stock_agent_runtime import cache
 
 
-def valid_fundamentals_payload(data: dict[str, Any], period: str = '2025年报') -> dict[str, Any]:
+def valid_fundamentals_payload(
+    data: dict[str, Any], period: str = "2025年报"
+) -> dict[str, Any]:
     """Add the mandatory period, null reasons and provenance envelope."""
-    if {'data_period', 'null_reasons', 'field_provenance'} <= set(data):
+    if {"data_period", "null_reasons", "field_provenance"} <= set(data):
         return data
     payload = dict(data)
     null_reasons = {
-        field: 'fixture missing value'
-        for field, value in data.items()
-        if value is None
+        field: "fixture missing value" for field, value in data.items() if value is None
     }
     provenance = {
         field: {
-            'source': 'test-fixture',
-            'as_of': period,
-            'status': 'missing' if value is None else 'ok',
+            "source": "test-fixture",
+            "as_of": period,
+            "status": "missing" if value is None else "ok",
         }
         for field, value in data.items()
     }
-    payload.update({
-        'data_period': period,
-        'null_reasons': null_reasons,
-        'field_provenance': provenance,
-    })
+    payload.update(
+        {
+            "data_period": period,
+            "null_reasons": null_reasons,
+            "field_provenance": provenance,
+        }
+    )
     return payload
 
 
@@ -51,8 +54,8 @@ def record_valid_quote(code: str, price: float = 10.0) -> None:
         code,
         price,
         cache.cst_today(),
-        '10:00:00',
-        'sina',
-        {'sina': {'price': price}},
+        "10:00:00",
+        "sina",
+        {"sina": {"price": price}},
         False,
     )

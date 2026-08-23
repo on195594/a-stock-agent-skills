@@ -44,7 +44,9 @@ def _balance() -> pd.DataFrame:
     )
 
 
-def test_latest_report_snapshot_uses_same_period_latest_revision_without_annualising() -> None:
+def test_latest_report_snapshot_uses_same_period_latest_revision_without_annualising() -> (
+    None
+):
     snapshot = fetcher._build_latest_report_snapshot(
         _indicator(), _income(), _balance(), annual_period="2025-12-31"
     )
@@ -56,12 +58,28 @@ def test_latest_report_snapshot_uses_same_period_latest_revision_without_annuali
     fields = snapshot["fields"]
     assert fields["revenue"] == {"value": 1000.0, "status": "ok", "direction": "up"}
     assert fields["revenue_yoy"] == {"value": 6.0, "status": "ok", "direction": "up"}
-    assert fields["net_profit_parent"] == {"value": 80.0, "status": "ok", "direction": "down"}
-    assert fields["net_profit_yoy"] == {"value": -5.0, "status": "ok", "direction": "down"}
-    assert fields["deducted_net_profit_yoy"] == {"value": -7.0, "status": "ok", "direction": "down"}
+    assert fields["net_profit_parent"] == {
+        "value": 80.0,
+        "status": "ok",
+        "direction": "down",
+    }
+    assert fields["net_profit_yoy"] == {
+        "value": -5.0,
+        "status": "ok",
+        "direction": "down",
+    }
+    assert fields["deducted_net_profit_yoy"] == {
+        "value": -7.0,
+        "status": "ok",
+        "direction": "down",
+    }
     assert fields["roe"] == {"value": 3.2, "status": "ok", "direction": "missing"}
     assert fields["bps"] == {"value": 10.3, "status": "ok", "direction": "missing"}
-    assert fields["equity_parent"] == {"value": 550.0, "status": "ok", "direction": "up"}
+    assert fields["equity_parent"] == {
+        "value": 550.0,
+        "status": "ok",
+        "direction": "up",
+    }
 
 
 def test_latest_report_snapshot_preserves_field_level_missing() -> None:
@@ -96,7 +114,9 @@ def test_fetch_fin_data_keeps_annual_baseline_and_exports_snapshot(monkeypatch) 
     expected = {"report_period": "2026Q1", "fields": {}}
     annual.attrs["latest_report_snapshot"] = expected
     monkeypatch.setattr(fetcher, "_fetch_financials", lambda code: annual)
-    monkeypatch.setattr(fetcher, "timed_call_with_retry", lambda fn, code, timeout: fn(code))
+    monkeypatch.setattr(
+        fetcher, "timed_call_with_retry", lambda fn, code, timeout: fn(code)
+    )
     results: dict = {}
     null_reasons: dict = {}
 

@@ -40,7 +40,14 @@ CLI_ARGUMENT_CASES = {
     "add-holding": (
         ["600000", "10"],
         [
-            "600000", "10", "100", "--notes", "备注", "--fee", "1", "--date",
+            "600000",
+            "10",
+            "100",
+            "--notes",
+            "备注",
+            "--fee",
+            "1",
+            "--date",
             "2026-08-11",
         ],
     ),
@@ -51,7 +58,14 @@ CLI_ARGUMENT_CASES = {
     "sell-holding": (
         ["600000", "10", "all"],
         [
-            "600000", "10", "all", "--fee", "1", "--tax", "1", "--date",
+            "600000",
+            "10",
+            "all",
+            "--fee",
+            "1",
+            "--tax",
+            "1",
+            "--date",
             "2026-08-11",
         ],
     ),
@@ -64,7 +78,13 @@ CLI_ARGUMENT_CASES = {
     "retro-add": (
         ["600000", "无错误"],
         [
-            "600000", "无错误", "--note", "备注", "--thesis", "理由", "--gap",
+            "600000",
+            "无错误",
+            "--note",
+            "备注",
+            "--thesis",
+            "理由",
+            "--gap",
             "改进",
         ],
     ),
@@ -97,7 +117,9 @@ def test_public_mains_return_int() -> None:
     assert isinstance(fetcher.main(["--help"]), int)
 
 
-def test_w1_requires_prefix_confirmation_without_opening_database(tmp_path, monkeypatch, capsys) -> None:
+def test_w1_requires_prefix_confirmation_without_opening_database(
+    tmp_path, monkeypatch, capsys
+) -> None:
     database = tmp_path / "cache.db"
     monkeypatch.setenv("CACHE_DB_PATH", str(database))
     assert cache.main(["add-holding", "000001", "10", "100"]) == 3
@@ -129,7 +151,9 @@ def test_cli_argument_matrix_covers_every_command(monkeypatch) -> None:
             command,
             lambda args, name=command: called.append((name, args)),
         )
-        prefix = ["--confirm-write"] if cache.COMMAND_CLASSIFICATION[command] == "W1" else []
+        prefix = (
+            ["--confirm-write"] if cache.COMMAND_CLASSIFICATION[command] == "W1" else []
+        )
         for case in cases:
             called.clear()
             assert cache.main([*prefix, command, *case]) == 0, command
@@ -166,8 +190,12 @@ def test_argparse_rejects_extra_positionals_and_unknown_options(monkeypatch) -> 
     cache.paths.cache_db_path().touch()
     for command, (_, maximum) in CLI_ARGUMENT_CASES.items():
         monkeypatch.setitem(cache.COMMANDS, command, fail_if_called)
-        prefix = ["--confirm-write"] if cache.COMMAND_CLASSIFICATION[command] == "W1" else []
-        assert cache.main([*prefix, command, *maximum, "EXTRA_POSITIONAL"]) == 2, command
+        prefix = (
+            ["--confirm-write"] if cache.COMMAND_CLASSIFICATION[command] == "W1" else []
+        )
+        assert cache.main([*prefix, command, *maximum, "EXTRA_POSITIONAL"]) == 2, (
+            command
+        )
         assert cache.main([*prefix, command, "--unknown-option"]) == 2, command
 
 

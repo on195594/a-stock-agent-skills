@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 - 2026-08-23
+
+- Requires `a-stock-lib==0.6.1`, whose rule hash follows executable scorer source automatically.
+- Applied the existing Ruff formatter across maintained Python sources and tests, closing the historical format baseline gap without behavior changes.
+
 ## 0.1.5 - 2026-08-23
 
 - Added the read-only `a-stock-cache score-fundamentals` bridge to the A—F deterministic 60-point scorer in `a-stock-lib==0.6.0`.

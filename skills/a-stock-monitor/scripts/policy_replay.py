@@ -134,10 +134,7 @@ def replay(bars: list[Bar], policy: Policy) -> ReplayResult:
         if valuation is not None and valuation >= policy.valuation_exit:
             pending_fraction = shares / initial_shares
             continue
-        if (
-            not stop_done
-            and bar.close <= reference_cost * (1 - policy.stop2_loss)
-        ):
+        if not stop_done and bar.close <= reference_cost * (1 - policy.stop2_loss):
             pending_fraction = 0.5
             stop_done = True
             continue
@@ -222,7 +219,9 @@ def main() -> None:
         f"{_pct(current.max_drawdown)},{current.turnover:.2f},{current.trades}"
     )
     if args.grid:
-        print("\n\ntier1_gain,stop2_loss,valuation_exit,total_return,max_drawdown,turnover")
+        print(
+            "\n\ntier1_gain,stop2_loss,valuation_exit,total_return,max_drawdown,turnover"
+        )
         for policy, result in grid_replay(bars, args.fee_bps):
             print(
                 f"{policy.tier1_gain:.2f},{policy.stop2_loss:.2f},"

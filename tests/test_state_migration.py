@@ -22,11 +22,27 @@ def test_online_backup_and_report(tmp_path, capsys) -> None:
     report = tmp_path / "report.json"
     with sqlite3.connect(source) as conn:
         conn.execute("PRAGMA user_version=7")
-        conn.execute("CREATE TABLE holdings(code TEXT PRIMARY KEY, shares INTEGER NOT NULL)")
+        conn.execute(
+            "CREATE TABLE holdings(code TEXT PRIMARY KEY, shares INTEGER NOT NULL)"
+        )
         conn.execute("CREATE TABLE transactions(id INTEGER PRIMARY KEY, code TEXT)")
         conn.execute("CREATE TABLE analysis_results(id INTEGER PRIMARY KEY, code TEXT)")
         conn.execute("INSERT INTO holdings VALUES ('000001', 100)")
-    assert module.main(["--source-db", str(source), "--target-db", str(target), "--report", str(report), "--expected-table", "holdings"]) == 0
+    assert (
+        module.main(
+            [
+                "--source-db",
+                str(source),
+                "--target-db",
+                str(target),
+                "--report",
+                str(report),
+                "--expected-table",
+                "holdings",
+            ]
+        )
+        == 0
+    )
     payload = json.loads(report.read_text(encoding="utf-8"))
     assert payload["target"]["integrity"] == "ok"
     assert payload["target"]["user_version"] == 7
@@ -38,7 +54,11 @@ def test_online_backup_and_report(tmp_path, capsys) -> None:
 
 def test_invariant_mismatch_fails_and_is_reported(tmp_path, monkeypatch) -> None:
     module = _module()
-    source, target, report = tmp_path / "source.db", tmp_path / "target.db", tmp_path / "report.json"
+    source, target, report = (
+        tmp_path / "source.db",
+        tmp_path / "target.db",
+        tmp_path / "report.json",
+    )
     with sqlite3.connect(source) as conn:
         conn.execute("CREATE TABLE holdings(code TEXT)")
         conn.execute("INSERT INTO holdings VALUES ('000001')")
@@ -55,7 +75,9 @@ def test_invariant_mismatch_fails_and_is_reported(tmp_path, monkeypatch) -> None
 
     monkeypatch.setattr(module, "_snapshot", changed_target)
     assert module.migrate(source, target, report, [], False) == 1
-    assert json.loads(report.read_text(encoding="utf-8"))["invariant_mismatches"] == ["counts"]
+    assert json.loads(report.read_text(encoding="utf-8"))["invariant_mismatches"] == [
+        "counts"
+    ]
 
 
 def test_dry_run_creates_no_target_or_report(tmp_path) -> None:
@@ -64,5 +86,18 @@ def test_dry_run_creates_no_target_or_report(tmp_path) -> None:
     with sqlite3.connect(source) as conn:
         conn.execute("CREATE TABLE holdings(code TEXT)")
     target, report = tmp_path / "target.db", tmp_path / "report.json"
-    assert module.main(["--source-db", str(source), "--target-db", str(target), "--report", str(report), "--dry-run"]) == 0
+    assert (
+        module.main(
+            [
+                "--source-db",
+                str(source),
+                "--target-db",
+                str(target),
+                "--report",
+                str(report),
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
     assert not target.exists() and not report.exists()

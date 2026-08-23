@@ -36,9 +36,9 @@ def test_standalone_smoke_uses_isolated_python() -> None:
 
 
 def test_research_routing_and_checklist_rubric_match_research_skill() -> None:
-    rubric = (ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md").read_text(
-        encoding="utf-8"
-    )
+    rubric = (
+        ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
+    ).read_text(encoding="utf-8")
     research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
     bank = (ROOT / "skills/a-stock-research/references/frameworks/B.md").read_text(
         encoding="utf-8"
@@ -55,13 +55,13 @@ def test_research_routing_and_checklist_rubric_match_research_skill() -> None:
 
 
 def test_investment_review_repairs_are_part_of_the_research_and_qa_contract() -> None:
-    rubric = (ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md").read_text(
+    rubric = (
+        ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
+    ).read_text(encoding="utf-8")
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+    resource = (ROOT / "skills/a-stock-research/references/frameworks/C.md").read_text(
         encoding="utf-8"
     )
-    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
-    resource = (
-        ROOT / "skills/a-stock-research/references/frameworks/C.md"
-    ).read_text(encoding="utf-8")
 
     assert "综合得分参考阈值" not in research
     assert "可用资金 × 该股仓位建议比例" not in research
@@ -77,9 +77,9 @@ def test_investment_review_repairs_are_part_of_the_research_and_qa_contract() ->
 
 
 def test_second_investment_review_fail_closed_contract() -> None:
-    rubric = (ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md").read_text(
-        encoding="utf-8"
-    )
+    rubric = (
+        ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
+    ).read_text(encoding="utf-8")
     qa_skill = (ROOT / "skills/a-stock-qa/SKILL.md").read_text(encoding="utf-8")
     research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
 
@@ -99,9 +99,9 @@ def test_second_investment_review_fail_closed_contract() -> None:
 
 def test_wuxi_retro_repairs_are_pinned_in_research_and_qa_contracts() -> None:
     qa_skill = (ROOT / "skills/a-stock-qa/SKILL.md").read_text(encoding="utf-8")
-    rubric = (ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md").read_text(
-        encoding="utf-8"
-    )
+    rubric = (
+        ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
+    ).read_text(encoding="utf-8")
     research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
     framework_a = (
         ROOT / "skills/a-stock-research/references/frameworks/A.md"

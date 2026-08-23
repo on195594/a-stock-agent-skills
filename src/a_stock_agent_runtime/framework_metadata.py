@@ -11,6 +11,7 @@ ChecklistDefinition/ChecklistItem 仍定义在 checklist.py，这里只在 TYPE_
 `from __future__ import annotations`，注解本身是字符串，不会在模块加载时触发
 真正的 import，因此不会形成循环。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

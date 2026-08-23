@@ -1,4 +1,5 @@
 """Database-backed fundamentals, quote, and indicator stores."""
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,7 @@ from datetime import date, time as dtime, timedelta
 from a_stock_agent_runtime import db, domain
 
 logger = logging.getLogger(__name__)
-_DATA_PERIOD_RE = re.compile(r'^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$')
+_DATA_PERIOD_RE = re.compile(r"^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$")
 QUOTE_SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 QUOTE_SNAPSHOT_RETENTION_PER_CODE = 64
 MAX_SNAPSHOT_CLOCK_SKEW = timedelta(seconds=30)
@@ -20,40 +21,46 @@ def validate_fundamentals_payload(data: dict) -> str | None:
     """Validate report period, null reasons and per-field provenance."""
     if not isinstance(data, dict):
         return "基本面数据必须是 JSON 对象"
-    period = data.get('data_period')
+    period = data.get("data_period")
     if not isinstance(period, str) or _DATA_PERIOD_RE.fullmatch(period) is None:
         return "data_period 必须为 YYYY年报、YYYY半年报或 YYYYQ1—YYYYQ3"
-    null_reasons = data.get('null_reasons')
-    provenance = data.get('field_provenance')
+    null_reasons = data.get("null_reasons")
+    provenance = data.get("field_provenance")
     if not isinstance(null_reasons, dict):
         return "null_reasons 必须是 JSON 对象"
     if not isinstance(provenance, dict):
         return "field_provenance 必须是 JSON 对象"
 
-    business_fields = set(data) - {'data_period', 'null_reasons', 'field_provenance'}
+    business_fields = set(data) - {"data_period", "null_reasons", "field_provenance"}
     for field in sorted(business_fields):
         field_provenance = provenance.get(field)
         if not isinstance(field_provenance, dict):
             return f"字段 {field} 缺少 field_provenance"
-        source = field_provenance.get('source')
-        as_of = field_provenance.get('as_of')
-        status = field_provenance.get('status')
+        source = field_provenance.get("source")
+        as_of = field_provenance.get("as_of")
+        status = field_provenance.get("status")
         if not isinstance(source, str) or not source.strip():
             return f"字段 {field} provenance.source 缺失"
         if not isinstance(as_of, str) or not as_of.strip():
             return f"字段 {field} provenance.as_of 缺失"
-        if status not in {'ok', 'missing'}:
+        if status not in {"ok", "missing"}:
             return f"字段 {field} provenance.status 必须为 ok 或 missing"
         if data[field] is None:
-            if status != 'missing' or not isinstance(null_reasons.get(field), str) or not null_reasons[field].strip():
+            if (
+                status != "missing"
+                or not isinstance(null_reasons.get(field), str)
+                or not null_reasons[field].strip()
+            ):
                 return f"缺失字段 {field} 必须同时提供 status=missing 和 null_reasons"
-        elif status != 'ok':
+        elif status != "ok":
             return f"非空字段 {field} 的 provenance.status 必须为 ok"
 
     unknown_provenance = set(provenance) - business_fields
     if unknown_provenance:
         return f"field_provenance 包含未写入的字段: {', '.join(sorted(unknown_provenance))}"
-    unknown_reasons = set(null_reasons) - {field for field in business_fields if data[field] is None}
+    unknown_reasons = set(null_reasons) - {
+        field for field in business_fields if data[field] is None
+    }
     if unknown_reasons:
         return f"null_reasons 包含非缺失字段: {', '.join(sorted(unknown_reasons))}"
     return None
@@ -106,24 +113,30 @@ def record_quote_snapshot(
     fetched_at_value = fetched_at_dt.isoformat()
     with db.db_session() as conn:
         conn.execute(
-            '''INSERT INTO quote_snapshots
+            """INSERT INTO quote_snapshots
                (code, price, quote_date, quote_time, fetched_at, source,
                 verification_sources, degraded, valid)
-               VALUES (?,?,?,?,?,?,?,?,1)''',
+               VALUES (?,?,?,?,?,?,?,?,1)""",
             (
-                code, price, quote_date, quote_time, fetched_at_value, source,
-                json.dumps(verification_sources, ensure_ascii=False), int(degraded),
+                code,
+                price,
+                quote_date,
+                quote_time,
+                fetched_at_value,
+                source,
+                json.dumps(verification_sources, ensure_ascii=False),
+                int(degraded),
             ),
         )
         conn.execute(
-            '''DELETE FROM quote_snapshots
+            """DELETE FROM quote_snapshots
                WHERE code=?
                  AND id NOT IN (
                      SELECT id FROM quote_snapshots
                      WHERE code=?
                      ORDER BY fetched_at DESC, id DESC
                      LIMIT ?
-                 )''',
+                 )""",
             (code, code, QUOTE_SNAPSHOT_RETENTION_PER_CODE),
         )
         conn.commit()
@@ -139,10 +152,10 @@ def get_latest_quote_snapshot(
         raise ValueError("max_age must be non-negative")
     with db.db_session() as conn:
         row = conn.execute(
-            '''SELECT price, quote_date, quote_time, fetched_at, source,
+            """SELECT price, quote_date, quote_time, fetched_at, source,
                       verification_sources, degraded
                FROM quote_snapshots
-               WHERE code=? AND valid=1 ORDER BY fetched_at DESC LIMIT 1''',
+               WHERE code=? AND valid=1 ORDER BY fetched_at DESC LIMIT 1""",
             (code,),
         ).fetchone()
     if row is None:
@@ -157,11 +170,14 @@ def get_latest_quote_snapshot(
     if max_age is not None and age > max_age:
         return None
     return {
-        'price': row[0], 'quote_date': row[1], 'quote_time': row[2],
-        'fetched_at': row[3], 'source': row[4],
-        'verification_sources': safe_json_value(row[5], dict, {}),
-        'degraded': bool(row[6]),
-        'quote_as_of': f"{row[1]}T{row[2]}",
+        "price": row[0],
+        "quote_date": row[1],
+        "quote_time": row[2],
+        "fetched_at": row[3],
+        "source": row[4],
+        "verification_sources": safe_json_value(row[5], dict, {}),
+        "degraded": bool(row[6]),
+        "quote_as_of": f"{row[1]}T{row[2]}",
     }
 
 
@@ -190,36 +206,38 @@ def set_market_indicator_snapshot(
     fetched_at_value = fetched_at_dt.isoformat()
     with db.db_session() as conn:
         conn.execute(
-            '''INSERT INTO market_indicator_snapshots
+            """INSERT INTO market_indicator_snapshots
                (indicator_key, value, as_of, fetched_at, source, status)
                VALUES (?,?,?,?,?,'ok')
                ON CONFLICT(indicator_key) DO UPDATE SET
                    value=excluded.value, as_of=excluded.as_of,
                    fetched_at=excluded.fetched_at, source=excluded.source,
                    status='ok'
-               WHERE excluded.fetched_at >= market_indicator_snapshots.fetched_at''',
+               WHERE excluded.fetched_at >= market_indicator_snapshots.fetched_at""",
             (indicator_key, value, as_of, fetched_at_value, source),
         )
         conn.commit()
 
 
-def update_qualitative_only_security(code: str, name: str, industry: str | None) -> None:
+def update_qualitative_only_security(
+    code: str, name: str, industry: str | None
+) -> None:
     """Persist or clear the terminal qualitative-only routing decision."""
-    if not industry or '未知' in industry:
+    if not industry or "未知" in industry:
         return
     with db.db_session() as conn:
         if domain.is_unsupported_financial_industry(industry):
             conn.execute(
-                '''INSERT INTO qualitative_only_securities
+                """INSERT INTO qualitative_only_securities
                    (code, name, industry, updated_at) VALUES (?,?,?,?)
                    ON CONFLICT(code) DO UPDATE SET
                        name=excluded.name, industry=excluded.industry,
-                       updated_at=excluded.updated_at''',
+                       updated_at=excluded.updated_at""",
                 (code, name, industry, domain.utc_now_iso()),
             )
         else:
             conn.execute(
-                'DELETE FROM qualitative_only_securities WHERE code=?', (code,)
+                "DELETE FROM qualitative_only_securities WHERE code=?", (code,)
             )
         conn.commit()
 
@@ -234,11 +252,11 @@ def get_market_indicator_snapshot(
         raise ValueError("max_age must be non-negative")
     with db.db_session() as conn:
         row = conn.execute(
-            '''SELECT value, as_of, fetched_at, source, status
-               FROM market_indicator_snapshots WHERE indicator_key=?''',
+            """SELECT value, as_of, fetched_at, source, status
+               FROM market_indicator_snapshots WHERE indicator_key=?""",
             (indicator_key,),
         ).fetchone()
-    if row is None or row[4] != 'ok' or not row[3]:
+    if row is None or row[4] != "ok" or not row[3]:
         return None
     try:
         age = domain.utc_now() - domain.parse_timestamp_utc(row[2])
@@ -249,16 +267,26 @@ def get_market_indicator_snapshot(
         return None
     if max_age is not None and age > max_age:
         return None
-    return {'value': row[0], 'as_of': row[1], 'fetched_at': row[2], 'source': row[3], 'status': row[4]}
+    return {
+        "value": row[0],
+        "as_of": row[1],
+        "fetched_at": row[2],
+        "source": row[3],
+        "status": row[4],
+    }
 
 
 def add_market_indicators(data: dict) -> dict:
     """Expose fresh global indicators without storing them per stock."""
     result = dict(data)
-    snapshot = get_market_indicator_snapshot('bond_yield_10y', max_age=timedelta(hours=24))
+    snapshot = get_market_indicator_snapshot(
+        "bond_yield_10y", max_age=timedelta(hours=24)
+    )
     if snapshot is not None:
-        result['bond_yield_10y'] = snapshot['value']
-        result.setdefault('market_indicator_provenance', {})['bond_yield_10y'] = snapshot
+        result["bond_yield_10y"] = snapshot["value"]
+        result.setdefault("market_indicator_provenance", {})["bond_yield_10y"] = (
+            snapshot
+        )
     return result
 
 
@@ -266,8 +294,8 @@ def get_fundamentals(code: str) -> dict | None:
     """获取基本面缓存。未命中或过期返回 None；命中返回含 _cache_meta 的 dict。"""
     with db.db_session() as conn:
         row = conn.execute(
-            'SELECT name, industry, data, updated_at, ttl_hours FROM stock_fundamentals WHERE code=?',
-            (code,)
+            "SELECT name, industry, data, updated_at, ttl_hours FROM stock_fundamentals WHERE code=?",
+            (code,),
         ).fetchone()
     if not row:
         return None
@@ -275,15 +303,19 @@ def get_fundamentals(code: str) -> dict | None:
     if domain.is_expired(updated_at, ttl_hours):
         return None
     result = add_market_indicators(json.loads(data))
-    result['_cache_meta'] = {
-        'code': code, 'name': name, 'industry': industry,
-        'updated_at': domain.format_timestamp_cst(updated_at), 'ttl_hours': ttl_hours
+    result["_cache_meta"] = {
+        "code": code,
+        "name": name,
+        "industry": industry,
+        "updated_at": domain.format_timestamp_cst(updated_at),
+        "ttl_hours": ttl_hours,
     }
     return result
 
 
-def set_fundamentals(code: str, name: str, industry: str,
-                     data_dict: dict, ttl: int | None = None) -> str:
+def set_fundamentals(
+    code: str, name: str, industry: str, data_dict: dict, ttl: int | None = None
+) -> str:
     """写入基本面缓存，ttl=None 时按行业自动推断。返回状态消息。"""
     validation_error = validate_fundamentals_payload(data_dict)
     if validation_error:
@@ -291,11 +323,17 @@ def set_fundamentals(code: str, name: str, industry: str,
     ttl_hours = ttl if ttl is not None else domain.get_industry_ttl(industry)
     with db.db_session() as conn:
         conn.execute(
-            '''INSERT OR REPLACE INTO stock_fundamentals
+            """INSERT OR REPLACE INTO stock_fundamentals
                (code, name, industry, data, updated_at, ttl_hours)
-               VALUES (?,?,?,?,?,?)''',
-            (code, name, industry, json.dumps(data_dict, ensure_ascii=False),
-             domain.utc_now_iso(), ttl_hours)
+               VALUES (?,?,?,?,?,?)""",
+            (
+                code,
+                name,
+                industry,
+                json.dumps(data_dict, ensure_ascii=False),
+                domain.utc_now_iso(),
+                ttl_hours,
+            ),
         )
         conn.commit()
     return f"已缓存 {name}({code}) 行业:{industry} TTL:{ttl_hours}h"
@@ -305,6 +343,6 @@ def list_codes() -> list[str]:
     """返回所有基本面缓存中的股票代码（含过期），按更新时间倒序。"""
     with db.db_session() as conn:
         rows = conn.execute(
-            'SELECT code FROM stock_fundamentals ORDER BY updated_at DESC'
+            "SELECT code FROM stock_fundamentals ORDER BY updated_at DESC"
         ).fetchall()
     return [r[0] for r in rows]
