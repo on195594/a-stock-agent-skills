@@ -21,7 +21,7 @@ CLIENT_ROOTS = {
 }
 SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
 CONSOLE_SCRIPTS = ("a-stock-cache", "a-stock-fetch", "a-stock-install")
-REQUIRED_A_STOCK_LIB_VERSION = "0.5.2"
+REQUIRED_A_STOCK_LIB_VERSION = "0.5.3"
 
 
 def _sha256(path: Path) -> str:
@@ -158,6 +158,11 @@ def _install_runtime(
             raise RuntimeError(
                 f"a-stock-lib version mismatch: expected {REQUIRED_A_STOCK_LIB_VERSION}, got {lib_version}"
             )
+        artifact_dir = runtime_root / "artifacts"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        artifact_wheel = artifact_dir / wheel.name
+        shutil.copy2(wheel, artifact_wheel)
+        wheel = artifact_wheel
         wheel_hash = _sha256(wheel)
         wheel_display = str(wheel)
         installer = shutil.which("uv")

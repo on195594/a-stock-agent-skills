@@ -12,7 +12,7 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The `v0.1.4` runtime release uses `a-stock-lib==0.5.2`. It adds
+The `v0.1.4` runtime release uses `a-stock-lib==0.5.3`. It adds
 same-basis 5-year PS and latest-report snapshot capabilities while retaining
 the canonical Research and QA contracts, including `pe_static`, the same-basis
 5-year PE percentile and deterministic QA verdict handling. All nine active
@@ -34,7 +34,7 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 ## Install or update
 
 Requirements for `v0.1.4`: Python 3.13+, `uv`, and an explicit checkout or wheel for
-`a-stock-lib==0.5.2`. The installer itself uses only the Python
+`a-stock-lib==0.5.3`. The installer itself uses only the Python
 standard library, so it can bootstrap the runtime:
 
 ```bash

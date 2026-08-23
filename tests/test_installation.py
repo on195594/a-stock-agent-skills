@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -23,7 +24,7 @@ UV_CACHE_DIR = os.environ.get("UV_CACHE_DIR") or str(
 # explicit checkout or wheel and records its provenance.  Tests locate it the same
 # way an operator would, and skip rather than fail when it is not provisioned here.
 LIB_ROOT = Path(os.environ.get("A_STOCK_LIB_SOURCE") or Path.home() / "a-stock-lib")
-LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.5.2-py3-none-any.whl"
+LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.5.3-py3-none-any.whl"
 
 _MISSING = f"a-stock-lib not provisioned at {LIB_ROOT}; set A_STOCK_LIB_SOURCE"
 requires_lib_wheel = pytest.mark.skipif(not LIB_WHEEL.is_file(), reason=_MISSING)
@@ -74,8 +75,12 @@ def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
     metadata = next((tmp_path / ".local/share/a-stock-agent/runtime").glob("*/a-stock-lib-install.json"))
     payload = json.loads(metadata.read_text(encoding="utf-8"))
     assert payload["name"] == "a-stock-lib"
-    assert payload["version"] == "0.5.2"
+    assert payload["version"] == "0.5.3"
     assert len(payload["wheel_sha256"]) == 64
+    wheel = Path(payload["wheel"])
+    assert wheel.is_file()
+    assert wheel.parent == metadata.parent / "artifacts"
+    assert hashlib.sha256(wheel.read_bytes()).hexdigest() == payload["wheel_sha256"]
 
 
 @requires_lib_wheel
