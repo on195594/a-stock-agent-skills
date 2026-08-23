@@ -14,7 +14,6 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 The `v0.1.4` runtime release is deployed with `a-stock-lib==0.5.1`. It adds
 same-basis 5-year PS and latest-report snapshot capabilities while retaining
-the installed fetcher's
 the canonical Research and QA contracts, including `pe_static`, the same-basis
 5-year PE percentile and deterministic QA verdict handling. All nine active
 client Skill entries continue to resolve directly to `skills/`.
