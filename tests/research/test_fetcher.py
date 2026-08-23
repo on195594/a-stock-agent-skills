@@ -674,6 +674,101 @@ def _make_fin_df_with_period(year: int, eps: float, bps: float) -> 'pd.DataFrame
     }])
 
 
+def _make_ps_valuation_df(start_year: int = 2021, months: int = 60, start_ps: float = 5.0) -> 'pd.DataFrame':
+    """构造 fetcher 内部 date/收盘/ps_ttm 同源月度样本。"""
+    import pandas as pd
+    dates = pd.date_range(f'{start_year}-01-31', periods=months, freq='ME')
+    return pd.DataFrame({
+        'date': dates.astype('datetime64[us]'),
+        '收盘': [40.0] * months,
+        'ps_ttm': [start_ps + i * 0.1 for i in range(months)],
+    })
+
+
+def test_compute_ps_ttm_percentile_requires_60_valid_months():
+    valuation_df = _make_ps_valuation_df(months=59)
+
+    ps_ttm, percentile, window = fetcher.compute_ps_ttm_percentile_5y(valuation_df)
+
+    assert ps_ttm is None
+    assert percentile is None
+    assert window['valid_months'] == 59
+
+
+def test_compute_ps_ttm_percentile_uses_month_end_strict_less():
+    valuation_df = _make_ps_valuation_df()
+    # 同月早期的极端值不得进入月末样本。
+    duplicate = valuation_df.iloc[[-1]].copy()
+    duplicate['date'] = duplicate['date'] - pd.Timedelta(days=10)
+    duplicate['ps_ttm'] = 999.0
+    valuation_df = pd.concat([valuation_df, duplicate], ignore_index=True)
+
+    ps_ttm, percentile, window = fetcher.compute_ps_ttm_percentile_5y(valuation_df)
+
+    assert ps_ttm == pytest.approx(10.9)
+    assert percentile == pytest.approx(98.3)
+    assert window == {
+        'sample_start': '2021-01-31',
+        'sample_end': '2025-12-31',
+        'valid_months': 60,
+        'basis': 'ps_ttm',
+        'source': 'tushare.daily_basic',
+    }
+
+
+def test_fetch_percentiles_reuses_price_history_for_ps(monkeypatch):
+    price_df = _make_ps_valuation_df()
+    fin_df = _make_fin_df_with_period(2024, eps=2.0, bps=15.0)
+    calls = []
+    monkeypatch.setattr(
+        fetcher, '_load_price_df',
+        lambda code, years: calls.append((code, years)) or price_df,
+    )
+    monkeypatch.setattr(fetcher, 'DATA_SOURCE', 'tushare')
+    monkeypatch.setattr(fetcher, 'compute_pe_percentile', lambda *args, **kwargs: 20.0)
+    monkeypatch.setattr(fetcher, 'compute_pb_percentile', lambda *args, **kwargs: 30.0)
+
+    results = {'pe_static': 20.0, 'pb': 2.0}
+    null_reasons = {}
+    fetcher._fetch_percentiles('600000', fin_df, results, null_reasons)
+
+    assert calls == [('600000', 10)]
+    assert results['ps_ttm'] == pytest.approx(10.9)
+    assert results['ps_percentile_5y'] == pytest.approx(98.3)
+    assert results['_ps_percentile_window']['valid_months'] == 60
+    assert 'ps_ttm' not in null_reasons
+    assert 'ps_percentile_5y' not in null_reasons
+
+
+def test_fetch_percentiles_can_return_ps_when_financials_are_missing(monkeypatch):
+    monkeypatch.setattr(fetcher, 'DATA_SOURCE', 'tushare')
+    monkeypatch.setattr(fetcher, '_load_price_df', lambda code, years: _make_ps_valuation_df())
+    results = {}
+    null_reasons = {}
+
+    fetcher._fetch_percentiles('600000', None, results, null_reasons)
+
+    assert results['ps_ttm'] == pytest.approx(10.9)
+    assert results['ps_percentile_5y'] == pytest.approx(98.3)
+    assert null_reasons['pe_percentile_5y']
+
+
+def test_fetch_percentiles_skips_ps_in_akshare_mode(monkeypatch):
+    monkeypatch.setattr(fetcher, 'DATA_SOURCE', 'akshare')
+    fin_df = _make_fin_df_with_period(2024, eps=2.0, bps=15.0)
+    price_df = _make_price_df('2018-01-01', '2028-01-01', base_price=40.0)
+    monkeypatch.setattr(fetcher, '_load_price_df', lambda code, years: price_df)
+
+    results = {'pe_static': 20.0, 'pb': 2.0}
+    null_reasons = {}
+    fetcher._fetch_percentiles('600000', fin_df, results, null_reasons)
+
+    assert results.get('ps_ttm') is None
+    assert results.get('ps_percentile_5y') is None
+    assert null_reasons['ps_ttm'] == 'AKShare手动降级路径不提供同口径PS_TTM'
+    assert null_reasons['ps_percentile_5y'] == 'AKShare手动降级路径不提供同口径PS_TTM'
+
+
 def test_compute_pe_percentile_no_split():
     """无送转时 PE 分位正常计算（基线测试）"""
     fin_df = _make_fin_df_with_period(2024, eps=2.0, bps=15.0)

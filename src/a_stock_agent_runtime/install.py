@@ -21,6 +21,7 @@ CLIENT_ROOTS = {
 }
 SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
 CONSOLE_SCRIPTS = ("a-stock-cache", "a-stock-fetch", "a-stock-install")
+REQUIRED_A_STOCK_LIB_VERSION = "0.5.1"
 
 
 def _sha256(path: Path) -> str:
@@ -152,6 +153,11 @@ def _install_runtime(
             wheel = _build_lib_wheel(lib_source, Path(temp_dir.name))
         if wheel is None:
             raise ValueError("one of --a-stock-lib-source or --a-stock-lib-wheel is required")
+        lib_version = wheel.name.split("-", 2)[1].replace("_", "-")
+        if lib_version != REQUIRED_A_STOCK_LIB_VERSION:
+            raise RuntimeError(
+                f"a-stock-lib version mismatch: expected {REQUIRED_A_STOCK_LIB_VERSION}, got {lib_version}"
+            )
         wheel_hash = _sha256(wheel)
         wheel_display = str(wheel)
         installer = shutil.which("uv")
@@ -166,7 +172,6 @@ def _install_runtime(
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
-    lib_version = wheel.name.split("-", 2)[1].replace("_", "-")
     installed = subprocess.check_output(
         [str(python), "-c", "import importlib.metadata as m; print(m.version('a-stock-lib'))"],
         text=True,

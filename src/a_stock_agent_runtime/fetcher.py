@@ -67,12 +67,15 @@ FIELDS = {
     'pe_percentile_5y':   ('PE历史5年分位(%)',            'computed'),
     'pe_percentile_10y':  ('PE历史10年分位(%)',           'computed'),
     'pb_percentile_10y':  ('PB历史10年分位(%)',           'computed'),
+    'ps_ttm':             ('PS_TTM',                      'structured'),
+    'ps_percentile_5y':   ('PS_TTM历史5年分位(%)',        'computed'),
     'float_to_total_ratio': ('流通/总市值比(%)',           'structured'),
     'gross_margin':           ('毛利率(%)',             'structured'),
     'revenue_growth_3y':      ('收入增速近3年均值(%)',   'structured'),
     'current_ratio':          ('流动比率',               'structured'),
     'operating_cf_per_share': ('每股经营现金流(元)',     'structured'),
     'eps':                    ('基本每股收益(元)',        'structured'),
+    'latest_report_snapshot': ('最新中报/季报方向快照',    'structured'),
     'bps':                    ('每股净资产(元)',          'structured'),
     'industry_status':        ('行业来源状态',             'structured'),
     'bond_yield_10y':     ('10年期国债收益率(%)',         'akshare'),
@@ -375,23 +378,157 @@ def _fetch_financials_akshare(code: str) -> Any:
     return ak.stock_financial_abstract_ths(symbol=code, indicator='按年度')
 
 
+def _report_period_label(raw: Any) -> str | None:
+    import pandas as pd
+
+    try:
+        period = pd.to_datetime(raw)
+    except Exception:
+        return None
+    suffix = {3: 'Q1', 6: '半年报', 9: 'Q3', 12: '年报'}.get(period.month)
+    return f'{period.year}{suffix}' if suffix else None
+
+
+def _deduplicated_report_rows(frame: Any) -> Any:
+    import pandas as pd
+
+    if isinstance(frame, tuple) or frame is None or getattr(frame, 'empty', True):
+        return None
+    rows = frame.copy()
+    if 'end_date' not in rows.columns:
+        return None
+    rows['_period'] = pd.to_datetime(rows['end_date'], errors='coerce')
+    announced = rows.get('f_ann_date', pd.Series(index=rows.index, dtype='object'))
+    announced = announced.combine_first(rows.get('ann_date', pd.Series(index=rows.index, dtype='object')))
+    rows['_announcement'] = pd.to_datetime(announced, errors='coerce')
+    update_flag = rows.get('update_flag', pd.Series(index=rows.index, dtype='float64'))
+    rows['_update_order'] = pd.to_numeric(update_flag, errors='coerce').fillna(-1)
+    rows = rows.dropna(subset=['_period']).sort_values(
+        ['_period', '_announcement', '_update_order'], na_position='first'
+    )
+    return rows.drop_duplicates('_period', keep='last').reset_index(drop=True)
+
+
+def _build_latest_report_snapshot(
+    indicator: Any,
+    income: Any,
+    balance: Any,
+    *,
+    annual_period: Any,
+) -> dict[str, Any] | None:
+    import math
+    import pandas as pd
+
+    frames = {
+        'indicator': _deduplicated_report_rows(indicator),
+        'income': _deduplicated_report_rows(income),
+        'balance': _deduplicated_report_rows(balance),
+    }
+    periods = [
+        frame['_period'].max()
+        for frame in frames.values()
+        if frame is not None and not frame.empty
+    ]
+    if not periods:
+        return None
+    latest_period = max(periods)
+    previous_period = latest_period - pd.DateOffset(years=1)
+
+    def row_at(name: str, period: Any) -> Any:
+        frame = frames[name]
+        if frame is None:
+            return None
+        rows = frame[frame['_period'] == period]
+        return rows.iloc[-1] if not rows.empty else None
+
+    latest = {name: row_at(name, latest_period) for name in frames}
+    previous = {name: row_at(name, previous_period) for name in frames}
+
+    def value(row: Any, *columns: str) -> float | None:
+        if row is None:
+            return None
+        for column in columns:
+            if column in row.index:
+                parsed = parse_float(row[column])
+                if parsed is not None and math.isfinite(parsed):
+                    return parsed
+        return None
+
+    def direction(current: float | None, prior: float | None = None, *, yoy: bool = False) -> str:
+        compared = current if yoy else (None if current is None or prior is None else current - prior)
+        if compared is None:
+            return 'missing'
+        if math.isclose(compared, 0.0, abs_tol=1e-12):
+            return 'flat'
+        return 'up' if compared > 0 else 'down'
+
+    def field(current: float | None, prior: float | None = None, *, yoy: bool = False) -> dict[str, Any]:
+        return {
+            'value': current,
+            'status': 'ok' if current is not None else 'missing',
+            'direction': direction(current, prior, yoy=yoy),
+        }
+
+    indicator_row = latest['indicator']
+    income_row = latest['income']
+    balance_row = latest['balance']
+    prior_income = previous['income']
+    prior_balance = previous['balance']
+    announcements = [
+        row['_announcement']
+        for row in latest.values()
+        if row is not None and pd.notna(row['_announcement'])
+    ]
+    annual_dt = pd.to_datetime(annual_period, errors='coerce')
+    report_label = _report_period_label(latest_period)
+    return {
+        'report_period': report_label,
+        'announcement_date': max(announcements).date().isoformat() if announcements else None,
+        'source': 'tushare.fina_indicator+income+balancesheet',
+        'is_newer_than_annual': bool(pd.notna(annual_dt) and latest_period > annual_dt),
+        'fields': {
+            'revenue': field(
+                value(income_row, 'total_revenue', 'revenue'),
+                value(prior_income, 'total_revenue', 'revenue'),
+            ),
+            'revenue_yoy': field(value(indicator_row, 'or_yoy'), yoy=True),
+            'net_profit_parent': field(
+                value(income_row, 'n_income_attr_p'),
+                value(prior_income, 'n_income_attr_p'),
+            ),
+            'net_profit_yoy': field(value(indicator_row, 'netprofit_yoy'), yoy=True),
+            'deducted_net_profit_yoy': field(
+                value(indicator_row, 'dt_netprofit_yoy'), yoy=True
+            ),
+            'roe': field(value(indicator_row, 'roe_waa')),
+            'bps': field(value(indicator_row, 'bps')),
+            'equity_parent': field(
+                value(balance_row, 'total_hldr_eqy_exc_min_int'),
+                value(prior_balance, 'total_hldr_eqy_exc_min_int'),
+            ),
+        },
+    }
+
+
 def _fetch_financials_tushare(code: str) -> Any:
     import pandas as pd
     from a_stock_lib.providers import TushareFinancialProvider
 
     provider = TushareFinancialProvider()
 
-    def annual_frame(method_name: str, source: str) -> Any:
+    def fetch_frame(method_name: str, source: str) -> Any:
         method = getattr(provider, method_name, None)
         if method is None:
             return ('ERROR', f'{source}: provider不支持')
         try:
-            value = _tushare_frame(method(code), source)
+            return _tushare_frame(method(code), source)
         except Exception as exc:
             return ('ERROR', f'{source}: {exc}')
-        if isinstance(value, tuple) or value is None or value.empty:
-            return value
-        value = value.copy()
+
+    def annual_frame(frame: Any) -> Any:
+        if isinstance(frame, tuple) or frame is None or frame.empty:
+            return frame
+        value = frame.copy()
         if 'end_date' in value.columns:
             period = pd.to_datetime(value['end_date'], errors='coerce')
             value = value[period.dt.month.eq(12)].copy()
@@ -399,11 +536,14 @@ def _fetch_financials_tushare(code: str) -> Any:
             '报告期', keep='last'
         )
 
-    result = provider.fetch_indicator_history(code)
-    frame = _tushare_frame(result, 'tushare.fina_indicator')
-    if isinstance(frame, tuple) or frame is None:
-        return frame
-    frame = frame.copy()
+    indicator = fetch_frame('fetch_indicator_history', 'tushare.fina_indicator')
+    if isinstance(indicator, tuple) or indicator is None:
+        return indicator
+    income = fetch_frame('fetch_income_history', 'tushare.income')
+    balance = fetch_frame('fetch_balance_history', 'tushare.balancesheet')
+    cashflow = fetch_frame('fetch_cashflow_history', 'tushare.cashflow')
+
+    frame = indicator.copy()
     period = pd.to_datetime(frame.get('end_date'), errors='coerce')
     annual = frame[period.dt.month.eq(12)].copy() if 'end_date' in frame else frame
     if annual.empty:
@@ -417,19 +557,8 @@ def _fetch_financials_tushare(code: str) -> Any:
         'bps': '每股净资产',
     })
 
-    # EPS and revenue growth live on the income endpoint; keep them optional so
-    # a permission-limited endpoint does not discard usable indicator data.
-    fetch_income = getattr(provider, 'fetch_income_history', None)
-    income = (
-        _tushare_frame(fetch_income(code), 'tushare.income')
-        if fetch_income
-        else ('ERROR', 'tushare.income: provider不支持')
-    )
-    if not isinstance(income, tuple) and income is not None and not income.empty:
-        income = income.copy()
-        income_period = pd.to_datetime(income.get('end_date'), errors='coerce')
-        income = income[income_period.dt.month.eq(12)].copy()
-        income = income.rename(columns={'end_date': '报告期'})
+    annual_income = annual_frame(income)
+    if not isinstance(annual_income, tuple) and annual_income is not None and not annual_income.empty:
         columns = ['报告期']
         for candidate, target in (
             ('basic_eps', '基本每股收益'),
@@ -437,46 +566,53 @@ def _fetch_financials_tushare(code: str) -> Any:
             ('total_revenue', '营业总收入'),
             ('revenue', '营业总收入'),
         ):
-            if candidate in income.columns and target not in income.columns:
-                income = income.rename(columns={candidate: target})
-            if target in income.columns and target not in columns:
+            if candidate in annual_income.columns and target not in annual_income.columns:
+                annual_income = annual_income.rename(columns={candidate: target})
+            if target in annual_income.columns and target not in columns:
                 columns.append(target)
         if len(columns) > 1:
-            income = income[columns].drop_duplicates('报告期', keep='last')
-            annual = annual.merge(income, on='报告期', how='left')
+            annual_income = annual_income[columns].drop_duplicates('报告期', keep='last')
+            annual = annual.merge(annual_income, on='报告期', how='left')
             if '营业总收入' in annual.columns:
                 revenue = pd.to_numeric(annual['营业总收入'], errors='coerce')
                 annual['营业总收入同比增长率'] = revenue.pct_change() * 100
 
-    balance = annual_frame('fetch_balance_history', 'tushare.balancesheet')
-    if not isinstance(balance, tuple) and balance is not None and not balance.empty:
+    annual_balance = annual_frame(balance)
+    if not isinstance(annual_balance, tuple) and annual_balance is not None and not annual_balance.empty:
         fields = [
             field for field in ('报告期', 'total_cur_assets', 'total_cur_liab', 'total_share')
-            if field in balance.columns
+            if field in annual_balance.columns
         ]
         if len(fields) > 1:
-            annual = annual.merge(balance[fields], on='报告期', how='left')
+            annual = annual.merge(annual_balance[fields], on='报告期', how='left')
             if {'total_cur_assets', 'total_cur_liab'} <= set(annual.columns):
                 assets = pd.to_numeric(annual['total_cur_assets'], errors='coerce')
                 liabilities = pd.to_numeric(annual['total_cur_liab'], errors='coerce')
                 annual['流动比率'] = assets.div(liabilities.where(liabilities != 0))
 
-    cashflow = annual_frame('fetch_cashflow_history', 'tushare.cashflow')
+    annual_cashflow = annual_frame(cashflow)
     if (
-        not isinstance(cashflow, tuple)
-        and cashflow is not None
-        and not cashflow.empty
-        and 'n_cashflow_act' in cashflow.columns
+        not isinstance(annual_cashflow, tuple)
+        and annual_cashflow is not None
+        and not annual_cashflow.empty
+        and 'n_cashflow_act' in annual_cashflow.columns
         and 'total_share' in annual.columns
     ):
         annual = annual.merge(
-            cashflow[['报告期', 'n_cashflow_act']], on='报告期', how='left'
+            annual_cashflow[['报告期', 'n_cashflow_act']], on='报告期', how='left'
         )
         cashflow_total = pd.to_numeric(annual['n_cashflow_act'], errors='coerce')
         total_share = pd.to_numeric(annual['total_share'], errors='coerce')
         annual['每股经营现金流'] = cashflow_total.div(total_share.where(total_share != 0))
 
-    return annual.sort_values('报告期').reset_index(drop=True)
+    annual = annual.sort_values('报告期').reset_index(drop=True)
+    annual.attrs['latest_report_snapshot'] = _build_latest_report_snapshot(
+        indicator,
+        income,
+        balance,
+        annual_period=annual['报告期'].iloc[-1] if not annual.empty else None,
+    )
+    return annual
 
 
 def _fetch_financials(code: str) -> Any:
@@ -550,7 +686,11 @@ def _fetch_price_history_tushare(code: str) -> Any:
     frame = _tushare_frame(result, 'tushare.daily_basic')
     if isinstance(frame, tuple) or frame is None:
         return frame
-    return frame.rename(columns={'trade_date': '日期', 'close': '收盘'})[['日期', '收盘']]
+    frame = frame.rename(columns={'trade_date': '日期', 'close': '收盘'})
+    columns = ['日期', '收盘']
+    if 'ps_ttm' in frame.columns:
+        columns.append('ps_ttm')
+    return frame[columns]
 
 
 def _fetch_price_history(code: str) -> Any:
@@ -667,7 +807,7 @@ def compute_dps_ttm(div_df: Any) -> float | None:
 
 
 def _load_price_df(code: str, years: int = 10) -> Any:
-    """获取并预处理价格历史 DataFrame，供 PE/PB 分位计算复用。
+    """获取并预处理估值历史，供 PE/PB/PS 分位计算复用。
 
     返回含 'date'(datetime64[us]) 和 '收盘' 列的 DataFrame，
     已按 years 起始日过滤；失败时返回 'API_ERROR' 字符串。
@@ -679,11 +819,62 @@ def _load_price_df(code: str, years: int = 10) -> Any:
         return 'API_ERROR'
     if hasattr(raw, 'empty') and raw.empty:
         return 'API_ERROR'
-    df = raw[['日期', '收盘']].copy()
+    columns = ['日期', '收盘'] + (['ps_ttm'] if 'ps_ttm' in raw.columns else [])
+    df = raw[columns].copy()
     df['date'] = pd.to_datetime(df['日期']).astype('datetime64[us]')
     df = df.sort_values('date').reset_index(drop=True)
     cutoff = pd.Timestamp(start_dt).to_datetime64().astype('datetime64[us]')
     return df[df['date'] >= cutoff].reset_index(drop=True)
+
+
+def compute_ps_ttm_percentile_5y(
+    valuation_df: Any,
+) -> tuple[float | None, float | None, dict[str, Any]]:
+    """Return latest PS_TTM and its strict-less rank over 60 month-end values."""
+    import math
+    import pandas as pd
+
+    metadata: dict[str, Any] = {
+        'sample_start': None,
+        'sample_end': None,
+        'valid_months': 0,
+        'basis': 'ps_ttm',
+        'source': 'tushare.daily_basic',
+    }
+    if (
+        valuation_df is None
+        or isinstance(valuation_df, (str, tuple))
+        or getattr(valuation_df, 'empty', True)
+        or not {'date', 'ps_ttm'} <= set(valuation_df.columns)
+    ):
+        return None, None, metadata
+
+    frame = valuation_df[['date', 'ps_ttm']].copy()
+    frame['date'] = pd.to_datetime(frame['date'], errors='coerce')
+    frame['ps_ttm'] = pd.to_numeric(frame['ps_ttm'], errors='coerce')
+    frame = frame.dropna(subset=['date', 'ps_ttm'])
+    frame = frame[
+        frame['ps_ttm'].map(lambda value: math.isfinite(float(value)) and float(value) > 0)
+    ].sort_values('date')
+    if frame.empty:
+        return None, None, metadata
+
+    frame['month'] = frame['date'].dt.to_period('M')
+    latest_month = frame['month'].max()
+    first_month = latest_month - 59
+    monthly = frame[frame['month'] >= first_month].groupby('month', as_index=False).tail(1)
+    monthly = monthly.sort_values('date').reset_index(drop=True)
+    metadata.update({
+        'sample_start': monthly['date'].iloc[0].date().isoformat() if not monthly.empty else None,
+        'sample_end': monthly['date'].iloc[-1].date().isoformat() if not monthly.empty else None,
+        'valid_months': len(monthly),
+    })
+    if len(monthly) < 60:
+        return None, None, metadata
+
+    current = float(monthly['ps_ttm'].iloc[-1])
+    percentile = round(float((monthly['ps_ttm'] < current).mean() * 100), 1)
+    return current, percentile, metadata
 
 
 def _period_year(raw: Any) -> int | None:
@@ -961,6 +1152,11 @@ def _fetch_fin_data(code: str, results: dict, null_reasons: dict) -> tuple[Any, 
         results[k] = v
         if v is None:
             null_reasons[k] = '数据含缺失值'
+    snapshot = getattr(fin_df, 'attrs', {}).get('latest_report_snapshot')
+    if snapshot is not None:
+        results['latest_report_snapshot'] = snapshot
+    else:
+        null_reasons['latest_report_snapshot'] = '数据源未返回可核验的最新报告快照'
     logger.info(f"  ✅ ROE3y={results.get('roe_3y_avg')}% | "
                 f"净利增速3年均值={results.get('net_profit_growth')}% | "
                 f"负债率={results.get('debt_ratio')}% | EPS={eps} | BPS={bps}")
@@ -1032,14 +1228,14 @@ def _fetch_percentiles(code: str, fin_df: Any,
                        results: dict, null_reasons: dict,
                        split_ratio: float = 0.0,
                        split_ex_date: str | None = None) -> None:
-    """Step 5: PE 5/10-year and PB 10-year percentiles."""
-    logger.info("  [5/7] 计算 PE 5/10年与 PB 10年历史分位...")
-    if fin_df is None or isinstance(fin_df, (str, tuple)):
+    """Step 5: PE 5/10-year, PB 10-year and PS_TTM 5-year percentiles."""
+    logger.info("  [5/7] 计算 PE 5/10年、PB 10年与 PS_TTM 5年历史分位...")
+    financials_available = fin_df is not None and not isinstance(fin_df, (str, tuple))
+    if not financials_available:
         null_reasons['pe_percentile_5y'] = '财务数据不可用'
         null_reasons['pe_percentile_10y'] = '财务数据不可用'
         null_reasons['pb_percentile_10y'] = '财务数据不可用'
-        logger.warning("  ⚠️ 跳过（财务数据不可用）")
-        return
+        logger.warning("  ⚠️ PE/PB跳过（财务数据不可用）；PS仍按独立估值历史核验")
 
     # 价格历史仅拉取一次，PE 和 PB 分位共享同一份数据
     price_df = _load_price_df(code, years=10)
@@ -1047,6 +1243,8 @@ def _fetch_percentiles(code: str, fin_df: Any,
         null_reasons['pe_percentile_5y'] = '历史价格API失败（网络错误，重试后仍不可用）'
         null_reasons['pe_percentile_10y'] = '历史价格API失败（网络错误，重试后仍不可用）'
         null_reasons['pb_percentile_10y'] = '历史价格API失败（网络错误，重试后仍不可用）'
+        null_reasons['ps_ttm'] = '历史估值API失败（网络错误，重试后仍不可用）'
+        null_reasons['ps_percentile_5y'] = '历史估值API失败（网络错误，重试后仍不可用）'
         logger.warning("  ⚠️ 历史价格获取失败，跳过PE/PB分位计算")
         return
     results['_pe_percentile_windows'] = {}
@@ -1058,7 +1256,7 @@ def _fetch_percentiles(code: str, fin_df: Any,
                 'sample_end': window['date'].max().date().isoformat(),
             }
 
-    if results.get('pe_static'):
+    if financials_available and results.get('pe_static'):
         for years in (5, 10):
             field = f'pe_percentile_{years}y'
             pct = compute_pe_percentile(
@@ -1075,7 +1273,7 @@ def _fetch_percentiles(code: str, fin_df: Any,
         null_reasons['pe_percentile_5y'] = 'PE_静态不可用'
         null_reasons['pe_percentile_10y'] = 'PE_静态不可用'
 
-    if results.get('pb'):
+    if financials_available and results.get('pb'):
         pct = compute_pb_percentile(code, results['pb'], fin_df, years=10,
                                     price_df=price_df,
                                     split_ratio=split_ratio, split_ex_date=split_ex_date)
@@ -1086,6 +1284,26 @@ def _fetch_percentiles(code: str, fin_df: Any,
             null_reasons['pb_percentile_10y'] = '历史PB数据点不足（<100）'
     else:
         null_reasons['pb_percentile_10y'] = 'PB 不可用'
+
+    if DATA_SOURCE == 'akshare':
+        reason = 'AKShare手动降级路径不提供同口径PS_TTM'
+        null_reasons['ps_ttm'] = reason
+        null_reasons['ps_percentile_5y'] = reason
+    else:
+        ps_ttm, percentile, metadata = compute_ps_ttm_percentile_5y(price_df)
+        results['_ps_percentile_window'] = metadata
+        if ps_ttm is None or percentile is None:
+            reason = (
+                'PS_TTM有效月不足60'
+                if metadata['valid_months'] < 60
+                else 'PS_TTM缺失、非正或非有限'
+            )
+            null_reasons['ps_ttm'] = reason
+            null_reasons['ps_percentile_5y'] = reason
+        else:
+            results['ps_ttm'] = ps_ttm
+            results['ps_percentile_5y'] = percentile
+            logger.info(f"  ✅ PS_TTM={ps_ttm} | PS5y分位={percentile}%")
 
 
 def _fetch_bond_yield(null_reasons: dict) -> dict | None:
@@ -1185,6 +1403,15 @@ def _build_cache_payload(code: str, name: str, industry: str,
             provenance[key].update(
                 results.get('_pe_percentile_windows', {}).get(years, {})
             )
+        if key in {'ps_ttm', 'ps_percentile_5y'} and DATA_SOURCE != 'akshare':
+            ps_window = results.get('_ps_percentile_window', {})
+            provenance[key].update(ps_window)
+            provenance[key]['source'] = 'tushare.daily_basic'
+            provenance[key]['as_of'] = ps_window.get('sample_end') or data_period
+        if key == 'latest_report_snapshot' and isinstance(cache_data[key], dict):
+            snapshot = cache_data[key]
+            provenance[key]['source'] = snapshot.get('source') or provenance[key]['source']
+            provenance[key]['as_of'] = snapshot.get('announcement_date') or data_period
     cache_data.update({
         'data_period': data_period,
         'null_reasons': normalized_reasons,

@@ -239,7 +239,7 @@
 
 ### 15. 关键估值能力与最新财报核验（Critical）
 
-**要求**：A/E/F 使用近5年分位时不得以10年分位替代；E/F 的 PEG 必须使用真实TTM口径，F 的PS必须有同口径近5年分位。所有量化框架必须说明是否存在年报后更新的中报/季报，并核对关键趋势；`industry_status=stale_cache/missing` 时必须先核验主营业务再路由。无法取得或口径冲突时进入 `incomplete`。
+**要求**：A/E/F 使用近5年分位时不得以10年分位替代；E/F 的 PEG 必须使用真实TTM口径，F 的PS必须有同口径 `ps_ttm` 与 `ps_percentile_5y`。所有量化框架必须读取非评分 `latest_report_snapshot`，说明是否存在年报后更新的中报/季报并核对关键趋势；快照缺失字段须补正式披露或进入 `incomplete`。`industry_status=stale_cache/missing` 时必须先核验主营业务再路由。
 
 **PASS 信号**：所需5年分位、PS/PEG和最新报告期均有来源、时点及口径；或缺失/冲突后停止配置评级、时机评级、综合总分和仓位矩阵。
 

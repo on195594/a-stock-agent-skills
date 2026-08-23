@@ -12,7 +12,9 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The `v0.1.3` runtime release is deployed. It aligns the installed fetcher with
+The `v0.1.3` runtime release remains deployed. Candidate `v0.1.4` adds
+same-basis 5-year PS and latest-report snapshot capabilities and has not been
+cut over. The deployed release aligns the installed fetcher with
 the canonical Research and QA contracts, including `pe_static`, the same-basis
 5-year PE percentile and deterministic QA verdict handling. All nine active
 client Skill entries continue to resolve directly to `skills/`.
@@ -32,8 +34,8 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 
 ## Install or update
 
-Requirements: Python 3.13+, `uv`, and an explicit checkout or wheel for
-`a-stock-lib==0.5.0`. The installer itself uses only the Python
+Requirements for candidate `v0.1.4`: Python 3.13+, `uv`, and an explicit checkout or wheel for
+`a-stock-lib==0.5.1`. The installer itself uses only the Python
 standard library, so it can bootstrap the runtime:
 
 ```bash

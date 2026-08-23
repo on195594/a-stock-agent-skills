@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Fetcher now exposes same-basis `ps_ttm` and 5-year month-end `ps_percentile_5y` from TuShare `daily_basic`, with a 60-valid-month fail-closed gate.
+- Fundamentals cache now carries a non-scoring `latest_report_snapshot` for newer interim-report direction checks while preserving annual scoring fields.
+- Research moves detailed cycle, timing-adjustment and report templates into three directly linked references while retaining safety and fail-closed gates in the main Skill.
+
 ## 0.1.3 - 2026-08-14
 
 ### Added

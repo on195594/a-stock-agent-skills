@@ -112,6 +112,8 @@ def test_wuxi_retro_repairs_are_pinned_in_research_and_qa_contracts() -> None:
     assert fetch_pos < check_pos
     assert "禁止并行" in research
     assert "pe_static" in research and "pe_percentile_5y" in research
+    assert "ps_ttm" in research and "ps_percentile_5y" in research
+    assert "latest_report_snapshot" in research
     for reference in (
         "references/frameworks/A.md",
         "references/frameworks/B.md",
@@ -133,3 +135,5 @@ def test_wuxi_retro_repairs_are_pinned_in_research_and_qa_contracts() -> None:
     assert "置信度受限" in research
     assert "外部集中风险覆盖" in rubric
     assert "pe_percentile_5y" in rubric
+    assert "ps_percentile_5y" in rubric
+    assert "latest_report_snapshot" in rubric

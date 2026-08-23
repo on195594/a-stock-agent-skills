@@ -151,7 +151,7 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
 
 def test_project_version_is_single_release_source() -> None:
     pyproject = tomllib.loads((PROJECT_ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
-    assert pyproject['project']['version'] == '0.1.3'
+    assert pyproject['project']['version'] == '0.1.4'
     for skill in ('a-stock-research', 'a-stock-monitor', 'a-stock-qa'):
         text = (PROJECT_ROOT / 'skills' / skill / 'SKILL.md').read_text(encoding='utf-8')
         assert '\nversion:' not in text
@@ -227,8 +227,19 @@ def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -
         'pe_static': 18.0,
         'pe_ttm': 18.0,
         'pe_percentile_5y': 25.0,
+        'ps_ttm': 3.2,
+        'ps_percentile_5y': 40.0,
         '_pe_percentile_windows': {
             '5': {'sample_start': '2021-07-14', 'sample_end': '2026-07-14'},
+        },
+        '_ps_percentile_window': {
+            'sample_start': '2021-07-30', 'sample_end': '2026-07-14',
+            'valid_months': 60, 'basis': 'ps_ttm', 'source': 'tushare.daily_basic',
+        },
+        'latest_report_snapshot': {
+            'report_period': '2026Q1', 'announcement_date': '2026-04-25',
+            'source': 'tushare.fina_indicator+income+balancesheet',
+            'is_newer_than_annual': True, 'fields': {},
         },
         '_quote_as_of': '2026-07-14T10:00:00',
     }
@@ -252,6 +263,15 @@ def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -
     assert stored['field_provenance']['pe_percentile_5y']['split_policy'] == 'detected_event_eps_adjustment'
     assert stored['field_provenance']['pe_percentile_5y']['sample_start'] == '2021-07-14'
     assert stored['field_provenance']['pe_percentile_5y']['sample_end'] == '2026-07-14'
+    assert stored['ps_ttm'] == 3.2
+    assert stored['ps_percentile_5y'] == 40.0
+    assert stored['field_provenance']['ps_percentile_5y']['basis'] == 'ps_ttm'
+    assert stored['field_provenance']['ps_percentile_5y']['valid_months'] == 60
+    assert stored['field_provenance']['ps_percentile_5y']['source'] == 'tushare.daily_basic'
+    assert stored['field_provenance']['latest_report_snapshot']['status'] == 'ok'
+    assert stored['field_provenance']['latest_report_snapshot']['source'] == 'tushare.fina_indicator+income+balancesheet'
+    assert stored['field_provenance']['latest_report_snapshot']['as_of'] == '2026-04-25'
+    assert stored['latest_report_snapshot']['report_period'] == '2026Q1'
 
 
 @pytest.mark.parametrize(('raw', 'expected'), [
