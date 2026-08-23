@@ -12,10 +12,11 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The `v0.1.5` runtime release uses `a-stock-lib==0.6.0`. Research now routes
+The `v0.1.6` runtime release uses `a-stock-lib==0.6.1`. Research now routes
 A—F fundamental scoring through the read-only deterministic scorer while
-retaining the existing timing, QA and write-confirmation contracts. All nine
-active client Skill entries continue to resolve directly to `skills/`.
+retaining the existing timing, QA and write-confirmation contracts. Rule hashes
+follow executable scorer source, and all maintained Python files pass the Ruff
+format baseline. All nine client Skill entries resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
@@ -32,8 +33,8 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 
 ## Install or update
 
-Requirements for `v0.1.5`: Python 3.13+, `uv`, and an explicit checkout or wheel for
-`a-stock-lib==0.6.0`. The installer itself uses only the Python
+Requirements for `v0.1.6`: Python 3.13+, `uv`, and an explicit checkout or wheel for
+`a-stock-lib==0.6.1`. The installer itself uses only the Python
 standard library, so it can bootstrap the runtime:
 
 ```bash

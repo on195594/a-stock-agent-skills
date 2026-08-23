@@ -1,8 +1,8 @@
 # a-stock-lib 0.6.0 消费者切换与真实策略接线规范
 
 **日期：** 2026-08-23
-**状态：** 已实施并生产切换；AGY `PASS_WITH_NOTES`
-**生产：** tracker `a-stock-lib==0.6.0`；agent runtime `0.1.5-898af3b6a6f0` / lib `0.6.0`
+**状态：** 已实施；生产版本随后由 0.6.1/0.1.6 provenance 与格式基线补丁取代
+**生产：** tracker `a-stock-lib==0.6.1`；agent runtime `0.1.6-8ab751454a5c` / lib `0.6.1`
 
 ## 目标
 
