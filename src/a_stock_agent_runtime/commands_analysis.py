@@ -7,6 +7,7 @@ import math
 import re
 import sqlite3
 import sys
+from dataclasses import asdict
 from datetime import timedelta
 
 from a_stock_agent_runtime import db, domain, store
@@ -16,6 +17,7 @@ from a_stock_lib.contracts import (
     parse_subjective_assessment_tags,
     required_subjective_categories,
 )
+from a_stock_lib.framework_scoring import score_fundamentals
 
 _VALUATION_CONFLICT_RE = re.compile(
     r'估值冲突\[状态=待核实；PB结论="[^"]+"；交叉估值结论="[^"]+"\]'
@@ -269,6 +271,56 @@ def _validate_cycle_stage_for_framework(result: str, framework: str) -> None:
         file=sys.stderr,
     )
     sys.exit(1)
+
+
+def cmd_score_fundamentals(args: list[str]) -> None:
+    """用 a-stock-lib 0.6.0 对缓存与显式补充指标执行只读基本面评分。"""
+    if len(args) != 3:
+        print("错误：需要参数 <代码> <框架A-F> <补充指标JSON>", file=sys.stderr)
+        sys.exit(1)
+    code, framework_token, overrides_text = args
+    framework = domain.FRAMEWORK_ALIASES.get(framework_token)
+    if framework is None:
+        print(f"错误：未知框架 {framework_token}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        overrides = json.loads(overrides_text)
+    except json.JSONDecodeError as exc:
+        print(f"JSON解析错误: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(overrides, dict):
+        print("错误：补充指标必须是 JSON 对象", file=sys.stderr)
+        sys.exit(1)
+    fundamentals = store.get_fundamentals(code)
+    if fundamentals is None:
+        print(f"错误：未找到 {code} 的有效基本面缓存", file=sys.stderr)
+        sys.exit(1)
+    metrics = dict(fundamentals)
+    if "net_profit_growth" in metrics:
+        metrics["net_profit_growth_3y"] = metrics["net_profit_growth"]
+    operating_cf = metrics.get("operating_cf_per_share")
+    eps = metrics.get("eps")
+    if (
+        isinstance(operating_cf, (int, float))
+        and not isinstance(operating_cf, bool)
+        and isinstance(eps, (int, float))
+        and not isinstance(eps, bool)
+        and eps > 0
+    ):
+        metrics["operating_cf_to_net_profit"] = operating_cf / eps
+    metrics.update(overrides)
+    report = sys.stdin.read().strip()
+    cycle_assessment = parse_cycle_stage_tag(report)
+    score = score_fundamentals(
+        FrameworkKey(framework[0]),
+        metrics,
+        parse_subjective_assessment_tags(report),
+        cycle_stage=cycle_assessment.stage if cycle_assessment else None,
+    )
+    payload = asdict(score)
+    payload["blocked"] = score.blocked
+    payload["code"] = code
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 def cmd_set_analysis(args: list[str]) -> None:

@@ -85,6 +85,10 @@ CLI_ARGUMENT_CASES = {
     "cleanup": ([], []),
     "clear": ([], ["600000"]),
     "checklist": (["600000", "A"], ["600000", "A"]),
+    "score-fundamentals": (
+        ["600000", "A", "{}"],
+        ["600000", "A", '{"gross_margin_stable":true}'],
+    ),
 }
 
 

@@ -21,7 +21,7 @@ CLIENT_ROOTS = {
 }
 SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
 CONSOLE_SCRIPTS = ("a-stock-cache", "a-stock-fetch", "a-stock-install")
-REQUIRED_A_STOCK_LIB_VERSION = "0.5.3"
+REQUIRED_A_STOCK_LIB_VERSION = "0.6.0"
 
 
 def _sha256(path: Path) -> str:

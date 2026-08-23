@@ -54,6 +54,7 @@ A股投研数据缓存管理器
   cache.py cleanup                                      # 清除所有过期缓存条目
   cache.py clear [代码]                                  # 清除全部或指定股票缓存
   cache.py checklist <代码> <框架A|B|C|D|E|F>             # 打印框架客观指标核对清单（仅核对事实，不计分）
+  cache.py score-fundamentals <代码> <框架> '<JSON>'       # 只读确定性基本面评分（报告正文从stdin读取）
 
 check 命令输出格式（供 SKILL.md 解析）：
   ANALYSIS_HIT   → 今日分析结论已缓存，直接输出结论，终止分析流程
@@ -127,6 +128,7 @@ cmd_get_analysis = commands_analysis.cmd_get_analysis
 cmd_set_analysis = commands_analysis.cmd_set_analysis
 cmd_set_score = commands_analysis.cmd_set_score
 cmd_set_score_breakdown = commands_analysis.cmd_set_score_breakdown
+cmd_score_fundamentals = commands_analysis.cmd_score_fundamentals
 
 cmd_add_holding = commands_holdings.cmd_add_holding
 cmd_holdings = commands_holdings.cmd_holdings
@@ -183,6 +185,7 @@ COMMANDS = {
     'set-analysis': cmd_set_analysis,
     'set-score': cmd_set_score,
     'set-score-breakdown': cmd_set_score_breakdown,
+    'score-fundamentals': cmd_score_fundamentals,
     'set-flag': cmd_set_flag,
     'clear-flag': cmd_clear_flag,
     'alert-open': cmd_alert_open,
@@ -227,6 +230,7 @@ COMMAND_CLASSIFICATION = {
             'get', 'get-analysis', 'holdings', 'position-return',
             'retro-pending', 'retro-stats', 'retro-outliers',
             'alerts', 'l3-list', 'watchlist', 'list', 'checklist',
+            'score-fundamentals',
         ),
         'R0',
     ),
@@ -303,6 +307,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     'cleanup': (),
     'clear': (('代码', '?'),),
     'checklist': (('代码', None), ('框架', None)),
+    'score-fundamentals': (('代码', None), ('框架', None), ('补充指标JSON', None)),
 }
 
 _CLI_VALUE_OPTIONS = {
