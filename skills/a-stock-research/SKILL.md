@@ -41,7 +41,11 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 - 新闻、政策、银行 NIM/不良率/拨备等定性或非结构化信息继续使用 WebSearch。
 - 结构化接口故障时可手动设置 `FETCHER_DATA_SOURCE=akshare` 切换旧链路；默认值为 `tushare`。除交易日历外，不自动在 TuShare 与 AKShare 之间切换。
 
-## 缓存检查（最先执行，在第零步之前）
+## 持仓路由（最先执行）
+
+股票代码确定且本地持仓账本可用时，先只读执行 `a-stock-cache holdings` 核对该股票是否已持仓。若已持仓，停止本首次研究流程并改用 `a-stock-monitor`；只有用户明确要求重新做首次配置研究或持仓账本不可用时，才继续本 Skill。不得读取单股 monitor 的 `config.json` 代替真实持仓账本。
+
+## 缓存检查（路由确认后，在第零步之前）
 
 **必须按下列顺序串行执行，禁止并行**。只有 `fetch` 成功后才能运行 `check`；`fetch` 失败时停止并报告数据缺口，不得读取可能陈旧的状态继续评分。⚠️ **禁止用 WebSearch 获取当前股价**——fetcher 使用新浪单源，并按交易日、交易时段、未来时间和盘中120秒最大年龄校验行情时间戳；新浪不可用或行情过期时行情获取失败。
 
