@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8 - 2026-08-27
+
+- Made holdings and read-only retrospective queries physically read-only and removed command-time compatibility backfills already owned by migration 025.
+- Added `a-stock-cache holdings [code]` so routing can inspect one security without exposing unrelated holding notes; missing rows and unavailable ledgers now have distinct stable outcomes.
+- Hard-stopped first-time research after confirmed held-stock routing and added bounded official-first retrieval, document fallback and concise monitor-delivery contracts without changing investment rules.
+
 ## 0.1.7 - 2026-08-27
 
 - Added versioned holding theses with a partial unique index enforcing one active thesis per holding.

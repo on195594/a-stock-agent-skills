@@ -348,7 +348,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "retro-pending": (),
     "retro-stats": (("框架", "?"),),
     "retro-outliers": (),
-    "holdings": (),
+    "holdings": (("代码", "?"),),
     "remove-holding": (("代码", None),),
     "update-return": (("代码", None), ("回报率", None)),
     "position-return": (("代码", None), ("当前价", "?")),
@@ -450,6 +450,12 @@ def main(argv: list[str] | None = None) -> int:
         return int(exc.code or 0)
     database_path = paths.cache_db_path()
     if classification == "R0" and not database_path.exists():
+        if command == "holdings":
+            print(
+                f"HOLDINGS_UNAVAILABLE database_missing:{database_path}",
+                file=sys.stderr,
+            )
+            return 1
         print(f"状态数据库不存在：{database_path}", file=sys.stderr)
         return 0
     print(f"[a-stock-cache] 操作数据库: {database_path}", file=sys.stderr)

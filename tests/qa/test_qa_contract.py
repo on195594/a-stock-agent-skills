@@ -24,6 +24,14 @@ def test_research_qa_routing_is_host_neutral() -> None:
         assert client_command not in research.lower()
 
 
+def test_held_stock_route_hard_stops_research_work() -> None:
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+    assert "a-stock-cache holdings <股票代码>" in research
+    assert "确认已持仓后立即终止本 Skill" in research
+    assert "不得继续执行首次研究的 fetch/check、评分或 QA" in research
+    assert "HOLDINGS_UNAVAILABLE" in research
+
+
 def test_standalone_smoke_uses_isolated_python() -> None:
     result = subprocess.run(
         [sys.executable, "-I", str(ROOT / "tests/qa/standalone_smoke.py")],

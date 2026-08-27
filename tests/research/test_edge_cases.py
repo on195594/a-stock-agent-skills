@@ -13,11 +13,13 @@ Coverage gaps addressed:
                concurrent cmd_add_holding
 """
 
+import hashlib
 import json
 import threading
 import datetime as dt
 from datetime import datetime
 from io import StringIO
+from pathlib import Path
 
 import pytest
 
@@ -127,6 +129,7 @@ class TestAddHoldingArgParsing:
 class TestHoldingsDisplay:
     def test_empty_holdings_prints_no_record_message(self, capsys):
         """No holdings → prints '暂无持仓记录', no crash."""
+        cache.get_db().close()
         cache.cmd_holdings()
         out = capsys.readouterr().out
         assert "暂无持仓记录" in out
@@ -162,6 +165,79 @@ class TestHoldingsDisplay:
         cache.cmd_holdings()
         out = capsys.readouterr().out
         assert "胜率 100%" in out
+
+    def test_code_filter_does_not_leak_other_holdings(self, capsys):
+        cache.cmd_add_holding(["603606", "34.24", "500", "--notes", "east-only"])
+        cache.cmd_add_holding(["600036", "39.58", "500", "--notes", "bank-secret"])
+        capsys.readouterr()
+
+        cache.cmd_holdings(["603606"])
+
+        out = capsys.readouterr().out
+        assert "603606" in out
+        assert "east-only" in out
+        assert "600036" not in out
+        assert "bank-secret" not in out
+
+    def test_missing_code_has_stable_not_held_result(self, capsys):
+        cache.get_db().close()
+
+        cache.cmd_holdings(["603606"])
+
+        assert capsys.readouterr().out.strip() == "NOT_HELD 603606"
+
+    def test_holdings_handler_is_physically_read_only(self, isolated_db, capsys):
+        cache.cmd_add_holding(["603606", "34.24", "500"])
+        conn = cache.get_db()
+        conn.execute("DELETE FROM holding_events")
+        conn.execute(
+            """UPDATE holdings
+               SET initial_shares=NULL, main_entry_date=NULL,
+                   main_entry_basis=NULL, reference_cost=NULL"""
+        )
+        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+        capsys.readouterr()
+        path = Path(isolated_db)
+        before = hashlib.sha256(path.read_bytes()).hexdigest()
+
+        cache.cmd_holdings(["603606"])
+
+        after = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert after == before
+        conn = cache.get_db()
+        row = conn.execute(
+            "SELECT initial_shares, reference_cost FROM holdings WHERE code='603606'"
+        ).fetchone()
+        event_count = conn.execute("SELECT COUNT(*) FROM holding_events").fetchone()[0]
+        conn.close()
+        assert row == (None, None)
+        assert event_count == 0
+
+    @pytest.mark.parametrize(
+        "command,args",
+        [
+            (cache.cmd_retro_pending, []),
+            (cache.cmd_retro_outliers, []),
+        ],
+    )
+    def test_retro_read_commands_are_physically_read_only(
+        self, isolated_db, capsys, command, args
+    ):
+        cache.cmd_add_holding(["603606", "34.24", "500"])
+        cache.cmd_close_holding(["603606", "35.00"])
+        conn = cache.get_db()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+        capsys.readouterr()
+        path = Path(isolated_db)
+        before = hashlib.sha256(path.read_bytes()).hexdigest()
+
+        command(args)
+
+        after = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert after == before
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -726,12 +802,47 @@ class TestRaceConditions:
         assert closed_count == 2, "each concurrent close must update a distinct lot"
 
 
+def _insert_closed_holding_with_events(
+    conn,
+    *,
+    code: str,
+    name: str,
+    cost: float,
+    shares: int,
+    buy_score: int,
+    exit_price: float,
+) -> int:
+    cursor = conn.execute(
+        """INSERT INTO holdings
+           (code, name, cost_price, shares, buy_date, buy_score,
+            exit_price, exit_date, updated_at)
+           VALUES (?, ?, ?, ?, '2026-01-01', ?, ?, '2026-06-01', '2026-06-01')""",
+        (code, name, cost, shares, buy_score, exit_price),
+    )
+    holding_id = cursor.lastrowid
+    conn.executemany(
+        """INSERT INTO holding_events
+           (holding_id, code, event_type, event_date, shares, price, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, '2026-06-01')""",
+        [
+            (holding_id, code, "buy", "2026-01-01", shares, cost),
+            (holding_id, code, "sell", "2026-06-01", shares, exit_price),
+        ],
+    )
+    return holding_id
+
+
 class TestRetroAdd:
     def test_retro_add_happy_path(self, capsys):
         with cache.db_session() as conn:
-            conn.execute(
-                "INSERT INTO holdings (code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
-                "VALUES ('600036', '招商银行', 40.0, 100, '2026-01-01', 70, 42.0, '2026-06-01', '2026-06-01')"
+            _insert_closed_holding_with_events(
+                conn,
+                code="600036",
+                name="招商银行",
+                cost=40.0,
+                shares=100,
+                buy_score=70,
+                exit_price=42.0,
             )
             conn.commit()
         cache.cmd_retro_add(["600036", "ROE高估"])
@@ -753,9 +864,14 @@ class TestRetroAdd:
 
     def test_retro_add_optional_flags(self):
         with cache.db_session() as conn:
-            conn.execute(
-                "INSERT INTO holdings (code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
-                "VALUES ('000001', '平安银行', 10.0, 200, '2026-02-01', 60, 9.0, '2026-05-01', '2026-05-01')"
+            _insert_closed_holding_with_events(
+                conn,
+                code="000001",
+                name="平安银行",
+                cost=10.0,
+                shares=200,
+                buy_score=60,
+                exit_price=9.0,
             )
             conn.commit()
         cache.cmd_retro_add(
@@ -830,9 +946,14 @@ class TestRetroStats:
 class TestRetroOutliers:
     def test_retro_outliers_finds_large_loss(self, capsys):
         with cache.db_session() as conn:
-            conn.execute(
-                "INSERT INTO holdings (code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
-                "VALUES ('601088', '神华', 30.0, 100, '2026-01-01', 55, 25.0, '2026-06-01', '2026-06-01')"
+            _insert_closed_holding_with_events(
+                conn,
+                code="601088",
+                name="神华",
+                cost=30.0,
+                shares=100,
+                buy_score=55,
+                exit_price=25.0,
             )
             conn.commit()
         cache.cmd_retro_outliers(["--loss", "-10"])
@@ -841,13 +962,23 @@ class TestRetroOutliers:
 
     def test_retro_outliers_positive_loss_param(self, capsys):
         with cache.db_session() as conn:
-            conn.execute(
-                "INSERT INTO holdings (code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
-                "VALUES ('601088', '神华', 30.0, 100, '2026-01-01', 55, 25.0, '2026-06-01', '2026-06-01')"
+            _insert_closed_holding_with_events(
+                conn,
+                code="601088",
+                name="神华",
+                cost=30.0,
+                shares=100,
+                buy_score=55,
+                exit_price=25.0,
             )
-            conn.execute(
-                "INSERT INTO holdings (code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
-                "VALUES ('600036', '招行', 40.0, 100, '2026-01-01', 70, 38.0, '2026-06-01', '2026-06-01')"
+            _insert_closed_holding_with_events(
+                conn,
+                code="600036",
+                name="招行",
+                cost=40.0,
+                shares=100,
+                buy_score=70,
+                exit_price=38.0,
             )
             conn.commit()
         cache.cmd_retro_outliers(["--loss", "10"])

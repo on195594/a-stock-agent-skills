@@ -92,7 +92,7 @@ CLI_ARGUMENT_CASES = {
     "retro-pending": ([], []),
     "retro-stats": ([], ["A通用"]),
     "retro-outliers": ([], ["--loss", "10"]),
-    "holdings": ([], []),
+    "holdings": ([], ["600000"]),
     "remove-holding": (["600000"], ["600000"]),
     "update-return": (["600000", "10"], ["600000", "10"]),
     "position-return": (["600000"], ["600000", "10"]),
@@ -140,6 +140,33 @@ def test_cli_help_does_not_create_state(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     assert cache.main(["--help"]) == 0
     assert not (tmp_path / ".local").exists()
+
+
+def test_holdings_missing_database_is_unavailable_not_not_held(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    database = tmp_path / "missing.db"
+    monkeypatch.setenv("CACHE_DB_PATH", str(database))
+
+    assert cache.main(["holdings", "603606"]) == 1
+
+    captured = capsys.readouterr()
+    assert "HOLDINGS_UNAVAILABLE" in captured.err
+    assert "NOT_HELD" not in captured.out
+    assert not database.exists()
+
+
+def test_holdings_invalid_schema_is_unavailable(tmp_path, monkeypatch, capsys) -> None:
+    database = tmp_path / "invalid.db"
+    monkeypatch.setenv("CACHE_DB_PATH", str(database))
+    with sqlite3.connect(database) as conn:
+        conn.execute("CREATE TABLE unrelated(value TEXT)")
+
+    assert cache.main(["holdings", "603606"]) == 1
+
+    captured = capsys.readouterr()
+    assert "HOLDINGS_UNAVAILABLE" in captured.err
+    assert "NOT_HELD" not in captured.out
 
 
 def test_cli_argument_matrix_covers_every_command(monkeypatch) -> None:

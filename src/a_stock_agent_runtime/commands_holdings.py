@@ -7,9 +7,7 @@ import sqlite3
 import sys
 from datetime import date, datetime
 
-# Intentional exception: legacy holding-ledger repair remains schema-owned until
-# every supported database has a complete migration ledger.
-from a_stock_agent_runtime import db, domain, market_quotes, schema
+from a_stock_agent_runtime import db, domain, market_quotes
 from a_stock_agent_runtime.position_ledger import (
     LifecycleReturn,
     calculate_lifecycle_return,
@@ -448,32 +446,43 @@ def _print_closed_holdings(
 
 
 def cmd_holdings(args: list[str] | None = None) -> None:
-    """显示持仓列表：在仓持股 + 已平仓历史（含盈亏%，用于验证评分准确性）"""
-    with db.db_session() as conn:
-        # Lazy compatibility migration for legacy rows imported after process
-        # startup.  It only creates explicitly marked inferred baseline events.
-        schema.backfill_holding_metadata(conn)
-        rows = conn.execute(
-            """SELECT id, code, name, cost_price, shares, buy_date, buy_score,
-                      stop_loss_15, stop_loss_20, notes, exit_price, exit_date
-               FROM holdings ORDER BY exit_date IS NULL DESC, buy_date DESC"""
-        ).fetchall()
-        lifecycle_returns: dict[int, LifecycleReturn] = {}
-        for row in rows:
-            holding_id, exit_date = row[0], row[11]
-            if exit_date is None:
-                continue
-            try:
-                lifecycle_returns[holding_id] = calculate_lifecycle_return(
-                    _load_lifecycle_events(conn, holding_id),
-                    0,
-                    end_date=exit_date,
-                )
-            except ValueError:
-                continue
+    """显示全部持仓，或只显示指定代码的当前/历史持仓。"""
+    args = args or []
+    if len(args) > 1:
+        print("错误：holdings 最多接受一个股票代码", file=sys.stderr)
+        sys.exit(1)
+    code = args[0] if args else None
+    where = " WHERE code=?" if code else ""
+    params = (code,) if code else ()
+    try:
+        with db.read_only_db_session() as conn:
+            rows = conn.execute(
+                """SELECT id, code, name, cost_price, shares, buy_date, buy_score,
+                          stop_loss_15, stop_loss_20, notes, exit_price, exit_date
+                   FROM holdings"""
+                + where
+                + " ORDER BY exit_date IS NULL DESC, buy_date DESC",
+                params,
+            ).fetchall()
+            lifecycle_returns: dict[int, LifecycleReturn] = {}
+            for row in rows:
+                holding_id, exit_date = row[0], row[11]
+                if exit_date is None:
+                    continue
+                try:
+                    lifecycle_returns[holding_id] = calculate_lifecycle_return(
+                        _load_lifecycle_events(conn, holding_id),
+                        0,
+                        end_date=exit_date,
+                    )
+                except ValueError:
+                    continue
+    except sqlite3.OperationalError as exc:
+        print(f"HOLDINGS_UNAVAILABLE {exc}", file=sys.stderr)
+        sys.exit(1)
 
     if not rows:
-        print("暂无持仓记录")
+        print(f"NOT_HELD {code}" if code else "暂无持仓记录")
         return
 
     open_rows = [r for r in rows if r[11] is None]  # exit_date IS NULL
@@ -964,7 +973,6 @@ def cmd_retro_add(args: list[str]) -> None:
             sys.exit(1)
 
     with db.db_session() as conn:
-        schema.backfill_holding_metadata(conn)
         row = conn.execute(
             """SELECT h.id, h.code, h.name, h.buy_date, h.buy_score,
                       h.exit_date,
@@ -1031,8 +1039,7 @@ def cmd_retro_add(args: list[str]) -> None:
 
 def cmd_retro_pending(args: list[str] | None = None) -> None:
     """显示已平仓但尚未复盘的记录。用法：retro-pending"""
-    with db.db_session() as conn:
-        schema.backfill_holding_metadata(conn)
+    with db.read_only_db_session() as conn:
         rows = conn.execute(
             """SELECT h.id, h.code, h.name, h.exit_date, h.buy_score
                FROM holdings h
@@ -1138,8 +1145,7 @@ def cmd_retro_outliers(args: list[str]) -> None:
             print(f"错误：未知参数 {args[i]}", file=sys.stderr)
             sys.exit(1)
 
-    with db.db_session() as conn:
-        schema.backfill_holding_metadata(conn)
+    with db.read_only_db_session() as conn:
         rows = conn.execute(
             """SELECT h.id, h.code, h.name, h.exit_date, h.buy_score
                FROM holdings h
