@@ -318,6 +318,17 @@ def test_l3_list_freezes_incomplete_thesis_schema(capsys) -> None:
     assert "冻结交易" in output
 
 
+def test_l3_list_freezes_without_active_thesis_unique_index(capsys) -> None:
+    _add_holding_with_l3("000963")
+    with cache.db_session() as conn:
+        conn.execute("DROP INDEX idx_thesis_one_active_per_holding")
+        conn.commit()
+    cache.cmd_l3_list(["000963"])
+    output = capsys.readouterr().out
+    assert "论文版本迁移不完整" in output
+    assert "冻结交易" in output
+
+
 def test_l3_list_freezes_trigger_without_evidence(capsys, monkeypatch) -> None:
     old_ids = _add_holding_with_l3("000963")
     _rewrite(monkeypatch, "000963", _payload(old_ids))

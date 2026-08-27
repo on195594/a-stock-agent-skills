@@ -165,6 +165,10 @@ def cmd_l3_list(args: list[str]) -> None:
                    WHERE type='table' AND name='holding_thesis_versions'"""
             ).fetchone()
         )
+        active_thesis_index_exists = thesis_table_exists and any(
+            row[1] == "idx_thesis_one_active_per_holding" and row[2] == 1 and row[4] == 1
+            for row in conn.execute("PRAGMA index_list(holding_thesis_versions)")
+        )
         if not (thesis_columns & columns) and not thesis_table_exists:
             print(f"警告：{code} legacy contract（尚未迁移论文版本，保留旧L3行为）")
             rows = conn.execute(
@@ -183,7 +187,11 @@ def cmd_l3_list(args: list[str]) -> None:
             if not rows:
                 print(f"{code} 无结构化L3条件")
             return
-        if not thesis_columns <= columns or not thesis_table_exists:
+        if (
+            not thesis_columns <= columns
+            or not thesis_table_exists
+            or not active_thesis_index_exists
+        ):
             print("警告：论文版本迁移不完整，冻结交易；请先完成schema恢复")
             return
 
