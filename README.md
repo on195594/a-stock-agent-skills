@@ -12,7 +12,7 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The repository's `v0.1.7` runtime release candidate uses
+The deployed `v0.1.7` runtime release uses
 `a-stock-lib==0.6.1`. It adds incremental holding-thesis versioning, atomic L3
 replacement and materiality/action gates while preserving legacy L3 behavior
 with an explicit warning until each holding is rewritten. All nine client Skill

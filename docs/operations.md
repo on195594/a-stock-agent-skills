@@ -86,21 +86,18 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.6` (`0.1.6-8ab751454a5c`) with
-`a-stock-lib==0.6.1`. Its library manifest records source commit
-`797c68a65e9798175b57b173ded3ea94b631b102` and a hash-matching wheel retained
-under the runtime `artifacts/` directory; rollback manifest
-`rollback-1787479588943809320.json` preserves the prior client entries.
-The previous `0.1.5-898af3b6a6f0` runtime remains installed for rollback.
-Configuration and crontab SHA256 fingerprints were unchanged, and no database
-schema migration was performed.
+The current runtime is `v0.1.7` (`0.1.7-ce60e456bfd7`) with
+`a-stock-lib==0.6.1`. Rollback manifest
+`rollback-1787813347622232240.json` preserves the prior client entries and the
+previous `0.1.6-8ab751454a5c` runtime remains installed. Configuration and
+crontab SHA256 fingerprints stayed unchanged.
 
-The nine active client Skill entries still resolve to the canonical repository.
-The installed runtime exposes `score-fundamentals` as an R0 command. An isolated
-temporary-state production-entrypoint smoke returned a complete A-framework
-60-point result; a real production-cache B-framework read correctly failed closed
-on missing bank inputs. Configuration and crontab fingerprints matched their
-pre-cutover values; no database schema migration ran.
+The nine active client Skill entries resolve to the canonical repository. The
+production database has the thesis-version schema and passed `integrity_check`.
+For holding `000963`, thesis v1 is active, legacy L3 rows 7/8 are retired and
+replacement rows 19/20/21 are active with evidence-backed `not_triggered`
+status. Shares, costs, buy date, reference cost and the two transaction events
+were unchanged by the rewrite.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in
