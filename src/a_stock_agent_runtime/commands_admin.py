@@ -371,6 +371,7 @@ def cmd_cleanup(args: list[str] | None = None) -> None:
         for table in (
             "holding_events",
             "holding_l3_conditions",
+            "holding_thesis_versions",
             "holding_tier_state",
             "holding_alerts",
             "retro_notes",

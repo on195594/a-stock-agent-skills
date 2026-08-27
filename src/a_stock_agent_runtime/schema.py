@@ -88,6 +88,34 @@ SCHEMA_MIGRATIONS = [
         "022-holding-events-inferred",
         "ALTER TABLE holding_events ADD COLUMN inferred INTEGER NOT NULL DEFAULT 0",
     ),
+    (
+        "027-l3-thesis-version-id",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN thesis_version_id INTEGER",
+    ),
+    (
+        "028-l3-is-active",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1))",
+    ),
+    (
+        "029-l3-retired-at",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN retired_at TEXT",
+    ),
+    (
+        "030-l3-retired-reason",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN retired_reason TEXT",
+    ),
+    (
+        "031-l3-condition-scope",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN condition_scope TEXT NOT NULL DEFAULT 'legacy_unclassified' CHECK(condition_scope IN ('aggregate','core_driver','non_core','governance','legacy_unclassified'))",
+    ),
+    (
+        "032-l3-action-level",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN action_level TEXT NOT NULL DEFAULT 'legacy_unclassified' CHECK(action_level IN ('review','reduce','exit','legacy_unclassified'))",
+    ),
+    (
+        "033-l3-materiality-basis",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN materiality_basis TEXT",
+    ),
 ]
 
 
@@ -109,6 +137,29 @@ def apply_column_migration(conn: sqlite3.Connection, sql: str) -> None:
             return
         logger.exception("Schema migration failed: %s", sql)
         raise
+
+
+def _create_thesis_version_schema(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS holding_thesis_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        holding_id INTEGER NOT NULL,
+        version INTEGER NOT NULL,
+        l1 TEXT NOT NULL,
+        l2 TEXT NOT NULL,
+        rewrite_reason TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (holding_id, version),
+        CHECK (status IN ('active', 'superseded'))
+    )""")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_thesis_one_active_per_holding "
+        "ON holding_thesis_versions(holding_id) WHERE status='active'"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_thesis_holding_version "
+        "ON holding_thesis_versions(holding_id, version)"
+    )
 
 
 def _create_core_tables(conn: sqlite3.Connection) -> None:
@@ -187,11 +238,22 @@ def _create_core_tables(conn: sqlite3.Connection) -> None:
         as_of TEXT,
         next_review_date TEXT,
         temporary_exit_rule TEXT,
+        thesis_version_id INTEGER,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        retired_at TEXT,
+        retired_reason TEXT,
+        condition_scope TEXT NOT NULL DEFAULT 'legacy_unclassified',
+        action_level TEXT NOT NULL DEFAULT 'legacy_unclassified',
+        materiality_basis TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         CHECK (origin_type IN ('original', 'recovered', 'new_monitoring')),
-        CHECK (status IN ('pending', 'not_triggered', 'watch', 'triggered'))
+        CHECK (status IN ('pending', 'not_triggered', 'watch', 'triggered')),
+        CHECK (is_active IN (0,1)),
+        CHECK (condition_scope IN ('aggregate','core_driver','non_core','governance','legacy_unclassified')),
+        CHECK (action_level IN ('review','reduce','exit','legacy_unclassified'))
     )""")
+    _create_thesis_version_schema(conn)
     conn.execute("""CREATE TABLE IF NOT EXISTS holding_tier_state (
         holding_id INTEGER PRIMARY KEY,
         tier1_status TEXT NOT NULL DEFAULT 'pending',
@@ -519,6 +581,7 @@ def bootstrap_database_schema(conn: sqlite3.Connection) -> None:
             ("024-holdings-indices", lambda: _ensure_holdings_indices(conn)),
             ("025-holdings-metadata-backfill", lambda: backfill_holding_metadata(conn)),
             ("026-legacy-alerts-backfill", lambda: backfill_legacy_alerts(conn)),
+            ("034-holding-thesis-versions", lambda: _create_thesis_version_schema(conn)),
         ]
     )
     bootstrap_schema(conn, domain.utc_now_iso(), migrations)

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7 - 2026-08-27
+
+- Added versioned holding theses with a partial unique index enforcing one active thesis per holding.
+- Added the W1 `thesis-rewrite` command, which validates one stdin JSON payload and atomically supersedes the thesis, retires the complete old L3 set and creates linked structured replacements.
+- Added L3 lifecycle, scope, action and materiality fields; active listings follow the current thesis, `l3-list --all` retains audit history, and retired updates are rejected.
+- Preserved unrevised holdings under the existing behavior with a visible `legacy contract` warning; rewritten holdings fail closed on stale or unclassified active L3 contracts.
+
 ## 0.1.6 - 2026-08-23
 
 - Requires `a-stock-lib==0.6.1`, whose rule hash follows executable scorer source automatically.

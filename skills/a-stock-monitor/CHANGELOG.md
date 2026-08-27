@@ -4,6 +4,15 @@
 
 ---
 
+## [2.1.0] 2026-08-27
+
+### L3 重要性、动作分级与论文版本生命周期
+
+- 只有绑定当前活动论文版本、未退役且通过 scope/action/materiality 语义门的 L3 才能产生交易建议。
+- 新增 `aggregate/core_driver/non_core/governance` 范围与 `review/reduce/exit` 动作；`non_core` 最多只能复核。
+- 新增原子 `thesis-rewrite` 写入流程和 `l3-list --all` 审计视图；未重写持仓保留旧行为并明确显示 `legacy contract`。
+- TTM 现金流条件仍由 payload 保存公式与口径，运行时不代算财务指标。
+
 ## [2.0.2] 2026-08-09
 
 ### 修复：投资路线、加仓边界与 Tier1 回补状态口径

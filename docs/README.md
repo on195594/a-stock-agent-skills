@@ -14,6 +14,7 @@
 - [`specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md`](specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md) — product-cycle and thematic-catalyst analysis migration boundaries.
 - [`specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md`](specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md) — implemented and deployed Research/QA contract repairs.
 - [`specs/2026-08-23-research-data-capability-and-skill-slimming-spec.md`](specs/2026-08-23-research-data-capability-and-skill-slimming-spec.md) — deployed PS, interim-report snapshot and progressive-disclosure contract.
+- [`specs/2026-08-27-l3-materiality-and-thesis-versioning-repair-spec.md`](specs/2026-08-27-l3-materiality-and-thesis-versioning-repair-spec.md) — approved L3 materiality, lifecycle and holding-thesis versioning repair.
 - [`plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md`](plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md) — milestone ledger, execution commands and rollback plan.
 - [`plans/2026-08-10-p2-structural-refactor-plan.md`](plans/2026-08-10-p2-structural-refactor-plan.md) — completed P2 structural refactor and evidence relocation.
 - [`plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md`](plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md) — completed implementation, review and production cutover ledger.

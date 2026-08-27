@@ -45,6 +45,10 @@ $CACHE --confirm-write l3-add <代码> <original|recovered|new_monitoring> "<条
 $CACHE --confirm-write l3-update <条件id> <pending|not_triggered|watch|triggered> \
   <YYYY-MM-DD> "<证据>" [下次复核日期]
 $CACHE l3-list <代码>
+$CACHE l3-list <代码> --all
+
+# 从 stdin 读取一个 JSON 对象，原子版本化 L1/L2、退役完整旧L3并创建新L3
+$CACHE --confirm-write thesis-rewrite <代码> < thesis-rewrite.json
 
 # Tier（豁免声明只能在建仓当日写入）
 $CACHE --confirm-write tier-config <代码> <A|B|C|none> <目标涨幅%|none> <E|F|none>
@@ -64,8 +68,18 @@ $CACHE --confirm-write alert-resolve <代码> <reason_code> "<解除证据>"
 $CACHE alerts <代码>
 ```
 
-L3、Tier、预警和主力入场日期不得再以自由文本 notes 作为唯一事实源；notes 只保留
-无法结构化的补充说明。
+`thesis-rewrite` payload 必须含 `l1`、`l2`、`rewrite_reason`、完整的
+`retire_l3_ids`，以及非空 `new_l3`。每条新L3必须含 `condition`、`scope`、`action`、
+`materiality_basis` 和 `temporary_exit_rule`；scope为
+`aggregate/core_driver/non_core/governance`，action为 `review/reduce/exit`，其中
+`non_core` 只能使用 `review`。`core_driver/aggregate + exit` 的重要性与确认期约束、
+`governance + exit` 的集团级确定性证据必须写入相应文本字段。校验失败、跨持仓ID、遗漏活动L3或任一写入失败都会回滚全部
+修改。TTM现金流公式及口径写入条件/重要性/临时规则文本，运行时不负责代算财务指标。
+
+未出现活动论文版本时，`l3-list` 显示 `legacy contract` 并保留旧行为；一旦重写，只有绑定
+当前活动论文且未退役的合法L3可参与动作。`l3-update` 拒绝退役行，历史记录只通过
+`--all` 查看。L3、Tier、预警和主力入场日期不得再以自由文本 notes 作为唯一事实源；
+notes 只保留无法结构化的补充说明。
 
 ### 历史预警查询
 
@@ -107,6 +121,7 @@ L3、Tier、预警和主力入场日期不得再以自由文本 notes 作为唯�
 | Tier1/2/3状态 | `tier-update` | A/E/F | `holding_tier_state` |
 | PEG计算记录（数据源、as-of日期、NP0、NP2、`G_pct`、PEG结果） | 每次涉及E框架PEG判定时（Tier1/Tier2-3/Tier1后补仓均适用） | E框架持仓 | 步骤4各处PEG判定 |
 | L3核查结论 | `l3-add/l3-update` | 全部持仓 | `holding_l3_conditions` |
+| L1/L2论文版本与L3替换 | `thesis-rewrite` | 新建或重写论文的持仓 | `holding_thesis_versions` + `holding_l3_conditions` |
 | 预警及消除依据 | `alert-open/alert-resolve` | 全部持仓 | `holding_alerts` |
 
 本表汇总各步骤的持久化状态。除 PEG 计算明细和格档核查证据仍可作为补充 notes 外，

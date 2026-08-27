@@ -1200,6 +1200,7 @@ def cmd_remove_holding(args: list[str]) -> None:
         for table in (
             "holding_events",
             "holding_l3_conditions",
+            "holding_thesis_versions",
             "holding_tier_state",
             "holding_alerts",
             "retro_notes",

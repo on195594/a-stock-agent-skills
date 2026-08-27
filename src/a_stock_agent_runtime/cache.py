@@ -8,7 +8,7 @@ A股投研数据缓存管理器
   --confirm-write 必须位于子命令之前。所有 W1（修改投资状态）子命令缺少该参数时
   返回退出码 3，且不打开写事务；R0/R1 只读子命令不需要该参数。
   W1：set / set-analysis / set-score / set-score-breakdown / set-flag / clear-flag /
-      alert-open / alert-pending / alert-resolve / l3-add / l3-update / tier-config /
+      alert-open / alert-pending / alert-resolve / l3-add / l3-update / thesis-rewrite / tier-config /
       tier-update / holding-framework / add-holding / buy-holding / sell-holding /
       record-dividend / corporate-action / close-holding / retro-add / remove-holding /
       update-return / cleanup / clear
@@ -25,7 +25,8 @@ A股投研数据缓存管理器
   cache.py clear-flag <代码>                             # 清除指定股票所有预警标记
   cache.py alert-open ... / alert-pending ... / alert-resolve ... / alerts <代码>
                                                         # 结构化预警生命周期
-  cache.py l3-add ... / l3-update ... / l3-list <代码>   # 结构化 L3 条件
+  cache.py l3-add ... / l3-update ... / l3-list <代码> [--all]
+  cache.py thesis-rewrite <代码>                        # 从stdin原子重写论文和L3
   cache.py tier-config ... / tier-update ...             # 结构化 Tier 状态
   cache.py holding-framework <代码> <A|B|C|D|E|F>        # 显式迁移持仓框架并重算止损线
   cache.py add-holding <代码> <成交价> [股数] [--notes 备注] [--fee 金额] [--date YYYY-MM-DD]
@@ -150,6 +151,7 @@ cmd_check_holdings = commands_holdings.cmd_check_holdings
 cmd_l3_add = commands_monitor.cmd_l3_add
 cmd_l3_update = commands_monitor.cmd_l3_update
 cmd_l3_list = commands_monitor.cmd_l3_list
+cmd_thesis_rewrite = commands_monitor.cmd_thesis_rewrite
 cmd_tier_config = commands_monitor.cmd_tier_config
 cmd_holding_framework = commands_monitor.cmd_holding_framework
 cmd_tier_update = commands_monitor.cmd_tier_update
@@ -195,6 +197,7 @@ COMMANDS = {
     "l3-add": cmd_l3_add,
     "l3-update": cmd_l3_update,
     "l3-list": cmd_l3_list,
+    "thesis-rewrite": cmd_thesis_rewrite,
     "tier-config": cmd_tier_config,
     "tier-update": cmd_tier_update,
     "holding-framework": cmd_holding_framework,
@@ -257,6 +260,7 @@ COMMAND_CLASSIFICATION = {
             "alert-resolve",
             "l3-add",
             "l3-update",
+            "thesis-rewrite",
             "tier-config",
             "tier-update",
             "holding-framework",
@@ -320,6 +324,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
         ("下次复核", "?"),
     ),
     "l3-list": (("代码", None),),
+    "thesis-rewrite": (("代码", None),),
     "tier-config": (
         ("代码", None),
         ("路径", None),
@@ -396,6 +401,8 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         if command == "watchlist":
             command_parser.add_argument("--json", action="store_true")
             command_parser.add_argument("--breakdown", action="store_true")
+        if command == "l3-list":
+            command_parser.add_argument("--all", action="store_true")
     return parser
 
 

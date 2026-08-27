@@ -45,6 +45,7 @@ Useful focused checks:
 ```bash
 uv run pytest tests/test_cli_contract.py tests/test_command_classification.py -q
 uv run pytest tests/test_installation.py tests/test_state_migration.py -q
+uv run pytest tests/test_l3_thesis_versioning.py tests/test_cli_contract.py -q
 uv run pytest tests/monitor tests/qa tests/research -q
 bash tests/test_check_holdings_cron.sh
 ```
