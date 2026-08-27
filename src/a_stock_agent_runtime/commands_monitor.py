@@ -118,6 +118,8 @@ def cmd_l3_update(args: list[str]) -> None:
     if status not in ("pending", "not_triggered", "watch", "triggered"):
         print("错误：L3状态非法", file=sys.stderr)
         sys.exit(1)
+    if not as_of.strip() or not evidence.strip():
+        _fail("as-of 和证据必须是非空字符串")
     next_review = args[4] if len(args) > 4 else None
     for candidate in (as_of, next_review):
         if candidate:
@@ -148,7 +150,22 @@ def cmd_l3_list(args: list[str]) -> None:
         columns = {
             row[1] for row in conn.execute("PRAGMA table_info(holding_l3_conditions)")
         }
-        if "thesis_version_id" not in columns:
+        thesis_columns = {
+            "thesis_version_id",
+            "is_active",
+            "retired_at",
+            "retired_reason",
+            "condition_scope",
+            "action_level",
+            "materiality_basis",
+        }
+        thesis_table_exists = bool(
+            conn.execute(
+                """SELECT 1 FROM sqlite_master
+                   WHERE type='table' AND name='holding_thesis_versions'"""
+            ).fetchone()
+        )
+        if not (thesis_columns & columns) and not thesis_table_exists:
             print(f"警告：{code} legacy contract（尚未迁移论文版本，保留旧L3行为）")
             rows = conn.execute(
                 """SELECT l.id, l.origin_type, l.status, l.condition_text, l.as_of,
@@ -166,15 +183,18 @@ def cmd_l3_list(args: list[str]) -> None:
             if not rows:
                 print(f"{code} 无结构化L3条件")
             return
+        if not thesis_columns <= columns or not thesis_table_exists:
+            print("警告：论文版本迁移不完整，冻结交易；请先完成schema恢复")
+            return
 
         holding = conn.execute(
-            "SELECT id FROM holdings WHERE code=? AND exit_date IS NULL ORDER BY id",
+            "SELECT 1 FROM holdings WHERE code=? AND exit_date IS NULL LIMIT 1",
             (code,),
         ).fetchone()
         if holding is None:
             print(f"{code} 无结构化L3条件")
             return
-        holding_id = holding[0]
+        holding_id = commands_holdings._single_open_holding(conn, code)[0]
         active_thesis = conn.execute(
             """SELECT id, version, l1, l2 FROM holding_thesis_versions
                WHERE holding_id=? AND status='active'""",
@@ -212,6 +232,15 @@ def cmd_l3_list(args: list[str]) -> None:
         active_thesis_id = active_thesis[0]
 
         def valid(row) -> bool:
+            evidence_contract_valid = True
+            if row[2] == "triggered":
+                try:
+                    date.fromisoformat(row[4])
+                except (TypeError, ValueError):
+                    evidence_contract_valid = False
+                evidence_contract_valid = evidence_contract_valid and bool(
+                    row[6] and row[6].strip()
+                )
             return (
                 row[9] == 1
                 and row[8] == active_thesis_id
@@ -220,6 +249,7 @@ def cmd_l3_list(args: list[str]) -> None:
                 and not (row[12] == "non_core" and row[13] != "review")
                 and bool(row[14])
                 and bool(row[7])
+                and evidence_contract_valid
             )
 
         invalid_active = [row for row in all_rows if row[9] == 1 and not valid(row)]

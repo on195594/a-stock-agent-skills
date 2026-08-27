@@ -284,6 +284,55 @@ def test_l3_update_rejects_retired_row(monkeypatch) -> None:
         cache.cmd_l3_update([str(old_ids[0]), "triggered", "2026-08-27", "旧证据"])
 
 
+@pytest.mark.parametrize(
+    "as_of,evidence",
+    [("", "有效证据"), ("2026-08-27", "")],
+)
+def test_l3_update_rejects_empty_evidence_contract(as_of, evidence) -> None:
+    condition_id = _add_holding_with_l3("000963")[0]
+    with pytest.raises(SystemExit):
+        cache.cmd_l3_update([str(condition_id), "triggered", as_of, evidence])
+
+
+def test_l3_list_rejects_duplicate_open_holdings(capsys) -> None:
+    _add_holding_with_l3("000963")
+    with cache.db_session() as conn:
+        conn.execute(
+            """INSERT INTO holdings (code, cost_price, shares, buy_date, initial_shares)
+               VALUES ('000963', 11, 100, '2026-02-02', 100)"""
+        )
+        conn.commit()
+    with pytest.raises(SystemExit):
+        cache.cmd_l3_list(["000963"])
+    assert "有2条在仓记录" in capsys.readouterr().err
+
+
+def test_l3_list_freezes_incomplete_thesis_schema(capsys) -> None:
+    _add_holding_with_l3("000963")
+    with cache.db_session() as conn:
+        conn.execute("DROP TABLE holding_thesis_versions")
+        conn.commit()
+    cache.cmd_l3_list(["000963"])
+    output = capsys.readouterr().out
+    assert "论文版本迁移不完整" in output
+    assert "冻结交易" in output
+
+
+def test_l3_list_freezes_trigger_without_evidence(capsys, monkeypatch) -> None:
+    old_ids = _add_holding_with_l3("000963")
+    _rewrite(monkeypatch, "000963", _payload(old_ids))
+    with cache.db_session() as conn:
+        conn.execute(
+            """UPDATE holding_l3_conditions
+               SET status='triggered', as_of=NULL, evidence=NULL WHERE is_active=1"""
+        )
+        conn.commit()
+    cache.cmd_l3_list(["000963"])
+    output = capsys.readouterr().out
+    assert "交易契约无效" in output
+    assert "连续两个完整披露期核心利润恶化" not in output
+
+
 def test_second_rewrite_supersedes_prior_version_and_l3_add_is_blocked(
     monkeypatch,
 ) -> None:
