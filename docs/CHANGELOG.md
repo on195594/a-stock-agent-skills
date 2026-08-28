@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Bounded unspecified research/comparison requests to a concise but QA-complete first report, with installed-runtime-first market data, small search batches and an explicit stop condition after mandatory evidence gates.
+- Bound QA verdicts to immutable versioned report snapshots and prohibited polling/sleep or concurrent report edits while asynchronous QA runs.
+- Aligned the A-framework external-concentration output with the QA rubric for normal as well as limited/major states, and documented the required `gross_margin_stable` scorer supplement.
+
 ## 0.1.8 - 2026-08-27
 
 - Made holdings and read-only retrospective queries physically read-only and removed command-time compatibility backfills already owned by migration 025.

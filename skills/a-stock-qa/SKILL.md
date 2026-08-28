@@ -15,7 +15,7 @@ compatibility: Reads this Skill's rubric and checks supplied report text.
 
 ## 调用前提
 
-必须已有完整 a-stock-research 分析输出正文，并以正文直接传入或提供当前宿主可读的固定文件路径。
+必须已有完整 a-stock-research 分析输出正文，并以正文直接传入或提供当前宿主可读的**不可变快照**。文件输入必须使用本轮唯一版本路径；宿主在 QA 开始前记录内容哈希，并在形成 verdict 前再次核对。QA 开始后不得覆写该路径。QA verdict 仅适用于该快照；正文发生任何修订时必须生成新快照并重新执行 QA，不得沿用旧 verdict。
 如缺少完整正文、只提供摘要/修订说明、路径不可读或工具异常，直接返回 `verdict: INVALID_RUN` 并说明缺失项；不得返回 `NON_COMPLIANT`，也不得把该次运行计入报告合规结果。
 当前仅支持已有的 a-stock-research rubric；其他类型返回 `SKIP`。
 
@@ -97,3 +97,4 @@ NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
   （如 fetcher 数据本身是否正确，不在本 skill 职责范围内）
 - 完整报告存在、但某一步骤证据模糊或无法判断 → 按 rubric 级别保守判断为 FAIL，附注"无法从输出文本确认"
 - 完整报告本身不存在或不可读 → `INVALID_RUN`，不是合规 FAIL
+- 文件输入的前后内容哈希不一致时，返回 `INVALID_RUN` 并说明输入快照漂移；不得对混合版本形成合规 verdict

@@ -25,6 +25,7 @@ def test_research_skill_uses_three_progressive_disclosure_references() -> None:
     report = REFERENCES["report"].read_text(encoding="utf-8")
     assert "标准评估卡" in report
     assert "操作建议禁止条款" in report
+    assert "有界首版本身就是完整报告" in report
 
 
 def test_research_skill_keeps_hard_boundaries_in_main_entrypoint() -> None:
@@ -46,3 +47,31 @@ def test_research_skill_keeps_hard_boundaries_in_main_entrypoint() -> None:
     assert "## 第1.5步：周期位置判断" in main
     assert "## 第三步：择时评分" in main
     assert "## 输出格式" in main
+
+
+def test_research_skill_bounds_first_pass_source_work_and_qa_handoff() -> None:
+    main = MAIN.read_text(encoding="utf-8")
+
+    for marker in (
+        "有界首版",
+        "每批最多 4 个独立查询",
+        "不得再探测其他实时行情 Provider",
+        "停止新增非阻塞补充检索",
+        "不可变快照",
+        "内容哈希",
+        "交付副本",
+        "不得轮询",
+        "不得用 `sleep` 等待",
+    ):
+        assert marker in main
+
+
+def test_a_framework_inputs_and_external_risk_contract_match_qa() -> None:
+    main = MAIN.read_text(encoding="utf-8")
+    framework_a = (ROOT / "references/frameworks/A.md").read_text(encoding="utf-8")
+
+    assert "A框架每次都必须输出" in main
+    assert "状态=正常|受限|重大" in main
+    assert "异动、治理/政策与外部集中风险" in main
+    assert "gross_margin_stable" in framework_a
+    assert "补充指标 JSON" in framework_a

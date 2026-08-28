@@ -24,6 +24,17 @@ def test_research_qa_routing_is_host_neutral() -> None:
         assert client_command not in research.lower()
 
 
+def test_qa_verdict_is_bound_to_an_immutable_report_snapshot() -> None:
+    qa_skill = (ROOT / "skills/a-stock-qa/SKILL.md").read_text(encoding="utf-8")
+
+    assert "不可变快照" in qa_skill
+    assert "唯一版本路径" in qa_skill
+    assert "仅适用于该快照" in qa_skill
+    assert "新快照" in qa_skill and "重新执行 QA" in qa_skill
+    assert "内容哈希" in qa_skill
+    assert "再次核对" in qa_skill
+
+
 def test_held_stock_route_hard_stops_research_work() -> None:
     research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
     assert "a-stock-cache holdings <股票代码>" in research
