@@ -839,6 +839,60 @@ def _make_ps_valuation_df(
     )
 
 
+def test_compute_price_change_5d_uses_six_valid_sorted_observations():
+    frame = pd.DataFrame(
+        {
+            "date": [
+                "2026-01-08",
+                "2026-01-05",
+                "2026-01-07",
+                "invalid",
+                "2026-01-02",
+                "2026-01-06",
+                "2026-01-01",
+                "2026-01-05",
+                "2026-01-07",
+            ],
+            "收盘": [110.0, 102.0, 104.0, 999.0, 101.0, 103.0, 100.0, 0.0, -5.0],
+        }
+    )
+
+    change, as_of, reason = fetcher.compute_price_change_5d(frame)
+
+    assert change == pytest.approx(10.0)
+    assert as_of == "2026-01-08"
+    assert reason is None
+
+
+def test_compute_price_change_5d_requires_six_valid_observations():
+    frame = pd.DataFrame(
+        {
+            "date": pd.date_range("2026-01-01", periods=5, freq="B"),
+            "收盘": [100.0, 101.0, 102.0, 103.0, 104.0],
+        }
+    )
+
+    change, as_of, reason = fetcher.compute_price_change_5d(frame)
+
+    assert change is None
+    assert as_of is None
+    assert reason is not None and "6" in reason
+
+
+def test_load_price_df_drops_invalid_provider_dates(monkeypatch):
+    raw = pd.DataFrame(
+        {
+            "日期": ["2026-01-02", "malformed", "2026-01-05"],
+            "收盘": [100.0, 999.0, 101.0],
+        }
+    )
+    monkeypatch.setattr(fetcher, "timed_call_with_retry", lambda *args, **kwargs: raw)
+
+    result = fetcher._load_price_df("600000", years=10)
+
+    assert result["date"].dt.date.astype(str).tolist() == ["2026-01-02", "2026-01-05"]
+
+
 def test_compute_ps_ttm_percentile_requires_60_valid_months():
     valuation_df = _make_ps_valuation_df(months=59)
 
@@ -888,6 +942,8 @@ def test_fetch_percentiles_reuses_price_history_for_ps(monkeypatch):
     fetcher._fetch_percentiles("600000", fin_df, results, null_reasons)
 
     assert calls == [("600000", 10)]
+    assert results["price_change_5d"] == pytest.approx(0.0)
+    assert results["_price_change_5d_as_of"] == "2025-12-31"
     assert results["ps_ttm"] == pytest.approx(10.9)
     assert results["ps_percentile_5y"] == pytest.approx(98.3)
     assert results["_ps_percentile_window"]["valid_months"] == 60

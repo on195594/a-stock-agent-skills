@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.9 - 2026-08-30
 
 - Bounded unspecified research/comparison requests to a concise but QA-complete first report, with installed-runtime-first market data, small search batches and an explicit stop condition after mandatory evidence gates.
 - Bound QA verdicts to immutable versioned report snapshots and prohibited polling/sleep or concurrent report edits while asynchronous QA runs.
 - Aligned the A-framework external-concentration output with the QA rubric for normal as well as limited/major states, and documented the required `gross_margin_stable` scorer supplement.
+- Reused the existing valuation price history to expose a provenance-stamped five-session price change without another provider call.
+- Stopped optional sentiment/provider recovery after an incomplete gate has fixed the action, required QA-complete one-shot delivery, and kept one-off report snapshots out of durable project directories.
 
 ## 0.1.8 - 2026-08-27
 

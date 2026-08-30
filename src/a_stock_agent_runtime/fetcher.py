@@ -69,6 +69,7 @@ FIELDS = {
     "pe_percentile_5y": ("PE历史5年分位(%)", "computed"),
     "pe_percentile_10y": ("PE历史10年分位(%)", "computed"),
     "pb_percentile_10y": ("PB历史10年分位(%)", "computed"),
+    "price_change_5d": ("近5个交易日涨跌幅(%)", "computed"),
     "ps_ttm": ("PS_TTM", "structured"),
     "ps_percentile_5y": ("PS_TTM历史5年分位(%)", "computed"),
     "float_to_total_ratio": ("流通/总市值比(%)", "structured"),
@@ -910,10 +911,45 @@ def _load_price_df(code: str, years: int = 10) -> Any:
         return "API_ERROR"
     columns = ["日期", "收盘"] + (["ps_ttm"] if "ps_ttm" in raw.columns else [])
     df = raw[columns].copy()
-    df["date"] = pd.to_datetime(df["日期"]).astype("datetime64[us]")
+    df["date"] = pd.to_datetime(df["日期"], errors="coerce").astype("datetime64[us]")
+    df = df.dropna(subset=["date"])
     df = df.sort_values("date").reset_index(drop=True)
     cutoff = pd.Timestamp(start_dt).to_datetime64().astype("datetime64[us]")
     return df[df["date"] >= cutoff].reset_index(drop=True)
+
+
+def compute_price_change_5d(
+    price_df: Any,
+) -> tuple[float | None, str | None, str | None]:
+    """Return the latest close change versus five valid trading observations ago."""
+    import math
+    import pandas as pd
+
+    if (
+        price_df is None
+        or isinstance(price_df, (str, tuple))
+        or getattr(price_df, "empty", True)
+        or not {"date", "收盘"} <= set(price_df.columns)
+    ):
+        return None, None, "历史价格不可用"
+
+    frame = price_df[["date", "收盘"]].copy()
+    frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+    frame["收盘"] = pd.to_numeric(frame["收盘"], errors="coerce")
+    frame = frame.dropna(subset=["date", "收盘"])
+    frame = frame[
+        frame["收盘"].map(
+            lambda value: math.isfinite(float(value)) and float(value) > 0
+        )
+    ]
+    frame = frame.sort_values("date").drop_duplicates("date", keep="last")
+    if len(frame) < 6:
+        return None, None, "有效历史价格少于6个交易观察"
+
+    start = float(frame.iloc[-6]["收盘"])
+    latest = float(frame.iloc[-1]["收盘"])
+    as_of = frame.iloc[-1]["date"].date().isoformat()
+    return round((latest / start - 1) * 100, 2), as_of, None
 
 
 def compute_ps_ttm_percentile_5y(
@@ -1376,8 +1412,8 @@ def _fetch_percentiles(
     split_ratio: float = 0.0,
     split_ex_date: str | None = None,
 ) -> None:
-    """Step 5: PE 5/10-year, PB 10-year and PS_TTM 5-year percentiles."""
-    logger.info("  [5/7] 计算 PE 5/10年、PB 10年与 PS_TTM 5年历史分位...")
+    """Step 5: five-session change and PE/PB/PS historical percentiles."""
+    logger.info("  [5/7] 计算5日涨跌、PE/PB历史分位与 PS_TTM 5年分位...")
     financials_available = fin_df is not None and not isinstance(fin_df, (str, tuple))
     if not financials_available:
         null_reasons["pe_percentile_5y"] = "财务数据不可用"
@@ -1395,10 +1431,21 @@ def _fetch_percentiles(
         null_reasons["pb_percentile_10y"] = (
             "历史价格API失败（网络错误，重试后仍不可用）"
         )
+        null_reasons["price_change_5d"] = "历史价格API失败（网络错误，重试后仍不可用）"
         null_reasons["ps_ttm"] = "历史估值API失败（网络错误，重试后仍不可用）"
         null_reasons["ps_percentile_5y"] = "历史估值API失败（网络错误，重试后仍不可用）"
         logger.warning("  ⚠️ 历史价格获取失败，跳过PE/PB分位计算")
         return
+
+    price_change_5d, price_change_as_of, price_change_reason = (
+        compute_price_change_5d(price_df)
+    )
+    if price_change_5d is None:
+        null_reasons["price_change_5d"] = price_change_reason or "5日涨跌幅不可用"
+    else:
+        results["price_change_5d"] = price_change_5d
+        results["_price_change_5d_as_of"] = price_change_as_of
+        logger.info(f"  ✅ 近5个交易日涨跌={price_change_5d}%（{price_change_as_of}）")
     results["_pe_percentile_windows"] = {}
     for years in (5, 10):
         window = _trim_price_window(price_df, years)
@@ -1578,9 +1625,13 @@ def _build_cache_payload(
             status = "ok"
         provenance[key] = {
             "source": provenance_source,
-            "as_of": quote_as_of
-            if key in quote_derived_fields and quote_as_of
-            else data_period,
+            "as_of": (
+                results.get("_price_change_5d_as_of") or data_period
+                if key == "price_change_5d"
+                else quote_as_of
+                if key in quote_derived_fields and quote_as_of
+                else data_period
+            ),
             "status": status,
         }
         if key in {"pe_percentile_5y", "pe_percentile_10y"}:

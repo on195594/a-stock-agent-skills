@@ -12,11 +12,11 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The deployed `v0.1.7` runtime release uses
-`a-stock-lib==0.6.1`. It adds incremental holding-thesis versioning, atomic L3
-replacement and materiality/action gates while preserving legacy L3 behavior
-with an explicit warning until each holding is rewritten. All nine client Skill
-entries resolve directly to `skills/`.
+The deployed `v0.1.9` runtime release uses
+`a-stock-lib==0.6.1`. It keeps the versioned holding-thesis and fail-closed
+investment contracts, adds a provider-free five-session price-change field from
+the already loaded valuation history, and bounds first-research retrieval and QA
+delivery. All nine client Skill entries resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
@@ -33,7 +33,7 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 
 ## Install or update
 
-Requirements for `v0.1.7`: Python 3.13+, `uv`, and an explicit checkout or wheel for
+Requirements for `v0.1.9`: Python 3.13+, `uv`, and an explicit checkout or wheel for
 `a-stock-lib==0.6.1`. The installer itself uses only the Python
 standard library, so it can bootstrap the runtime:
 

@@ -191,7 +191,7 @@ def test_project_version_is_single_release_source() -> None:
     pyproject = tomllib.loads(
         (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     )
-    assert pyproject["project"]["version"] == "0.1.8"
+    assert pyproject["project"]["version"] == "0.1.9"
     for skill in ("a-stock-research", "a-stock-monitor", "a-stock-qa"):
         text = (PROJECT_ROOT / "skills" / skill / "SKILL.md").read_text(
             encoding="utf-8"
@@ -295,6 +295,8 @@ def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -
             "fields": {},
         },
         "_quote_as_of": "2026-07-14T10:00:00",
+        "price_change_5d": 3.25,
+        "_price_change_5d_as_of": "2026-07-11",
     }
     fetcher._build_cache_payload("600000", "测试", "制造", results, {}, "2025年报")
 
@@ -312,6 +314,12 @@ def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -
     assert stored["null_reasons"]["pb"]
     assert stored["pe_static"] == stored["pe_ttm"] == 18.0
     assert stored["field_provenance"]["pe_static"]["as_of"] == "2026-07-14T10:00:00"
+    assert stored["price_change_5d"] == 3.25
+    assert stored["field_provenance"]["price_change_5d"] == {
+        "source": "computed",
+        "as_of": "2026-07-11",
+        "status": "ok",
+    }
     assert stored["field_provenance"]["pe_percentile_5y"]["window_years"] == "5"
     assert (
         stored["field_provenance"]["pe_percentile_5y"]["basis"]

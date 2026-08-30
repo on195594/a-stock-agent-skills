@@ -57,9 +57,13 @@ def test_research_skill_bounds_first_pass_source_work_and_qa_handoff() -> None:
         "每批最多 4 个独立查询",
         "不得再探测其他实时行情 Provider",
         "停止新增非阻塞补充检索",
+        "已触发的 `incomplete`",
+        "price_change_5d",
         "不可变快照",
         "内容哈希",
         "交付副本",
+        "本轮唯一临时目录",
+        "QA verdict 返回前不得向用户交付完整报告正文",
         "不得轮询",
         "不得用 `sleep` 等待",
     ):
