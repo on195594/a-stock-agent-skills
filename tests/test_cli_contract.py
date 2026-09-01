@@ -21,7 +21,7 @@ CLI_ARGUMENT_CASES = {
     ),
     "alert-pending": (["600000", "code", "说明"], ["600000", "code", "说明"]),
     "alert-resolve": (["600000", "code", "证据"], ["600000", "code", "证据"]),
-    "alerts": (["600000"], ["600000"]),
+    "alerts": (["600000"], ["600000", "--active", "--json"]),
     "l3-add": (
         ["600000", "original", "条件"],
         ["600000", "original", "条件", "临时规则"],
@@ -30,7 +30,7 @@ CLI_ARGUMENT_CASES = {
         ["1", "pending", "2026-08-11", "证据"],
         ["1", "pending", "2026-08-11", "证据", "2026-08-12"],
     ),
-    "l3-list": (["600000"], ["600000", "--all"]),
+    "l3-list": (["600000"], ["600000", "--active", "--json"]),
     "thesis-rewrite": (["600000"], ["600000"]),
     "tier-config": (["600000", "none"], ["600000", "none", "none", "none"]),
     "tier-update": (
@@ -92,7 +92,7 @@ CLI_ARGUMENT_CASES = {
     "retro-pending": ([], []),
     "retro-stats": ([], ["A通用"]),
     "retro-outliers": ([], ["--loss", "10"]),
-    "holdings": ([], ["600000"]),
+    "holdings": ([], ["600000", "--compact", "--json"]),
     "remove-holding": (["600000"], ["600000"]),
     "update-return": (["600000", "10"], ["600000", "10"]),
     "position-return": (["600000"], ["600000", "10"]),
@@ -167,6 +167,23 @@ def test_holdings_invalid_schema_is_unavailable(tmp_path, monkeypatch, capsys) -
     captured = capsys.readouterr()
     assert "HOLDINGS_UNAVAILABLE" in captured.err
     assert "NOT_HELD" not in captured.out
+
+
+def test_json_monitoring_views_fail_when_database_is_missing(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    database = tmp_path / "missing.db"
+    monkeypatch.setenv("CACHE_DB_PATH", str(database))
+
+    for argv, marker in (
+        (["alerts", "600036", "--active", "--json"], "ALERTS_UNAVAILABLE"),
+        (["l3-list", "600036", "--active", "--json"], "L3_LIST_UNAVAILABLE"),
+    ):
+        assert cache.main(argv) == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert marker in captured.err
+        assert not database.exists()
 
 
 def test_cli_argument_matrix_covers_every_command(monkeypatch) -> None:

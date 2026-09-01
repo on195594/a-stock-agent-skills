@@ -32,7 +32,7 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 
 来源顺序固定为：交易所/监管正式披露 → 公司正式报告与投资者关系材料 → 结构化数据提供者 → 聚合检索补缺。官方入口可用时不得为同一公告重复搜索；聚合检索最多一个批次，首批结果系统性无关时立即停用该来源。正式报告提取最多使用两种方法：结构化文档提取一次，失败后浏览器原生下载并本地提取一次；两者均失败时报告缺口并按既有 fail-closed 规则处理，不继续堆叠同类回退。
 
-行情、估值和技术数据优先复用 `a-stock-fetch` 及其已安装 runtime provider；runtime 已取得数据时不得先探测临时第三方库。报告正文只对明确的单个文件执行一次有界提取，限制输入大小和每类命中上下文，不扫描整个临时目录。monitor 路径不得创建首次研究评分任务；`a-stock-qa` 的 monitor rubric 尚未实现时明确标记 `SKIP`，不得表述为已执行或通过。
+行情、估值和技术数据优先复用 `a-stock-fetch` 及其已安装 runtime provider；runtime 已取得数据时不得先探测临时第三方库。报告正文只对明确的单个文件执行一次有界提取，限制输入大小和每类命中上下文，不扫描整个临时目录。monitor 路径不得创建首次研究评分任务；`a-stock-qa` 的 monitor rubric 尚未实现，monitor 任务不得加载或调用该 Skill，合规项直接标记 `SKIP`。
 
 ## 任务级执行闭环
 
@@ -50,17 +50,17 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 | ID | 必检项 | 完成标准 |
 |---|---|---|
 | C01 | 组合风险 | 明确总资产分母；输出单股权重、当前净值至第二档线潜在回撤、组合潜在回撤；成本口径不一致时输出对账状态 |
-| C02 | 持仓框架 | 读取 `holdings.framework/framework_confident`；未知或`?`则停止框架专属动作 |
-| C03 | 活动预警 | `alerts <代码>`；逐项复核 active/pending/resolved 与到期日 |
+| C02 | 持仓框架 | 读取 `holdings --compact --json` 中 `status=active` 行的 `framework/framework_confident`；未知或`?`则停止框架专属动作 |
+| C03 | 活动预警 | 日常先用 `alerts <代码> --active --json`；逐项复核 active/pending 与到期日，需审计生命周期时再读完整视图 |
 | C04 | 当日异动 | ≥3%或弱于行业≥2pts时取得同日公告和行业横截面 |
 | C05 | 价格止损 | 读取持仓行实际第一/第二档价格，不按列名猜固定百分比 |
-| C06 | L3 | `l3-list <代码>`；只消费当前活动论文的活动条件，逐条输出scope/action、重要性、状态、证据as-of、下次节点、临时出场 |
+| C06 | L3 | `l3-list <代码> --active --json`；只消费当前活动论文的活动条件，逐条输出scope/action、重要性、状态、证据as-of、下次节点、临时出场 |
 | C07 | 通用财务恶化 | ROE/扣非两季条件只开红色预警并进入框架复核，不直接清仓 |
 | C08 | 估值退出 | 使用对应框架、当次刷新且口径匹配的指标 |
 | C09 | Tier/技术 | A/E/F查结构化Tier；技术信号只触发复查 |
 | C10 | 动作可执行性 | 区分建议/授权/成交；交易股数通过整手规则；成交后写事件账本 |
 
-C06补充：若输出 `legacy contract`，表示该持仓尚无活动论文版本，部署期间继续按旧L3行为核查但必须显式警告；不得把此兼容路径推广到已重写持仓。若返回“无活动结构化L3条件”或“交易契约无效/已过期”，不得以 notes 补位或输出卖出股数，必须冻结L3交易并重做论文。历史审计使用 `l3-list <代码> --all`。
+C06补充：若输出 `legacy contract`，表示该持仓尚无活动论文版本，部署期间继续按旧L3行为核查但必须显式警告；不得把此兼容路径推广到已重写持仓。若返回“无活动结构化L3条件”或“交易契约无效/已过期”，不得以 notes 补位或输出卖出股数，必须冻结L3交易并重做论文。历史审计使用 `l3-list <代码> --all`。只要任一持仓仍是 legacy、pending、watch 或契约无效，组合摘要必须写“未发现已确认且可执行的交易触发，并保留以下待核实项”，不得写成“全部L3未触发/均已排除”。
 
 ## 缓存工具速查
 
@@ -68,7 +68,7 @@ C06补充：若输出 `legacy contract`，表示该持仓尚无活动论文版�
 CACHE="a-stock-cache"
 
 # 查询
-$CACHE holdings                               # 所有当前持仓
+$CACHE holdings --compact --json              # 紧凑持仓字段，不输出长 notes
 $CACHE portfolio-risk                         # 持仓风险视图（含浮盈/综合评级）
 $CACHE check-holdings                         # 持仓止损检查（当前价 vs 该框架专属止损线，系数因框架而异，非固定15%/20%）
 $CACHE check <代码>                           # 查询该股缓存状态
@@ -80,8 +80,8 @@ $CACHE --confirm-write sell-holding <代码> <价格> <股数|all> ... # 部分/
 $CACHE --confirm-write record-dividend <代码> <现金总额> [日期]
 
 # 结构化状态
-$CACHE alerts <代码>
-$CACHE l3-list <代码>
+$CACHE alerts <代码> --active --json          # 当前 active/pending，排除 resolved 历史
+$CACHE l3-list <代码> --active --json         # 当前合同边界、论文与活动条件
 $CACHE l3-list <代码> --all                  # 含退役L3和论文版本
 ```
 

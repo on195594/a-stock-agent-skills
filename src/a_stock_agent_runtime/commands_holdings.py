@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import sqlite3
 import sys
@@ -448,14 +449,65 @@ def _print_closed_holdings(
 def cmd_holdings(args: list[str] | None = None) -> None:
     """显示全部持仓，或只显示指定代码的当前/历史持仓。"""
     args = args or []
-    if len(args) > 1:
+    compact = "--compact" in args
+    json_output = "--json" in args
+    positionals = [arg for arg in args if not arg.startswith("--")]
+    if len(positionals) > 1:
         print("错误：holdings 最多接受一个股票代码", file=sys.stderr)
         sys.exit(1)
-    code = args[0] if args else None
+    code = positionals[0] if positionals else None
     where = " WHERE code=?" if code else ""
     params = (code,) if code else ()
     try:
         with db.read_only_db_session() as conn:
+            if compact or json_output:
+                rows = conn.execute(
+                    """SELECT id, code, name, cost_price, shares, buy_date, buy_score,
+                              stop_loss_15, stop_loss_20, exit_price, exit_date,
+                              framework, initial_shares, main_entry_date,
+                              reference_cost, framework_confident
+                       FROM holdings"""
+                    + where
+                    + " ORDER BY exit_date IS NULL DESC, buy_date DESC",
+                    params,
+                ).fetchall()
+                records = [
+                    {
+                        "id": row[0],
+                        "code": row[1],
+                        "name": row[2],
+                        "status": "active" if row[10] is None else "closed",
+                        "shares": row[4],
+                        "cost_price": row[3],
+                        "reference_cost": row[14],
+                        "buy_date": row[5],
+                        "buy_score": row[6],
+                        "framework": row[11],
+                        "framework_confident": bool(row[15]),
+                        "initial_shares": row[12],
+                        "main_entry_date": row[13],
+                        "stop_loss_15": row[7],
+                        "stop_loss_20": row[8],
+                        "exit_price": row[9],
+                        "exit_date": row[10],
+                    }
+                    for row in rows
+                ]
+                if json_output:
+                    print(json.dumps(records, ensure_ascii=False, separators=(",", ":")))
+                elif records:
+                    for record in records:
+                        print(
+                            f"{record['status']} {record['code']}({record['name'] or '─'}) "
+                            f"shares={record['shares'] or '─'} framework={record['framework'] or '?'} "
+                            f"confident={int(record['framework_confident'])} "
+                            f"reference_cost={record['reference_cost'] or '─'} "
+                            f"stop1={record['stop_loss_15'] or '─'} "
+                            f"stop2={record['stop_loss_20'] or '─'}"
+                        )
+                else:
+                    print(f"NOT_HELD {code}" if code else "暂无持仓记录")
+                return
             rows = conn.execute(
                 """SELECT id, code, name, cost_price, shares, buy_date, buy_score,
                           stop_loss_15, stop_loss_20, notes, exit_price, exit_date

@@ -31,7 +31,8 @@ def test_generic_single_holding_request_has_bounded_delivery_contract():
     assert "正式报告提取最多使用两种方法" in SKILL
     assert "优先复用 `a-stock-fetch`" in SKILL
     assert "对明确的单个文件执行一次有界提取" in SKILL
-    assert "monitor rubric 尚未实现时明确标记 `SKIP`" in SKILL
+    assert "monitor 任务不得加载或调用该 Skill" in SKILL
+    assert "合规项直接标记 `SKIP`" in SKILL
 
 
 def test_decision_table_rule_ids_and_priorities_are_unique():

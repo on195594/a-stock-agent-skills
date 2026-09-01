@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 - 2026-09-01
+
+- Added compact, machine-readable holdings, active-alert and active-L3 views so daily monitoring no longer loads accumulated holding notes or resolved history by default.
+- Machine-readable monitoring views now fail nonzero with stable `*_UNAVAILABLE` markers when the state database is missing instead of returning success with empty, invalid JSON.
+- Preserved legacy, pending, watch and invalid-contract boundaries in JSON and prohibited clean “all L3 clear” summaries while any such state remains.
+- Stopped monitor tasks from invoking the research-only QA Skill until a monitor rubric exists.
+
 ## 0.1.9 - 2026-08-30
 
 - Bounded unspecified research/comparison requests to a concise but QA-complete first report, with installed-runtime-first market data, small search batches and an explicit stop condition after mandatory evidence gates.

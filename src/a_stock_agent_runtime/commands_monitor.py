@@ -142,10 +142,15 @@ def cmd_l3_update(args: list[str]) -> None:
 
 
 def cmd_l3_list(args: list[str]) -> None:
-    if len(args) not in (1, 2) or (len(args) == 2 and args[1] != "--all"):
-        _fail("需要参数 <代码> [--all]")
-    code = args[0]
-    show_all = len(args) == 2
+    show_all = "--all" in args
+    active_only = "--active" in args
+    json_output = "--json" in args
+    if show_all and active_only:
+        _fail("--all 与 --active 不能同时使用")
+    positionals = [arg for arg in args if not arg.startswith("--")]
+    if len(positionals) != 1:
+        _fail("需要参数 <代码> [--active|--all] [--json]")
+    code = positionals[0]
     with db.db_session() as conn:
         columns = {
             row[1] for row in conn.execute("PRAGMA table_info(holding_l3_conditions)")
@@ -170,7 +175,7 @@ def cmd_l3_list(args: list[str]) -> None:
             for row in conn.execute("PRAGMA index_list(holding_thesis_versions)")
         )
         if not (thesis_columns & columns) and not thesis_table_exists:
-            print(f"警告：{code} legacy contract（尚未迁移论文版本，保留旧L3行为）")
+            warning = f"{code} legacy contract（尚未迁移论文版本，保留旧L3行为）"
             rows = conn.execute(
                 """SELECT l.id, l.origin_type, l.status, l.condition_text, l.as_of,
                           l.next_review_date, l.evidence, l.temporary_exit_rule
@@ -179,6 +184,39 @@ def cmd_l3_list(args: list[str]) -> None:
                    WHERE h.code=? AND h.exit_date IS NULL ORDER BY l.id""",
                 (code,),
             ).fetchall()
+            if json_output:
+                print(
+                    json.dumps(
+                        {
+                            "code": code,
+                            "contract": "legacy",
+                            "warning": warning,
+                            "thesis": None,
+                            "conditions": [
+                                {
+                                    "id": row[0],
+                                    "origin": row[1],
+                                    "status": row[2],
+                                    "active": True,
+                                    "condition": row[3],
+                                    "as_of": row[4],
+                                    "next_review": row[5],
+                                    "evidence": row[6],
+                                    "temporary_exit_rule": row[7],
+                                    "scope": None,
+                                    "action": None,
+                                    "materiality_basis": None,
+                                    "valid_for_action": False,
+                                }
+                                for row in rows
+                            ],
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+                return
+            print(f"警告：{warning}")
             for row in rows:
                 print(
                     f"#{row[0]} [{row[1]}] {row[2]} | {row[3]} | as-of:{row[4] or '─'} "
@@ -192,7 +230,23 @@ def cmd_l3_list(args: list[str]) -> None:
             or not thesis_table_exists
             or not active_thesis_index_exists
         ):
-            print("警告：论文版本迁移不完整，冻结交易；请先完成schema恢复")
+            warning = "论文版本迁移不完整，冻结交易；请先完成schema恢复"
+            if json_output:
+                print(
+                    json.dumps(
+                        {
+                            "code": code,
+                            "contract": "invalid",
+                            "warning": warning,
+                            "thesis": None,
+                            "conditions": [],
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+                return
+            print(f"警告：{warning}")
             return
 
         holding = conn.execute(
@@ -200,6 +254,21 @@ def cmd_l3_list(args: list[str]) -> None:
             (code,),
         ).fetchone()
         if holding is None:
+            if json_output:
+                print(
+                    json.dumps(
+                        {
+                            "code": code,
+                            "contract": "none",
+                            "warning": None,
+                            "thesis": None,
+                            "conditions": [],
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+                return
             print(f"{code} 无结构化L3条件")
             return
         holding_id = commands_holdings._single_open_holding(conn, code)[0]
@@ -208,7 +277,7 @@ def cmd_l3_list(args: list[str]) -> None:
                WHERE holding_id=? AND status='active'""",
             (holding_id,),
         ).fetchone()
-        if show_all:
+        if not json_output and show_all:
             for version, status, l1, l2, reason in conn.execute(
                 """SELECT version, status, l1, l2, rewrite_reason
                    FROM holding_thesis_versions WHERE holding_id=? ORDER BY version""",
@@ -218,7 +287,7 @@ def cmd_l3_list(args: list[str]) -> None:
                     f"thesis:v{version} {status} | L1:{l1} | L2:{l2} "
                     f"| 重写原因:{reason}"
                 )
-        elif active_thesis is not None:
+        elif not json_output and active_thesis is not None:
             print(
                 f"thesis:v{active_thesis[1]} active | L1:{active_thesis[2]} "
                 f"| L2:{active_thesis[3]}"
@@ -233,13 +302,20 @@ def cmd_l3_list(args: list[str]) -> None:
                WHERE l.holding_id=? ORDER BY l.id""",
             (holding_id,),
         ).fetchall()
+    warning = None
+
+    def valid(row) -> bool:
+        return False
+
     if active_thesis is None:
-        print(f"警告：{code} legacy contract（尚未重写论文，保留旧L3行为）")
+        warning = f"{code} legacy contract（尚未重写论文，保留旧L3行为）"
+        if not json_output:
+            print(f"警告：{warning}")
         rows = all_rows if show_all else [row for row in all_rows if row[9] == 1]
     else:
         active_thesis_id = active_thesis[0]
 
-        def valid(row) -> bool:
+        def versioned_valid(row) -> bool:
             evidence_contract_valid = True
             if row[2] == "triggered":
                 try:
@@ -260,10 +336,57 @@ def cmd_l3_list(args: list[str]) -> None:
                 and evidence_contract_valid
             )
 
+        valid = versioned_valid
         invalid_active = [row for row in all_rows if row[9] == 1 and not valid(row)]
         if invalid_active:
-            print("警告：触发文本成立，但交易契约无效/已过期，冻结交易并重做论文")
+            warning = "触发文本成立，但交易契约无效/已过期，冻结交易并重做论文"
+            if not json_output:
+                print(f"警告：{warning}")
         rows = all_rows if show_all else [row for row in all_rows if valid(row)]
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "code": code,
+                    "contract": "versioned" if active_thesis is not None else "legacy",
+                    "warning": warning,
+                    "thesis": (
+                        {
+                            "id": active_thesis[0],
+                            "version": active_thesis[1],
+                            "l1": active_thesis[2],
+                            "l2": active_thesis[3],
+                        }
+                        if active_thesis is not None
+                        else None
+                    ),
+                    "conditions": [
+                        {
+                            "id": row[0],
+                            "origin": row[1],
+                            "status": row[2],
+                            "active": bool(row[9]),
+                            "condition": row[3],
+                            "as_of": row[4],
+                            "next_review": row[5],
+                            "evidence": row[6],
+                            "temporary_exit_rule": row[7],
+                            "scope": row[12],
+                            "action": row[13],
+                            "materiality_basis": row[14],
+                            "valid_for_action": bool(valid(row)),
+                            "thesis_version": row[15],
+                            "retired_at": row[10],
+                            "retired_reason": row[11],
+                        }
+                        for row in rows
+                    ],
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        return
     if not rows:
         print(f"{code} 无活动结构化L3条件")
         return
@@ -639,19 +762,45 @@ def cmd_alert_pending(args: list[str]) -> None:
 
 
 def cmd_alerts(args: list[str]) -> None:
-    if len(args) != 1:
+    active_only = "--active" in args
+    json_output = "--json" in args
+    positionals = [arg for arg in args if not arg.startswith("--")]
+    if len(positionals) != 1:
         print("错误：需要参数 <代码>", file=sys.stderr)
         sys.exit(1)
+    code = positionals[0]
     with db.db_session() as conn:
         rows = conn.execute(
             """SELECT level, category, reason_code, status, reason, review_due,
                       evidence, resolution_evidence
-               FROM holding_alerts WHERE code=?
-               ORDER BY status='resolved', opened_at, id""",
-            (args[0],),
+               FROM holding_alerts WHERE code=?"""
+            + (" AND status!='resolved'" if active_only else "")
+            + " ORDER BY status='resolved', opened_at, id",
+            (code,),
         ).fetchall()
+    if json_output:
+        print(
+            json.dumps(
+                [
+                    {
+                        "level": row[0],
+                        "category": row[1],
+                        "reason_code": row[2],
+                        "status": row[3],
+                        "reason": row[4],
+                        "review_due": row[5],
+                        "evidence": row[6],
+                        "resolution_evidence": row[7],
+                    }
+                    for row in rows
+                ],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        return
     if not rows:
-        print(f"{args[0]} 无结构化预警")
+        print(f"{code} 无结构化预警")
         return
     for row in rows:
         print(

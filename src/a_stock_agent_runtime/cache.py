@@ -401,8 +401,16 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         if command == "watchlist":
             command_parser.add_argument("--json", action="store_true")
             command_parser.add_argument("--breakdown", action="store_true")
+        if command == "holdings":
+            command_parser.add_argument("--compact", action="store_true")
+            command_parser.add_argument("--json", action="store_true")
+        if command == "alerts":
+            command_parser.add_argument("--active", action="store_true")
+            command_parser.add_argument("--json", action="store_true")
         if command == "l3-list":
             command_parser.add_argument("--all", action="store_true")
+            command_parser.add_argument("--active", action="store_true")
+            command_parser.add_argument("--json", action="store_true")
     return parser
 
 
@@ -450,9 +458,15 @@ def main(argv: list[str] | None = None) -> int:
         return int(exc.code or 0)
     database_path = paths.cache_db_path()
     if classification == "R0" and not database_path.exists():
-        if command == "holdings":
+        machine_view_missing = command in {"alerts", "l3-list"} and "--json" in remaining
+        if command == "holdings" or machine_view_missing:
+            marker = {
+                "holdings": "HOLDINGS_UNAVAILABLE",
+                "alerts": "ALERTS_UNAVAILABLE",
+                "l3-list": "L3_LIST_UNAVAILABLE",
+            }[command]
             print(
-                f"HOLDINGS_UNAVAILABLE database_missing:{database_path}",
+                f"{marker} database_missing:{database_path}",
                 file=sys.stderr,
             )
             return 1
