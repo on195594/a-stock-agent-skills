@@ -179,6 +179,8 @@ def test_monitor_skill_uses_compact_views_and_preserves_uncertainty() -> None:
         "alerts <代码> --active --json",
         "l3-list <代码> --active --json",
         "monitor 任务不得加载或调用该 Skill",
+        "只降级到原有 `holdings` / `alerts` / `l3-list` 文本视图",
+        "不得为一次监控自行安装或切换生产 runtime",
         "未发现已确认且可执行的交易触发",
         "不得写成“全部L3未触发/均已排除”",
     ):
