@@ -86,11 +86,11 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.7` (`0.1.7-ce60e456bfd7`) with
+The current runtime is `v0.1.10` (`0.1.10-2cc4cff469d9`) with
 `a-stock-lib==0.6.1`. Rollback manifest
-`rollback-1787813347622232240.json` preserves the prior client entries and the
-previous `0.1.6-8ab751454a5c` runtime remains installed. Configuration and
-crontab SHA256 fingerprints stayed unchanged.
+`rollback-1788245304196192960.json` preserves the prior client entries and the
+previous `0.1.9-7fc6581b7727` runtime remains installed. Database,
+configuration and crontab SHA256 fingerprints stayed unchanged.
 
 The nine active client Skill entries resolve to the canonical repository. The
 production database has the thesis-version schema and passed `integrity_check`.

@@ -12,7 +12,7 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The deployed runtime remains `v0.1.9`; the `v0.1.10` candidate uses
+The deployed `v0.1.10` runtime release (`0.1.10-2cc4cff469d9`) uses
 `a-stock-lib==0.6.1` and adds compact JSON monitoring views without changing
 the database schema, investment thresholds or W1 write boundary. All nine
 client Skill entries resolve directly to `skills/`.
