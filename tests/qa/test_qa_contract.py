@@ -156,3 +156,18 @@ def test_wuxi_retro_repairs_are_pinned_in_research_and_qa_contracts() -> None:
     assert "pe_percentile_5y" in rubric
     assert "ps_percentile_5y" in rubric
     assert "latest_report_snapshot" in rubric
+
+
+def test_research_and_monitor_share_current_valuation_capability_contract() -> None:
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+    monitor = (ROOT / "skills/a-stock-monitor/SKILL.md").read_text(encoding="utf-8")
+
+    for skill in (research, monitor):
+        assert "pe_percentile_5y" in skill
+        assert "ps_ttm" in skill
+        assert "ps_percentile_5y" in skill
+
+    assert "fetcher.py只有近10年分位" not in monitor
+    assert "F框架PS及其近5年分位：fetcher.py完全不提供" not in monitor
+    assert "AKShare手动降级路径不提供同口径PS_TTM" in monitor
+    assert "字段存在不代表当次必然可得" in monitor

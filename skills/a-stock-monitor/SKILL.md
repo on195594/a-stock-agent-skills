@@ -337,11 +337,12 @@ L3 条件核查（[股票代码/名称]，[YYYY-MM-DD]）：
 ## 步骤3：卖出信号
 
 **⚠️ 评估任何估值卖出信号前，须先确认所用数据是当次分析实时获取，不是沿用可能已过期的历史缓存，且口径与下表一致**：
-- fetcher.py（运行 `a-stock-fetch fetch <代码>` 刷新）直接提供：PE/PB当前值、**PE/PB近10年分位**（注意不是近5年）、股息率（基于历史分红计算的trailing值，不是前瞻值）、10年期国债收益率
-- 以下框架所需口径fetcher.py不直接提供，须另行WebSearch/手工计算并记录数据来源和as-of日期，不得用fetcher.py的近似字段代替：
-  - A框架"PE超近5年85%分位"：fetcher.py只有近10年分位，必须另行计算近5年分位；不得用10年分位替代5年分位，缺失时按下方规则暂不能判定
-  - C框架"前瞻股息率<3%"：fetcher.py的股息率是trailing值，前瞻股息率需结合最新分红预案/派息政策预期另行判断
-  - E框架PEG、F框架PS及其近5年分位：fetcher.py完全不提供，需另行获取
+- `a-stock-fetch fetch <代码>` 当前可输出 PE/PB 当前值、`pe_percentile_5y`、`pe_percentile_10y`、`pb_percentile_10y`、`ps_ttm`、`ps_percentile_5y`、历史股息率及10年期国债收益率；字段存在不代表当次必然可得，必须同时核对值、as-of/window metadata 与 `null_reasons`。
+- 以下框架仍须按各自口径处理，不得用近似字段代替：
+  - A框架“PE超近5年85%分位”：只使用有效 `pe_percentile_5y`，不得用 `pe_percentile_10y` 替代；缺失或窗口不合格时暂不能判定。
+  - C框架“前瞻股息率<3%”：fetcher 的历史/trailing 股息率不能代替前瞻股息率，须结合最新分红预案/派息政策并记录 as-of。
+  - E框架 PEG：fetcher 不直接提供，须另行获取。
+  - F框架 PS：可使用同口径 `ps_ttm` 与 `ps_percentile_5y`；AKShare手动降级路径不提供同口径PS_TTM，有效月份不足或字段无效时按 `null_reasons` 标记 `incomplete`。
 
 若任一所需指标无法确认时效性、口径或无法获取，须在结论中明确标注"该项估值数据缺失/口径不匹配/可能非最新，暂不能判定该卖出信号是否触发"，不得默认按缺失/过期/口径不符数据判定"未触发"。
 
