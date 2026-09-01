@@ -1,6 +1,6 @@
 ---
 name: a-stock-monitor
-description: "Use when the user asks about an existing A-share holding: checking stop-loss triggers, reviewing L3 thesis invalidation, executing 12-month position review, deciding whether to sell, reduce, or add back. Trigger phrases include 止损了吗、该卖了吗、L3触发了没、复查持仓、更新持仓记录、除权后成本怎么算. For initial stock screening or new buy decisions, use a-stock-research instead."
+description: "Use when an existing A-share holding needs an action decision: stop-loss/L3 review, 12-month review, sell/reduce/add-back, record update, or ex-rights cost handling. Do not use in a delegated public-data-only child that explicitly excludes trading advice; the parent that owns account state and the final action loads this skill. Initial screening/new buys use a-stock-research."
 license: Proprietary
 compatibility: Requires local command execution, Python 3.13+, the a-stock-agent runtime, a-stock-lib, network access for live monitoring, and configured market-data credentials.
 ---
@@ -12,6 +12,7 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 持仓、交易账本、预警、L3 和 Tier 写入属于 W1：用户确认具体动作后，才可在子命令前追加全局 `--confirm-write`。缺少该参数时 CLI 返回 3 且不改变数据库。行情或状态无法验证时必须 fail-closed，不得把推测当作触发事实。
 
 > 本 skill 专用于**已持仓**股票的监控和卖出决策。初次分析和买入判断请使用 `/a-stock-research`。
+> 明确声明“不做交易判断”的公开数据子任务（仅报价、指数、行业对照或宏观证据）不得加载本 skill；由持有账户、本地 alerts/L3 与最终操作判断的父级加载并执行 C01—C10。
 > 版本变更历史（案例来源、审查过程、修复细节）见 `CHANGELOG.md`，正文只保留可执行规则本身。
 
 ## 任务路由（按当前任务选必读路径；全局决策契约任何任务都适用，不因路径未列出而被忽略）
@@ -33,6 +34,14 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 来源顺序固定为：交易所/监管正式披露 → 公司正式报告与投资者关系材料 → 结构化数据提供者 → 聚合检索补缺。官方入口可用时不得为同一公告重复搜索；聚合检索最多一个批次，首批结果系统性无关时立即停用该来源。正式报告提取最多使用两种方法：结构化文档提取一次，失败后浏览器原生下载并本地提取一次；两者均失败时报告缺口并按既有 fail-closed 规则处理，不继续堆叠同类回退。
 
 行情、估值和技术数据优先复用 `a-stock-fetch` 及其已安装 runtime provider；runtime 已取得数据时不得先探测临时第三方库。报告正文只对明确的单个文件执行一次有界提取，限制输入大小和每类命中上下文，不扫描整个临时目录。monitor 路径不得创建首次研究评分任务；`a-stock-qa` 的 monitor rubric 尚未实现时明确标记 `SKIP`，不得表述为已执行或通过。
+
+## 任务级执行闭环
+
+本 Skill 是持仓操作判断的 Primary Skill。开始调用领域工具前，用当前会话的 `todo` 建立 C01—C10 临时检查项；Supporting Skills 只提供证据，不接管完成判定。尚未判断适用性时保持 `pending`，取得框架和任务范围后再关闭不适用项。
+
+`todo` 只使用其原生状态：适用且有当前证据的项目标为 `completed` 并在内容中附证据；不适用项目也标为 `completed`，内容写 `N/A + 原因`；决策关键证据缺失的项目标为 `cancelled`，内容写 `gap + fail-closed 动作`。交付前读取一次 todo：仍有 `pending/in_progress` 时继续执行；任何 `cancelled` 项未写降级动作时，不得给出干净的“继续持有/买入/卖出”结论。对外可只展示异常、临近触发项和关键缺口；内部闭环不得因用户要求精简而省略。
+
+若使用子代理，账户状态、alerts/L3/Tier和最终交易判断由父级保留。需要提前消费结果的独立证据通道分别派发；只有父级必须同时消费全部结果时才放入同一 wait-all batch。required 证据已齐时，optional 失败不得阻塞首轮交付。
 
 ## 日常监控唯一检查表
 
