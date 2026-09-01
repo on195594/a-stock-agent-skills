@@ -4,18 +4,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2] / "skills" / "a-stock-research"
 MAIN = ROOT / "SKILL.md"
 REFERENCES = {
+    "data_cache": ROOT / "references" / "data-cache-contract.md",
+    "execution": ROOT / "references" / "research-execution-flow.md",
     "cycle": ROOT / "references" / "cycle-assessment.md",
     "timing": ROOT / "references" / "timing-adjustments.md",
     "report": ROOT / "references" / "report-contract.md",
 }
 
 
-def test_research_skill_uses_three_progressive_disclosure_references() -> None:
+def test_research_skill_routes_each_progressive_disclosure_reference_once() -> None:
     main = MAIN.read_text(encoding="utf-8")
 
     for path in REFERENCES.values():
         assert path.is_file()
-        assert f"](references/{path.name})" in main
+        assert main.count(f"](references/{path.name})") == 1
 
     assert "周期位置[阶段=" in REFERENCES["cycle"].read_text(encoding="utf-8")
     timing = REFERENCES["timing"].read_text(encoding="utf-8")
@@ -26,6 +28,16 @@ def test_research_skill_uses_three_progressive_disclosure_references() -> None:
     assert "标准评估卡" in report
     assert "操作建议禁止条款" in report
     assert "有界首版本身就是完整报告" in report
+
+
+def test_analysis_hit_stops_before_full_research_flow() -> None:
+    main = MAIN.read_text(encoding="utf-8")
+    analysis_hit = main.split("`ANALYSIS_HIT`", 1)[1].split("`FUNDAMENTALS_HIT`", 1)[0]
+
+    assert "终止流程" in analysis_hit
+    assert "research-execution-flow.md" not in analysis_hit
+    assert "FULL_MISS" in main
+    assert "research-execution-flow.md" in main.split("FULL_MISS", 1)[1]
 
 
 def test_research_skill_keeps_hard_boundaries_in_main_entrypoint() -> None:

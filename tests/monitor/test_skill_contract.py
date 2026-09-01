@@ -5,6 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2] / "skills" / "a-stock-monitor"
 SKILL = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+DAILY_MONITORING = ROOT / "references" / "daily-monitoring-and-l3.md"
+VALUATION_REVIEW = ROOT / "references" / "valuation-and-annual-review.md"
 CD_ACCUMULATION = (ROOT / "references" / "step3.5-cd-accumulation.md").read_text(
     encoding="utf-8"
 )
@@ -100,6 +102,23 @@ def test_all_routed_reference_files_exist():
     paths = set(re.findall(r"`(references/[^`]+)`", SKILL))
     for relative in paths:
         assert (ROOT / relative).exists(), relative
+
+
+def test_phase2_routes_are_unique_and_keep_fail_closed_boundaries_in_main():
+    for path in (DAILY_MONITORING, VALUATION_REVIEW):
+        assert path.is_file()
+        assert SKILL.count(f"`references/{path.name}`") == 1
+
+    for marker in (
+        "--confirm-write",
+        "C01—C10",
+        "动作优先级",
+        "缺失数据不等于已排除/未触发",
+        "操作价格依据要求",
+        "建议/授权/成交",
+        "行情或状态无法验证时必须 fail-closed",
+    ):
+        assert marker in SKILL
 
 
 def test_cd_accumulation_keeps_cumulative_cap_while_allowing_one_lot():
