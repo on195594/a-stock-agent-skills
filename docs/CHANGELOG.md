@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11 - 2026-09-02
+
+- Added deterministic `valuation_compatibility` metadata from the existing quote, annual PB/BPS and latest-report BPS, with a decimal-safe inclusive 2% timing gate and no database migration.
+- Added a mandatory `FUNDAMENTALS_HIT` data card so available dividend, valuation and latest-report fields cannot disappear from report prose.
+- Aligned Research, report and QA contracts: legal fundamental `scoring_status=incomplete` outputs `not_formed`, while PB/BPS compatibility remains timing-only and cannot suppress a complete configuration grade.
+
 ## 0.1.10 - 2026-09-01
 
 - Added compact, machine-readable holdings, active-alert and active-L3 views so daily monitoring no longer loads accumulated holding notes or resolved history by default.

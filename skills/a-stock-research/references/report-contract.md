@@ -13,15 +13,16 @@
 1. **基本信息**：股票名称/代码/当前价/行业/框架类型
    **数据来源**：结构化（TuShare默认；需手动设置 `FETCHER_DATA_SOURCE=akshare` 切换AKShare，交易日历失败时自动回退）：列出有值字段数/总字段数 | WebSearch补充：[具体字段名或"无"]
    若毛利率/PE分位/股息率之一为 null，或任意框架 checklist 覆盖字段核验结果为"数据缺失"，前置 ⚠️ 提示："核心字段缺失，以下评分仅供参考"
+   **FUNDAMENTALS_HIT 最小数据卡**：必须逐项展示当前价/quote as-of/来源、`price_change_5d`、`pe_static`/`pe_percentile_5y`、`pb`/`bps`及报告期、`dividend_yield`/`dps`、`latest_report_snapshot.report_period`、`fields.revenue_yoy`、`fields.net_profit_yoy`、`valuation_compatibility`、`scoring_status`、`timing_status` 和缺失原因。顶层字段缺失时写 `missing` + `null_reasons`；nested 字段缺失时写其自身 `status`。字段有值但未展示属于报告遗漏，不得标成数据缺失。
 2. **格雷厄姆参考**（C/D框架标注"仅参考，见主估值轴"）
 3. **异动检测**（含政策风险）
 4. **周期位置判断**（C/D/B框架必填）+ 关键动态变量
-5. **基本面评分/60**（含风险降级说明；所有框架的每个 checklist 子项标注核验状态：「checklist核验」/「人工核验推翻简化判定（含核实出的实际档位）」/「⚠️ 无客观数据支撑，纯人工判断」/「⚠️ 数据缺失，未核验」四者之一；若本轮 checklist 调用报错，本项前整体标注"⚠️ checklist核验失败：[错误摘要]，已降级为纯人工评分"）
+5. **基本面评分/60**（含风险降级说明；所有框架的每个 checklist 子项标注核验状态：「checklist核验」/「人工核验推翻简化判定（含核实出的实际档位）」/「⚠️ 无客观数据支撑，纯人工判断」/「⚠️ 数据缺失，未核验」四者之一；若本轮 checklist 调用报错，本项前整体标注"⚠️ checklist核验失败：[错误摘要]，已降级为纯人工评分"）。合法 `scoring_status=incomplete` 时本模块仍保留，并将小计标为 `not_formed`，列出 recognized reason，不得静默省略。
 6. **红线检查**
 7. **分红可持续性压力测试**（C/D框架必填）
 8. **择时评分/20**（含主估值轴判断 + 预期差分析）
-9. **双轨评级**：配置评级（A/B/C/D）+ 时机评级（★★★/★★/★/—）
-10. **综合得分/80**（仅启发式展示；基本面60 + 择时20，技术信号不计入）+ **仓位建议**（唯一操作出口为双轨矩阵；含组合约束提示）
+9. **双轨评级**：配置评级（A/B/C/D）+ 时机评级（★★★/★★/★/—）。基本面必需输入缺失或 latest-report 基本面冲突导致 `scoring_status=incomplete` 时，两项均写 `not_formed`；仅 `timing_status=incomplete`（包括 PB/BPS 兼容性失败）时，配置评级仍必须输出，时机评级写 `not_formed`。
+10. **综合得分/80**（仅启发式展示；基本面60 + 择时20，技术信号不计入）+ **仓位建议**（唯一操作出口为双轨矩阵；含组合约束提示）。任一合法 incomplete 阻断完整矩阵时，综合分与仓位建议均明确写 `not_formed` 及停止原因，不得删除模块。
 11. **防韭菜检查**
 12. **操作建议**：核心逻辑（投资推理链，不是指标罗列）+ 主要风险（已纳入评分）+ 买入后的关注节点 + 技术信号参考
     > 注：买入后的止损线、L1/L2/L3 论文记录、卖出信号由 `/a-stock-monitor` 在建仓登记时负责，本步骤不输出止损条件。

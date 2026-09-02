@@ -60,14 +60,20 @@ a-stock-cache check <股票代码>
 
 输出状态码处理：
 - `ANALYSIS_HIT`：直接输出今日缓存结论并附注“[来自今日缓存]”，**终止流程**；不得加载完整流程、继续搜索、评分、写缓存或运行 QA。
-- `FUNDAMENTALS_HIT`：复用缓存，只补异动、治理/政策与外部集中风险；B银行另补 NIM、不良率、拨备覆盖率。**B框架三项核心数据全缺**时必须 `scoring_status=incomplete`，停止基本面总分、时机评级、综合总分和仓位矩阵。静态PE（`pe_static`；`pe_ttm` 仅为 deprecated 兼容别名）不得用于 PEG；实时价不得重复搜索。
+- `FUNDAMENTALS_HIT`：复用缓存，只补异动、治理/政策与外部集中风险；B银行另补 NIM、不良率、拨备覆盖率。**B框架三项核心数据全缺**时必须 `scoring_status=incomplete`，基本面总分、配置评级、时机评级、综合总分和仓位矩阵均输出 `not_formed`。静态PE（`pe_static`；`pe_ttm` 仅为 deprecated 兼容别名）不得用于 PEG；实时价不得重复搜索。
 - `FULL_MISS`：读取[完整投研执行流](references/research-execution-flow.md)并执行全部适用步骤。
 
 **所有量化框架的数据质量门仍在主入口生效**：
 - `FULL_MISS` 必须用 dps÷当前价交叉验证股息率，误差 >0.5%（50bps）以计算值为准；`FUNDAMENTALS_HIT` 直接用已验证 dps÷当前价，不重复搜索 dps。
 - ROE/NIM/净利增速等必须标报告期。PB 必须用当前已验证价÷同口径 BPS 重算；与列示值相差 >2% 时 PB、PB分位和择时估值不可用，停止时机总分、综合总分和仓位矩阵。
-- **最新中报/季报冲突门**：读取 `latest_report_snapshot` 核验年报后方向；缺失再查正式披露。方向冲突或无法同口径核验时 `scoring_status=incomplete`，不得机械年化单季利润，也不得把 TTL 内年报当作最新财务状态。
+- **最新中报/季报冲突门**：读取 `latest_report_snapshot` 核验年报后方向；缺失再查正式披露。基本面方向冲突或无法同口径核验时 `scoring_status=incomplete`，不得机械年化单季利润，也不得把 TTL 内年报当作最新财务状态。PB/BPS 的 `valuation_compatibility` 仅控制择时，不得单独吞掉配置评级。
 - `industry_status=stale_cache` 或 `missing` 时，必须从最新正式披露核验主营后再选 A—F；失败即终止量化评分并标记 `scoring_status=incomplete`。
+
+### FUNDAMENTALS_HIT 最小数据卡
+
+命中后必须先从同一份 `check` JSON 展示：当前价/quote as-of/来源、`price_change_5d`、`pe_static`/`pe_percentile_5y`、`pb`/`bps`及各自报告期、`dividend_yield`/`dps`、`latest_report_snapshot.report_period`、`fields.revenue_yoy`、`fields.net_profit_yoy`、`valuation_compatibility`、`scoring_status`、`timing_status` 与缺失原因。顶层字段无值时展示 `missing` 及 `null_reasons`；nested snapshot 字段无值时展示其自身 `status`，不得因正文未提到就把已取得字段误判为缺失。
+
+`valuation_compatibility` 仅控制择时：`timing_eligible=false` 时 `timing_status=incomplete`，停止时机评级、综合分和仓位矩阵；若基本面评分完整，仍必须输出配置评级。旧缓存没有该字段时按 `reason_code=legacy_field_absent` 处理为 timing incomplete；不得在读取时重算、不得写回。只有基本面必需输入缺失或 latest-report 基本面冲突才能令 `scoring_status=incomplete`，此时基本面总分、配置评级、时机评级、综合分和仓位矩阵均明确输出 `not_formed`。
 
 ## 缓存写入边界
 

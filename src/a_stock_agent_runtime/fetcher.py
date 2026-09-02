@@ -8,9 +8,11 @@ A股基本面数据自动获取工具
 """
 
 import os
+import re
 import sys
 import logging
 import multiprocessing as mp
+from decimal import Decimal, InvalidOperation
 from queue import Empty
 from typing import Any, Callable
 from functools import lru_cache
@@ -60,6 +62,7 @@ FIELDS = {
     "pe_static": ("PE_静态（年报EPS，非TTM）", "computed"),
     "pe_ttm": ("PE_静态兼容别名（deprecated）", "compatibility"),
     "pb": ("PB（当前价/同期BPS）", "computed"),
+    "valuation_compatibility": ("PB/BPS最新报告口径兼容性", "computed"),
     "roe_3y_avg": ("ROE近3年均值(%)", "structured"),
     "net_profit_growth": ("净利润增速近3年均值(%)", "structured"),
     "debt_ratio": ("资产负债率(%)", "structured"),
@@ -1287,6 +1290,7 @@ def _fetch_spot_data(
     if results["industry_status"] == "verified":
         store.update_qualitative_only_security(code, name, industry)
     results["_quote_as_of"] = quote.as_of
+    results["_quote_source"] = quote.source
     total_mv = parse_float(info.get("总市值"))
     float_mv = parse_float(info.get("流通市值"))
     if total_mv and total_mv > 0 and float_mv is not None:
@@ -1360,6 +1364,112 @@ def _fetch_pb_pe_data(
         null_reasons["pe_static"] = f"EPS不可用（eps={eps}）或价格不可用"
         null_reasons["pe_ttm"] = f"EPS不可用（eps={eps}）或价格不可用"
         logger.warning("  ⚠️ PE_静态无法计算: %s", null_reasons["pe_static"])
+
+
+def compute_valuation_compatibility(
+    *,
+    current_price: float | None,
+    annual_pb: float | None,
+    annual_bps: float | None,
+    annual_period: str | None,
+    latest_snapshot: dict[str, Any] | None,
+    quote_source: str | None,
+    quote_as_of: str | None,
+) -> dict[str, Any]:
+    """Compare annual-basis PB with the latest-report BPS on the same quote."""
+
+    snapshot = latest_snapshot if isinstance(latest_snapshot, dict) else {}
+    raw_fields = snapshot.get("fields")
+    fields = raw_fields if isinstance(raw_fields, dict) else {}
+    raw_bps_field = fields.get("bps")
+    bps_field = raw_bps_field if isinstance(raw_bps_field, dict) else {}
+    latest_bps = bps_field.get("value")
+    latest_period = snapshot.get("report_period")
+    latest_source = snapshot.get("source")
+    latest_announcement = snapshot.get("announcement_date")
+
+    base = {
+        "pb_cache": annual_pb,
+        "pb_cache_bps": annual_bps,
+        "pb_cache_bps_period": annual_period,
+        "pb_latest_report": None,
+        "latest_report_bps": latest_bps,
+        "latest_report_period": latest_period,
+        "relative_difference_pct": None,
+        "status": "incomplete",
+        "timing_eligible": False,
+        "reason_code": "missing_or_invalid_input",
+        "reason": "required valuation compatibility input is missing or invalid",
+        "quote_source": quote_source,
+        "quote_as_of": quote_as_of,
+        "latest_report_bps_source": latest_source,
+        "latest_report_announcement_date": latest_announcement,
+    }
+
+    numeric_values = (current_price, annual_pb, annual_bps, latest_bps)
+    try:
+        decimals = tuple(Decimal(str(value)) for value in numeric_values)
+        price_float = float(str(current_price))
+        latest_bps_float = float(str(latest_bps))
+        quote_text = str(quote_as_of).strip()
+        quote_timestamp_valid = datetime.fromisoformat(quote_text)
+        announcement_text = str(latest_announcement).strip()
+        announcement_valid = date.fromisoformat(announcement_text)
+    except (InvalidOperation, TypeError, ValueError):
+        return base
+    period_pattern = re.compile(r"^\d{4}(?:Q1|半年报|Q3|年报)$")
+    if (
+        any(not value.is_finite() or value <= 0 for value in decimals)
+        or not isinstance(annual_period, str)
+        or period_pattern.fullmatch(annual_period.strip()) is None
+        or not isinstance(latest_period, str)
+        or period_pattern.fullmatch(latest_period.strip()) is None
+        or not isinstance(quote_source, str)
+        or not quote_source.strip()
+        or not isinstance(latest_source, str)
+        or not latest_source.strip()
+        or not quote_text
+        or ("T" not in quote_text and " " not in quote_text)
+        or not quote_timestamp_valid
+        or not announcement_valid
+        or bps_field.get("status") != "ok"
+    ):
+        return base
+
+    _price_decimal, pb_decimal, _annual_bps_decimal, _latest_bps_decimal = decimals
+    pb_latest_report = round(price_float / latest_bps_float, 2)
+    pb_latest_decimal = Decimal(str(pb_latest_report))
+    difference_for_gate = (
+        abs(pb_decimal - pb_latest_decimal) / pb_decimal * Decimal("100")
+    )
+    base["pb_latest_report"] = pb_latest_report
+    base["relative_difference_pct"] = round(float(difference_for_gate), 2)
+
+    if difference_for_gate <= Decimal("2.0"):
+        base.update(
+            {
+                "status": "compatible",
+                "timing_eligible": True,
+                "reason_code": "within_2pct",
+                "reason": "current-price PB differs by no more than 2%",
+            }
+        )
+    elif annual_period == latest_period:
+        base.update(
+            {
+                "reason_code": "same_period_value_mismatch",
+                "reason": "same-period BPS values produce PB difference above 2%",
+            }
+        )
+    else:
+        base.update(
+            {
+                "status": "period_mismatch",
+                "reason_code": "different_period_value_mismatch",
+                "reason": "latest report BPS changes current-price PB by more than 2%",
+            }
+        )
+    return base
 
 
 def _fetch_dividend(
@@ -1602,6 +1712,7 @@ def _build_cache_payload(
         "pe_static",
         "pe_ttm",
         "pb",
+        "valuation_compatibility",
         "dividend_yield",
         "pe_percentile_5y",
         "pe_percentile_10y",
@@ -1721,6 +1832,15 @@ def cmd_fetch(args: list[str]) -> None:
                 f"  ✅ 送转复权调整: dividend_yield → {results['dividend_yield']}%"
             )
     _fetch_pb_pe_data(code, current_price, results, null_reasons)
+    results["valuation_compatibility"] = compute_valuation_compatibility(
+        current_price=current_price,
+        annual_pb=results.get("pb"),
+        annual_bps=results.get("bps"),
+        annual_period=data_period,
+        latest_snapshot=results.get("latest_report_snapshot"),
+        quote_source=results.get("_quote_source"),
+        quote_as_of=results.get("_quote_as_of"),
+    )
     _fetch_percentiles(code, fin_df, results, null_reasons, split_ratio, split_ex_date)
     _fetch_bond_yield(null_reasons)
     _build_cache_payload(code, name, industry, results, null_reasons, data_period)

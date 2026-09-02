@@ -171,3 +171,55 @@ def test_research_and_monitor_share_current_valuation_capability_contract() -> N
     assert "F框架PS及其近5年分位：fetcher.py完全不提供" not in monitor
     assert "AKShare手动降级路径不提供同口径PS_TTM" in monitor
     assert "字段存在不代表当次必然可得" in monitor
+
+
+def test_research_qa_and_report_contract_share_incomplete_semantics() -> None:
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+    rubric = (
+        ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
+    ).read_text(encoding="utf-8")
+    report = (
+        ROOT / "skills/a-stock-research/references/report-contract.md"
+    ).read_text(encoding="utf-8")
+
+    for text in (research, rubric, report):
+        assert "scoring_status=incomplete" in text
+        assert "not_formed" in text
+        assert "timing_status=incomplete" in text
+    assert "PB/BPS" in research and "仅控制择时" in research
+    assert "PB/BPS" in rubric and "仍必须输出配置评级" in rubric
+    assert "无合法原因" in rubric
+    assert "若基本面评分完整，仍必须输出配置评级" in research
+    assert "基本面小计、配置评级、时机评级、综合分和矩阵均标为 `not_formed`" in rubric
+    assert "配置评级仍必须输出，时机评级写 `not_formed`" in report
+    assert "综合分与仓位建议均明确写 `not_formed`" in report
+
+
+def test_fundamentals_hit_minimum_data_card_contract_is_pinned() -> None:
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+    report = (
+        ROOT / "skills/a-stock-research/references/report-contract.md"
+    ).read_text(encoding="utf-8")
+
+    for text in (research, report):
+        assert "FUNDAMENTALS_HIT 最小数据卡" in text
+        for field in (
+            "price_change_5d",
+            "dividend_yield",
+            "dps",
+            "latest_report_snapshot.report_period",
+            "fields.revenue_yoy",
+            "fields.net_profit_yoy",
+            "valuation_compatibility",
+        ):
+            assert field in text
+        assert "null_reasons" in text
+        assert "nested" in text
+
+
+def test_legacy_valuation_compatibility_is_timing_incomplete_without_backfill() -> None:
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+
+    assert "legacy_field_absent" in research
+    assert "不得在读取时重算" in research
+    assert "不得写回" in research

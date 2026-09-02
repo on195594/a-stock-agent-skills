@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "a-stock-agent-skills"
-version = "0.1.10"
+version = "0.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "akshare" },

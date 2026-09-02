@@ -146,6 +146,7 @@
 
 **FAIL 信号**：
 - 报告中某关键字段明显为空/缺失，或某子项标注"数据缺失，未核验"，但报告首部无任何 ⚠️ 警告
+- `FUNDAMENTALS_HIT` 最小数据卡漏展示缓存已有的关键字段；这属于报告遗漏，不得把“未展示”推断成源数据缺失
 
 **SKIP 条件**：无
 
@@ -165,6 +166,11 @@
 - 缺少仓位建议矩阵的对应输出
 
 **SKIP 条件**：报告因关键择时数据缺失或估值冲突明确进入 `incomplete` / fail-closed，且按对应规则省略时机评级、综合得分和仓位矩阵；配置评级仍必须输出。
+
+**Fail-closed 例外**：
+- 报告显式写出 `scoring_status=incomplete`，recognized reason 为基本面评分必需输入缺失或 latest-report 基本面冲突，并把基本面小计、配置评级、时机评级、综合分和矩阵均标为 `not_formed` 时，本项 PASS；不得要求编造 A/B/C/D。
+- 仅有 `timing_status=incomplete`（包括 PB/BPS `valuation_compatibility` 仅控制择时）时，仍必须输出配置评级；时机评级、综合分和矩阵标 `not_formed`。
+- 无合法原因省略配置评级或删除固定模块仍判 Important FAIL。
 
 ---
 

@@ -16,6 +16,7 @@ import pandas as pd
 from a_stock_agent_runtime import cache, fetcher, store
 from a_stock_lib.providers import QuoteObservation
 from a_stock_lib.fetcher_utils import detect_split_ratio
+from tests.helpers import set_valid_fundamentals
 
 
 @pytest.fixture(autouse=True)
@@ -83,6 +84,189 @@ def test_current_pb_uses_the_same_report_period_bps_as_pb_history(monkeypatch):
     assert fetcher.FIELDS["pe_ttm"][1] == "compatibility"
     assert fetcher.FIELDS["pb"][1] == "computed"
     assert "pb" not in null_reasons
+
+
+def _latest_bps_snapshot(*, period: str = "2026半年报", bps: float | None = 26.3208):
+    return {
+        "report_period": period,
+        "announcement_date": "2026-08-29",
+        "source": "tushare.fina_indicator+income+balancesheet",
+        "fields": {"bps": {"value": bps, "status": "ok", "direction": "missing"}},
+    }
+
+
+def test_valuation_compatibility_marks_different_period_mismatch():
+    result = fetcher.compute_valuation_compatibility(
+        current_price=86.75,
+        annual_pb=3.48,
+        annual_bps=24.9573,
+        annual_period="2025年报",
+        latest_snapshot=_latest_bps_snapshot(),
+        quote_source="sina",
+        quote_as_of="2026-09-02T11:30:00",
+    )
+
+    assert result == {
+        "pb_cache": 3.48,
+        "pb_cache_bps": 24.9573,
+        "pb_cache_bps_period": "2025年报",
+        "pb_latest_report": 3.3,
+        "latest_report_bps": 26.3208,
+        "latest_report_period": "2026半年报",
+        "relative_difference_pct": 5.17,
+        "status": "period_mismatch",
+        "timing_eligible": False,
+        "reason_code": "different_period_value_mismatch",
+        "reason": "latest report BPS changes current-price PB by more than 2%",
+        "quote_source": "sina",
+        "quote_as_of": "2026-09-02T11:30:00",
+        "latest_report_bps_source": "tushare.fina_indicator+income+balancesheet",
+        "latest_report_announcement_date": "2026-08-29",
+    }
+
+
+def test_valuation_compatibility_includes_decimal_safe_exact_two_percent():
+    result = fetcher.compute_valuation_compatibility(
+        current_price=29.4,
+        annual_pb=3.0,
+        annual_bps=10.0,
+        annual_period="2025年报",
+        latest_snapshot=_latest_bps_snapshot(period="2026半年报", bps=10.0),
+        quote_source="sina",
+        quote_as_of="2026-09-02T11:30:00",
+    )
+
+    assert result["pb_latest_report"] == 2.94
+    assert result["relative_difference_pct"] == 2.0
+    assert result["status"] == "compatible"
+    assert result["timing_eligible"] is True
+    assert result["reason_code"] == "within_2pct"
+
+
+def test_valuation_compatibility_uses_frozen_python_round_before_decimal_gate():
+    result = fetcher.compute_valuation_compatibility(
+        current_price=1.02,
+        annual_pb=0.42,
+        annual_bps=2.43,
+        annual_period="2025年报",
+        latest_snapshot=_latest_bps_snapshot(period="2026半年报", bps=2.4),
+        quote_source="sina",
+        quote_as_of="2026-09-02T11:30:00",
+    )
+
+    assert result["pb_latest_report"] == 0.43
+    assert result["relative_difference_pct"] == 2.38
+    assert result["status"] == "period_mismatch"
+    assert result["timing_eligible"] is False
+
+
+def test_valuation_compatibility_fails_same_period_value_mismatch():
+    result = fetcher.compute_valuation_compatibility(
+        current_price=28.0,
+        annual_pb=3.0,
+        annual_bps=10.0,
+        annual_period="2025年报",
+        latest_snapshot=_latest_bps_snapshot(period="2025年报", bps=10.0),
+        quote_source="sina",
+        quote_as_of="2026-09-02T11:30:00",
+    )
+
+    assert result["pb_latest_report"] == 2.8
+    assert result["status"] == "incomplete"
+    assert result["timing_eligible"] is False
+    assert result["reason_code"] == "same_period_value_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected_reason"),
+    [
+        ({"quote_source": ""}, "missing_or_invalid_input"),
+        ({"quote_source": "   "}, "missing_or_invalid_input"),
+        ({"quote_as_of": None}, "missing_or_invalid_input"),
+        ({"quote_as_of": "2026-09-02"}, "missing_or_invalid_input"),
+        ({"annual_period": "bad-period"}, "missing_or_invalid_input"),
+        (
+            {"latest_snapshot": _latest_bps_snapshot(period="bad-period")},
+            "missing_or_invalid_input",
+        ),
+        ({"latest_snapshot": _latest_bps_snapshot(bps=None)}, "missing_or_invalid_input"),
+        ({"annual_pb": float("nan")}, "missing_or_invalid_input"),
+    ],
+)
+def test_valuation_compatibility_fails_closed_on_missing_or_invalid_inputs(
+    overrides, expected_reason
+):
+    kwargs = {
+        "current_price": 30.0,
+        "annual_pb": 3.0,
+        "annual_bps": 10.0,
+        "annual_period": "2025年报",
+        "latest_snapshot": _latest_bps_snapshot(),
+        "quote_source": "sina",
+        "quote_as_of": "2026-09-02T11:30:00",
+    }
+    kwargs.update(overrides)
+
+    result = fetcher.compute_valuation_compatibility(**kwargs)
+
+    assert result["status"] == "incomplete"
+    assert result["timing_eligible"] is False
+    assert result["reason_code"] == expected_reason
+
+
+def test_valuation_compatibility_round_trips_in_existing_json_payload():
+    compatibility = {
+        "status": "period_mismatch",
+        "timing_eligible": False,
+        "reason_code": "different_period_value_mismatch",
+    }
+    set_valid_fundamentals(
+        "002594",
+        "比亚迪",
+        "汽车整车",
+        {"pb": 3.48, "valuation_compatibility": compatibility},
+    )
+
+    stored = cache.get_fundamentals("002594")
+
+    assert stored is not None
+    assert stored["valuation_compatibility"] == compatibility
+
+
+def test_build_cache_payload_persists_valuation_compatibility_provenance():
+    compatibility = {
+        "status": "compatible",
+        "timing_eligible": True,
+        "reason_code": "within_2pct",
+    }
+    results = {
+        "valuation_compatibility": compatibility,
+        "_quote_as_of": "2026-09-02T11:30:00",
+    }
+
+    fetcher._build_cache_payload(
+        "002594", "比亚迪", "汽车整车", results, {}, "2025年报"
+    )
+    stored = cache.get_fundamentals("002594")
+
+    assert stored is not None
+    assert stored["valuation_compatibility"] == compatibility
+    assert stored["field_provenance"]["valuation_compatibility"] == {
+        "source": "computed",
+        "as_of": "2026-09-02T11:30:00",
+        "status": "ok",
+    }
+
+
+def test_legacy_payload_remains_absent_without_read_time_backfill():
+    set_valid_fundamentals("600000", "旧缓存", "制造", {"pb": 1.2})
+
+    first_read = cache.get_fundamentals("600000")
+    second_read = cache.get_fundamentals("600000")
+
+    assert first_read is not None and second_read is not None
+    assert "valuation_compatibility" not in first_read
+    assert "valuation_compatibility" not in second_read
 
 
 def test_preloaded_price_history_is_trimmed_to_requested_percentile_window():
