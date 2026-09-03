@@ -494,7 +494,9 @@ def cmd_holdings(args: list[str] | None = None) -> None:
                     for row in rows
                 ]
                 if json_output:
-                    print(json.dumps(records, ensure_ascii=False, separators=(",", ":")))
+                    print(
+                        json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+                    )
                 elif records:
                     for record in records:
                         print(

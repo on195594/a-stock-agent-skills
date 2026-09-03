@@ -581,7 +581,10 @@ def bootstrap_database_schema(conn: sqlite3.Connection) -> None:
             ("024-holdings-indices", lambda: _ensure_holdings_indices(conn)),
             ("025-holdings-metadata-backfill", lambda: backfill_holding_metadata(conn)),
             ("026-legacy-alerts-backfill", lambda: backfill_legacy_alerts(conn)),
-            ("034-holding-thesis-versions", lambda: _create_thesis_version_schema(conn)),
+            (
+                "034-holding-thesis-versions",
+                lambda: _create_thesis_version_schema(conn),
+            ),
         ]
     )
     bootstrap_schema(conn, domain.utc_now_iso(), migrations)

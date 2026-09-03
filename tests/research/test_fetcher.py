@@ -189,7 +189,10 @@ def test_valuation_compatibility_fails_same_period_value_mismatch():
             {"latest_snapshot": _latest_bps_snapshot(period="bad-period")},
             "missing_or_invalid_input",
         ),
-        ({"latest_snapshot": _latest_bps_snapshot(bps=None)}, "missing_or_invalid_input"),
+        (
+            {"latest_snapshot": _latest_bps_snapshot(bps=None)},
+            "missing_or_invalid_input",
+        ),
         ({"annual_pb": float("nan")}, "missing_or_invalid_input"),
     ],
 )

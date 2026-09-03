@@ -1547,8 +1547,8 @@ def _fetch_percentiles(
         logger.warning("  ⚠️ 历史价格获取失败，跳过PE/PB分位计算")
         return
 
-    price_change_5d, price_change_as_of, price_change_reason = (
-        compute_price_change_5d(price_df)
+    price_change_5d, price_change_as_of, price_change_reason = compute_price_change_5d(
+        price_df
     )
     if price_change_5d is None:
         null_reasons["price_change_5d"] = price_change_reason or "5日涨跌幅不可用"

@@ -48,7 +48,10 @@ def _validated_rewrite_payload() -> dict:
     for index, item in enumerate(payload["new_l3"], start=1):
         if not isinstance(item, dict) or set(item) != l3_fields:
             _fail(f"new_l3[{index}] 字段不完整或包含未知字段")
-        if any(not isinstance(item[field], str) or not item[field].strip() for field in l3_fields):
+        if any(
+            not isinstance(item[field], str) or not item[field].strip()
+            for field in l3_fields
+        ):
             _fail(f"new_l3[{index}] 的所有字段必须是非空字符串")
         for field in l3_fields:
             item[field] = item[field].strip()
@@ -171,7 +174,9 @@ def cmd_l3_list(args: list[str]) -> None:
             ).fetchone()
         )
         active_thesis_index_exists = thesis_table_exists and any(
-            row[1] == "idx_thesis_one_active_per_holding" and row[2] == 1 and row[4] == 1
+            row[1] == "idx_thesis_one_active_per_holding"
+            and row[2] == 1
+            and row[4] == 1
             for row in conn.execute("PRAGMA index_list(holding_thesis_versions)")
         )
         if not (thesis_columns & columns) and not thesis_table_exists:

@@ -178,9 +178,9 @@ def test_research_qa_and_report_contract_share_incomplete_semantics() -> None:
     rubric = (
         ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
     ).read_text(encoding="utf-8")
-    report = (
-        ROOT / "skills/a-stock-research/references/report-contract.md"
-    ).read_text(encoding="utf-8")
+    report = (ROOT / "skills/a-stock-research/references/report-contract.md").read_text(
+        encoding="utf-8"
+    )
 
     for text in (research, rubric, report):
         assert "scoring_status=incomplete" in text
@@ -197,9 +197,9 @@ def test_research_qa_and_report_contract_share_incomplete_semantics() -> None:
 
 def test_fundamentals_hit_minimum_data_card_contract_is_pinned() -> None:
     research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
-    report = (
-        ROOT / "skills/a-stock-research/references/report-contract.md"
-    ).read_text(encoding="utf-8")
+    report = (ROOT / "skills/a-stock-research/references/report-contract.md").read_text(
+        encoding="utf-8"
+    )
 
     for text in (research, report):
         assert "FUNDAMENTALS_HIT 最小数据卡" in text

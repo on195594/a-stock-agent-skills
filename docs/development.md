@@ -50,7 +50,7 @@ uv run pytest tests/monitor tests/qa tests/research -q
 bash tests/test_check_holdings_cron.sh
 ```
 
-`uv run ruff format --check .` is optional for focused work; the current codebase has 9 files with formatting diffs, with 46 files already formatted.
+`uv run ruff format --check .` passes across maintained Python sources and tests.
 
 The QA standalone smoke intentionally runs with `python3 -I` and no installed
 runtime. It proves that the QA Skill can be discovered and evaluated from

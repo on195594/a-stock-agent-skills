@@ -31,7 +31,9 @@ def _add_holding(tmp_path, monkeypatch, capsys, *, notes: str = "long private no
     return database
 
 
-def test_holdings_json_is_compact_and_omits_notes(tmp_path, monkeypatch, capsys) -> None:
+def test_holdings_json_is_compact_and_omits_notes(
+    tmp_path, monkeypatch, capsys
+) -> None:
     _add_holding(tmp_path, monkeypatch, capsys)
 
     assert cache.main(["holdings", "--compact", "--json"]) == 0
@@ -87,8 +89,24 @@ def test_alerts_active_json_excludes_resolved(tmp_path, monkeypatch, capsys) -> 
                VALUES (?, '600036', 'yellow', 'unverified', ?, ?, ?, ?, ?, ?)""",
             [
                 (holding_id, "active-one", "active reason", "active", "e1", now, now),
-                (holding_id, "pending-one", "pending reason", "pending", "e2", now, now),
-                (holding_id, "resolved-one", "resolved reason", "resolved", "e3", now, now),
+                (
+                    holding_id,
+                    "pending-one",
+                    "pending reason",
+                    "pending",
+                    "e2",
+                    now,
+                    now,
+                ),
+                (
+                    holding_id,
+                    "resolved-one",
+                    "resolved reason",
+                    "resolved",
+                    "e3",
+                    now,
+                    now,
+                ),
             ],
         )
 
@@ -99,7 +117,9 @@ def test_alerts_active_json_excludes_resolved(tmp_path, monkeypatch, capsys) -> 
     assert all(item["status"] != "resolved" for item in payload)
 
 
-def test_l3_active_json_preserves_legacy_boundary(tmp_path, monkeypatch, capsys) -> None:
+def test_l3_active_json_preserves_legacy_boundary(
+    tmp_path, monkeypatch, capsys
+) -> None:
     _add_holding(tmp_path, monkeypatch, capsys)
     assert (
         cache.main(

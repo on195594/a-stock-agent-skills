@@ -458,7 +458,9 @@ def main(argv: list[str] | None = None) -> int:
         return int(exc.code or 0)
     database_path = paths.cache_db_path()
     if classification == "R0" and not database_path.exists():
-        machine_view_missing = command in {"alerts", "l3-list"} and "--json" in remaining
+        machine_view_missing = (
+            command in {"alerts", "l3-list"} and "--json" in remaining
+        )
         if command == "holdings" or machine_view_missing:
             marker = {
                 "holdings": "HOLDINGS_UNAVAILABLE",

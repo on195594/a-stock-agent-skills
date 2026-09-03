@@ -10,7 +10,9 @@ import pytest
 from a_stock_agent_runtime import cache, db
 
 
-def _add_holding_with_l3(code: str, conditions: tuple[str, ...] = ("旧条件",)) -> list[int]:
+def _add_holding_with_l3(
+    code: str, conditions: tuple[str, ...] = ("旧条件",)
+) -> list[int]:
     cache.cmd_add_holding([code, "10", "800", "--date", "2026-01-02"])
     for condition in conditions:
         cache.cmd_l3_add([code, "original", condition, "触发后清仓"])
@@ -26,7 +28,9 @@ def _add_holding_with_l3(code: str, conditions: tuple[str, ...] = ("旧条件",)
         ]
 
 
-def _payload(retire_l3_ids: list[int], *, scope: str = "core_driver", action: str = "reduce") -> dict:
+def _payload(
+    retire_l3_ids: list[int], *, scope: str = "core_driver", action: str = "reduce"
+) -> dict:
     return {
         "l1": "工业与创新商业化是主要利润引擎",
         "l2": "创新替代速度决定当前赔率",
@@ -102,7 +106,8 @@ def test_schema_migration_is_idempotent_for_legacy_fixture(
 
     with cache.db_session() as conn:
         columns = {
-            row[1]: row for row in conn.execute("PRAGMA table_info(holding_l3_conditions)")
+            row[1]: row
+            for row in conn.execute("PRAGMA table_info(holding_l3_conditions)")
         }
         assert columns["condition_scope"][4] == "'legacy_unclassified'"
         assert conn.execute(
@@ -177,14 +182,20 @@ def test_thesis_rewrite_retires_old_l3_without_touching_position_ledger(
         assert conn.execute(
             "SELECT COUNT(*) FROM holding_l3_conditions WHERE is_active=0"
         ).fetchone() == (2,)
-        assert conn.execute(
-            "SELECT shares, cost_price, buy_date, reference_cost FROM holdings WHERE code='000963'"
-        ).fetchone() == holding_before
-        assert conn.execute(
-            """SELECT holding_id, code, event_type, event_date, shares, price,
+        assert (
+            conn.execute(
+                "SELECT shares, cost_price, buy_date, reference_cost FROM holdings WHERE code='000963'"
+            ).fetchone()
+            == holding_before
+        )
+        assert (
+            conn.execute(
+                """SELECT holding_id, code, event_type, event_date, shares, price,
                       fees, tax, cash_amount, realized_pnl, notes, inferred, created_at
                FROM holding_events ORDER BY id"""
-        ).fetchall() == events_before
+            ).fetchall()
+            == events_before
+        )
 
     capsys.readouterr()
     cache.cmd_l3_list(["000963"])
@@ -227,7 +238,9 @@ def test_thesis_rewrite_rejects_invalid_stdin_without_mutation(
     with pytest.raises(SystemExit):
         cache.cmd_thesis_rewrite(["000963"])
     with cache.db_session() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM holding_thesis_versions").fetchone() == (0,)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM holding_thesis_versions"
+        ).fetchone() == (0,)
         assert conn.execute(
             "SELECT is_active FROM holding_l3_conditions"
         ).fetchone() == (1,)
@@ -243,7 +256,9 @@ def test_thesis_rewrite_rejects_cross_holding_and_incomplete_retirement(
         with pytest.raises(SystemExit):
             _rewrite(monkeypatch, "000963", _payload(ids))
         with cache.db_session() as conn:
-            assert conn.execute("SELECT COUNT(*) FROM holding_thesis_versions").fetchone() == (0,)
+            assert conn.execute(
+                "SELECT COUNT(*) FROM holding_thesis_versions"
+            ).fetchone() == (0,)
             assert conn.execute(
                 "SELECT COUNT(*) FROM holding_l3_conditions WHERE is_active=1"
             ).fetchone() == (3,)
@@ -253,9 +268,13 @@ def test_thesis_rewrite_rejects_cross_holding_and_incomplete_retirement(
 def test_non_core_cannot_authorize_reduce_or_exit(monkeypatch, action) -> None:
     old_ids = _add_holding_with_l3("000963")
     with pytest.raises(SystemExit):
-        _rewrite(monkeypatch, "000963", _payload(old_ids, scope="non_core", action=action))
+        _rewrite(
+            monkeypatch, "000963", _payload(old_ids, scope="non_core", action=action)
+        )
     with cache.db_session() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM holding_thesis_versions").fetchone() == (0,)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM holding_thesis_versions"
+        ).fetchone() == (0,)
 
 
 def test_any_write_failure_rolls_back_entire_rewrite(monkeypatch) -> None:
@@ -271,7 +290,9 @@ def test_any_write_failure_rolls_back_entire_rewrite(monkeypatch) -> None:
     with pytest.raises(sqlite3.IntegrityError):
         _rewrite(monkeypatch, "000963", _payload(old_ids))
     with cache.db_session() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM holding_thesis_versions").fetchone() == (0,)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM holding_thesis_versions"
+        ).fetchone() == (0,)
         assert conn.execute(
             "SELECT is_active, retired_at FROM holding_l3_conditions"
         ).fetchone() == (1, None)
@@ -417,11 +438,15 @@ def test_remove_holding_and_cleanup_cover_thesis_versions(capsys) -> None:
         conn.commit()
     cache.cmd_remove_holding(["000963"])
     with cache.db_session() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM holding_thesis_versions").fetchone() == (0,)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM holding_thesis_versions"
+        ).fetchone() == (0,)
 
     orphan_ids = _add_holding_with_l3("600036")
     with cache.db_session() as conn:
-        holding_id = conn.execute("SELECT id FROM holdings WHERE code='600036'").fetchone()[0]
+        holding_id = conn.execute(
+            "SELECT id FROM holdings WHERE code='600036'"
+        ).fetchone()[0]
         conn.execute(
             """INSERT INTO holding_thesis_versions
                (holding_id, version, l1, l2, rewrite_reason, status, created_at)
@@ -435,4 +460,6 @@ def test_remove_holding_and_cleanup_cover_thesis_versions(capsys) -> None:
     cache.cmd_cleanup([])
     assert "孤儿持仓关联记录" in capsys.readouterr().out
     with cache.db_session() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM holding_thesis_versions").fetchone() == (0,)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM holding_thesis_versions"
+        ).fetchone() == (0,)
