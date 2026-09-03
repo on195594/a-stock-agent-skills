@@ -8,6 +8,7 @@
 # it does not sit at ~/a-stock-lib; the installer tests skip when it is absent.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export RUFF_CACHE_DIR="${RUFF_CACHE_DIR:-/tmp/ruff_cache}"
 
 # --inexact keeps the externally provisioned a-stock-lib installed.  It is
 # deliberately not a declared dependency (the installer supplies it explicitly and
