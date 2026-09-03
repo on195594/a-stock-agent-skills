@@ -13,8 +13,14 @@
 - [`specs/2026-08-09-investment-framework-repair-spec.md`](specs/2026-08-09-investment-framework-repair-spec.md) — authorized investment-framework and fail-closed repairs.
 - [`specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md`](specs/2026-08-10-catalyst-cycle-analysis-migration-spec.md) — product-cycle and thematic-catalyst analysis migration boundaries.
 - [`specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md`](specs/2026-08-11-wuxi-analysis-retro-repairs-spec.md) — implemented and deployed Research/QA contract repairs.
+- [`specs/2026-08-23-lib-060-consumer-cutover-and-scoring-wire-spec.md`](specs/2026-08-23-lib-060-consumer-cutover-and-scoring-wire-spec.md) — implemented deterministic fundamental scoring and rule-hash wiring.
 - [`specs/2026-08-23-research-data-capability-and-skill-slimming-spec.md`](specs/2026-08-23-research-data-capability-and-skill-slimming-spec.md) — deployed PS, interim-report snapshot and progressive-disclosure contract.
+- [`specs/2026-08-27-a-stock-research-latency-and-readonly-remediation-spec.md`](specs/2026-08-27-a-stock-research-latency-and-readonly-remediation-spec.md) — deployed physically read-only holdings queries and bounded search budgets.
 - [`specs/2026-08-27-l3-materiality-and-thesis-versioning-repair-spec.md`](specs/2026-08-27-l3-materiality-and-thesis-versioning-repair-spec.md) — approved L3 materiality, lifecycle and holding-thesis versioning repair.
+- [`specs/2026-08-28-a-stock-research-execution-efficiency-repair-spec.md`](specs/2026-08-28-a-stock-research-execution-efficiency-repair-spec.md) — deployed bounded first-pass research and A-framework concentration contract.
+- [`specs/2026-08-30-a-stock-research-tool-chain-efficiency-spec.md`](specs/2026-08-30-a-stock-research-tool-chain-efficiency-spec.md) — deployed 5-session price change reuse and stop conditions for incomplete routes.
+- [`specs/2026-09-01-a-stock-skill-contract-reconciliation-and-slimming-spec.md`](specs/2026-09-01-a-stock-skill-contract-reconciliation-and-slimming-spec.md) — deployed PE/PS contract reconciliation and progressive disclosure.
+- [`specs/2026-09-02-a-stock-research-incomplete-qa-valuation-compatibility-spec.md`](specs/2026-09-02-a-stock-research-incomplete-qa-valuation-compatibility-spec.md) — deployed latest-report PB/BPS valuation compatibility and Research/QA fail-closed alignment.
 - [`plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md`](plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md) — milestone ledger, execution commands and rollback plan.
 - [`plans/2026-08-10-p2-structural-refactor-plan.md`](plans/2026-08-10-p2-structural-refactor-plan.md) — completed P2 structural refactor and evidence relocation.
 - [`plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md`](plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md) — completed implementation, review and production cutover ledger.
