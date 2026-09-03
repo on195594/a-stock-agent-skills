@@ -24,7 +24,7 @@ UV_CACHE_DIR = os.environ.get("UV_CACHE_DIR") or str(
 # explicit checkout or wheel and records its provenance.  Tests locate it the same
 # way an operator would, and skip rather than fail when it is not provisioned here.
 LIB_ROOT = Path(os.environ.get("A_STOCK_LIB_SOURCE") or Path.home() / "a-stock-lib")
-LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.6.1-py3-none-any.whl"
+LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.6.2-py3-none-any.whl"
 
 _MISSING = f"a-stock-lib not provisioned at {LIB_ROOT}; set A_STOCK_LIB_SOURCE"
 requires_lib_wheel = pytest.mark.skipif(not LIB_WHEEL.is_file(), reason=_MISSING)
@@ -132,7 +132,7 @@ def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
     )
     payload = json.loads(metadata.read_text(encoding="utf-8"))
     assert payload["name"] == "a-stock-lib"
-    assert payload["version"] == "0.6.1"
+    assert payload["version"] == "0.6.2"
     assert len(payload["wheel_sha256"]) == 64
     wheel = Path(payload["wheel"])
     assert wheel.is_file()

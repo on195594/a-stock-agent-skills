@@ -86,10 +86,10 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.11` (`0.1.11-da6a7e9c8f7d`) with
-`a-stock-lib==0.6.1`. Rollback manifest
-`rollback-1788324887046264040.json` preserves the prior client entries and the
-previous `0.1.10-2cc4cff469d9` runtime remains installed and executable.
+The current runtime is `v0.1.11` (`0.1.11-7131c119ae80`) with
+`a-stock-lib==0.6.2`. Rollback manifest
+`rollback-1788419772158187000.json` preserves the prior client entries and the
+previous runtime remains installed and executable.
 The authorized 002594 refresh changed cache content; database schema and
 migration-ledger fingerprints, configuration and crontab fingerprints stayed
 unchanged.
