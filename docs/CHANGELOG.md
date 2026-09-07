@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-07
+
+- Added pure functional P0–P3 risk control gates (`risk_gates.py`) evaluated before valuation scoring and holding trade proposals.
+- P0: Regulatory compliance gate covering ST/listing status, audit opinions, formal CSRC investigation, and board-specific statutory dividend rules (50M CNY for Main Board, 30M CNY for STAR and ChiNext, not applicable for BSE).
+- P1: Structural ROE deterioration gate comparing same-basis TTM ROE with 5-year mean, invalidating valuation percentiles when TTM ROE is negative or retention ratio is strictly below 0.75, with 3-factor DuPont drill-down.
+- P2: True FCF gate (`FCF = CFO - Capex`) with strict Capex > CFO redline and `review_required` state machine for heavy capex cycles in C/D frameworks.
+- P3: Extreme systemic liquidity shock gate delaying second-stop candidate actions for 24 hours when verified limit-down count strictly exceeds 500, with untradeable/suspended price protection and `holding_alerts` persistence.
+- Aligned Research, Monitor, and QA contracts with checks 19, 20, 21 added to QA rubric without database schema changes.
+
 ## 0.1.11 - 2026-09-02
 
 - Added deterministic `valuation_compatibility` metadata from the existing quote, annual PB/BPS and latest-report BPS, with a decimal-safe inclusive 2% timing gate and no database migration.
