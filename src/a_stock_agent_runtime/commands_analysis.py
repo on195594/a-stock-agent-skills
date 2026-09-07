@@ -10,7 +10,7 @@ import sys
 from dataclasses import asdict
 from datetime import timedelta
 
-from a_stock_agent_runtime import db, domain, store
+from a_stock_agent_runtime import db, domain, risk_gates, store
 from a_stock_lib.contracts import (
     FrameworkKey,
     parse_cycle_stage_tag,
@@ -18,6 +18,30 @@ from a_stock_lib.contracts import (
     required_subjective_categories,
 )
 from a_stock_lib.framework_scoring import score_fundamentals
+
+def _risk_gate_state(fundamentals: dict) -> tuple[str, list[str], dict[str, dict]] | None:
+    return risk_gates.aggregate_fundamentals_gates(fundamentals)
+
+
+def _hard_gate_failed(gates: dict[str, dict]) -> bool:
+    return any(
+        name in {"regulatory_gate", "cash_flow_gate"}
+        and value.get("status") not in {"clear", "not_applicable"}
+        for name, value in gates.items()
+    )
+
+
+def _not_formed_score(code: str, framework: str, reasons: list[str], gates: dict[str, dict]) -> dict:
+    return {
+        "framework": framework[0], "code": code, "scoring_status": "incomplete",
+        "complete": False, "blocked": True, "action_eligible": False,
+        "subtotal": None, "fundamentals_subtotal": "not_formed",
+        "configuration_rating": "not_formed", "timing_rating": "not_formed",
+        "total": "not_formed", "matrix": "not_formed",
+        "reason_code": "risk_gate_incomplete", "risk_gate_reasons": reasons,
+        "risk_gates": gates,
+    }
+
 
 _VALUATION_CONFLICT_RE = re.compile(
     r'估值冲突\[状态=待核实；PB结论="[^"]+"；交叉估值结论="[^"]+"\]'
@@ -309,6 +333,12 @@ def cmd_score_fundamentals(args: list[str]) -> None:
     ):
         metrics["operating_cf_to_net_profit"] = operating_cf / eps
     metrics.update(overrides)
+    gate_state = _risk_gate_state(metrics)
+    if gate_state is not None:
+        _gate_status, gate_reasons, gates = gate_state
+        if _hard_gate_failed(gates):
+            print(json.dumps(_not_formed_score(code, framework, gate_reasons, gates), ensure_ascii=False, indent=2))
+            return
     report = sys.stdin.read().strip()
     cycle_assessment = parse_cycle_stage_tag(report)
     score = score_fundamentals(
@@ -319,6 +349,22 @@ def cmd_score_fundamentals(args: list[str]) -> None:
     )
     payload = asdict(score)
     payload["blocked"] = score.blocked
+    if gate_state is not None:
+        _, gate_reasons, gates = gate_state
+        roe_gate = gates.get("roe_structural_gate", {})
+        if roe_gate.get("status") != "clear":
+            payload.update({
+                "timing_status": "incomplete",
+                "scoring_status": "incomplete",
+                "complete": False,
+                "blocked": True,
+                "valuation_action_eligible": False,
+                "valuation_score": 0,
+                "total": "not_formed",
+                "matrix": "not_formed",
+                "action_eligible": False,
+                "risk_gate_reasons": gate_reasons,
+            })
     payload["code"] = code
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
@@ -366,8 +412,16 @@ def cmd_set_analysis(args: list[str]) -> None:
         sys.exit(1)
     result = _read_validated_analysis_stdin(framework)
     _validate_cycle_stage_for_framework(result, framework)
+    cached_fundamentals = store.get_fundamentals(code) or {}
+    gate_state = _risk_gate_state(cached_fundamentals)
+
     today = domain.cst_today()
     scoring_status = "complete"
+    if gate_state is not None and gate_state[0] != "clear":
+        scoring_status = "incomplete"
+        if score is not None:
+            print("错误：风险门未通过时不得写入完整总分", file=sys.stderr)
+            sys.exit(1)
     valuation_conflict = framework == "C资源" and _VALUATION_CONFLICT_RE.search(result)
     if valuation_conflict:
         scoring_status = "incomplete"

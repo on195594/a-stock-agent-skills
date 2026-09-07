@@ -10,3 +10,10 @@
   direct user authorization, with focused regression tests and read-only review.
 - Database schema, production cron, and active client entries require separate
   explicit authorization; do not bundle them with repository-only changes.
+
+## Multi-board and runtime discipline
+- A-Share regulatory gates must strictly distinguish Main Board (50M CNY threshold),
+  STAR & ChiNext (30M CNY threshold), and BSE (not applicable). SZSE requires
+  consolidated unallocated profit checks. Never apply Main Board constants globally.
+- When dispatching local CLI agents (codex, pi), strip stale proxy environment
+  variables and execute with unsandboxed permissions to avoid connection refused loops.

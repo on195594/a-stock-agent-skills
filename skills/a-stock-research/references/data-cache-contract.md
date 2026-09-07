@@ -85,3 +85,9 @@ JSON数据结构示例：
  }}
 ```
 > **字段说明**：`data_period` 为数据来源报告期（必填，如 "2025年报"/"2026Q1"）；`dps` 为每股分红（用于股息率交叉验证）；`pe_static` 是当前价÷最近完整年报EPS；`pe_ttm` 暂时保留为同值的 deprecated 兼容别名，绝不代表真实TTM。`pe_percentile_5y` 使用相同静态PE口径、披露滞后处理和近5年价格窗口。
+
+## P0-P2 JSON 门合同
+
+新版 payload 可包含 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`。每个门必须保留 `status`、`action_eligible`、稳定 `reason_code`、`sources`、`as_of` 和适用报告期；P0 还必须保留交易所/板块、`rule_version` 与四个子门。旧缓存没有门字段时按 `legacy_field_absent` 处理为不具备买入资格，读取不得回填。
+
+P1 使用同口径最新 TTM ROE 与最近五个完整年度均值，负 ROE 无条件阻断，保留率严格低于 0.75 才阻断。P2 只使用合并现金流量表 CFO 与“购建固定资产、无形资产和其他长期资产支付的现金”计算 `FCF=CFO-Capex`；金融框架可经正式依据标记 `not_applicable`，C/D 的 Capex>CFO 只能进入有证据的周期专项复核。

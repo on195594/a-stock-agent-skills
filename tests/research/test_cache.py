@@ -1685,7 +1685,8 @@ def test_check_holdings_alerts_below_20pct(capsys, monkeypatch):
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
     assert "🔴 已跌破20%止损线" in out
-    assert "建议立即止损" in out
+    assert "P3:incomplete(market_snapshot_incomplete)" in out
+    assert "建议立即止损" not in out
 
 
 def test_check_holdings_skips_closed_positions(capsys, monkeypatch):
@@ -1790,7 +1791,8 @@ def test_check_holdings_after_hours_breach_uses_close_price_wording(
     )
     cache.cmd_check_holdings()
     out = capsys.readouterr().out
-    assert "🔴 已跌破20%止损线（32.000），收盘价31.00，建议立即止损" in out
+    assert "🔴 已跌破20%止损线（32.000），收盘价31.00，暂不可执行" in out
+    assert "P3:incomplete(market_snapshot_incomplete)" in out
     assert "现价31.00" not in out
     assert "共 1 项预警" in out
 

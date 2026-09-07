@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, time as dtime, timedelta, timezone
 
-from a_stock_agent_runtime import framework_metadata
+from a_stock_agent_runtime import framework_metadata, risk_gates
 from a_stock_agent_runtime.market_quotes import PriceQuote
 
 _CST = timezone(timedelta(hours=8))
@@ -133,6 +133,11 @@ def is_a_share_trading_hours(moment: datetime) -> bool:
     return dtime(9, 30) <= current <= dtime(11, 30) or dtime(13, 0) <= current <= dtime(
         15, 0
     )
+
+
+def evaluate_liquidity_shock(payload: dict) -> dict:
+    """Delegate the pure P3 state machine without adding domain-side rules."""
+    return risk_gates.liquidity_shock_gate(payload)
 
 
 def _legacy_style_status(

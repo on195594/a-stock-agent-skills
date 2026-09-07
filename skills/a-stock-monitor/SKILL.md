@@ -235,3 +235,9 @@ Tier、止损与估值阈值均视为启发式参数；回放数据格式、无�
 
 **完整内容见 `references/data-operations.md`**：买卖/分红/公司行动事件、真实总回报、
 L3/Tier/预警命令、主力入场日期、写入授权与状态字段一览。
+
+## P0-P3 监控硬门（2026-09-07）
+
+C01—C10 前先读取基本面 JSON 中的 `regulatory_gate`、`roe_structural_gate` 与 `cash_flow_gate`。这些门为 `blocked`、`incomplete` 或 `review_required` 时，只生成红色复核候选并冻结新增买入、Tier1 后补仓及 C/D 加仓；不自动卖出、不覆盖活动 L3。金融 P2 的 `not_applicable` 必须有正式框架依据。
+
+P3 只适用于第二档价格止损候选，并读取持仓行实际 `stop_loss_20`。同一时点完整快照跌停数 `>500` 时延迟一次24小时；不得续延或重置 `defer_started_at`。到期前不输出卖出股数；停牌、一字跌停、无流动性或报价字段缺失分别保持 `untradeable`/`incomplete`，只有新鲜可交易报价才可复核。`check-holdings` 保持现有只读候选输出分类；alert 写入仍须用户确认和 `--confirm-write`。

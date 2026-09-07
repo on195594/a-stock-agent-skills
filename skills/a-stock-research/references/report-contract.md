@@ -29,6 +29,10 @@
 
 横向对比多股时输出对比表格（含双轨评级列）。
 
+## P0-P3 门字段
+
+红线模块须按 `regulatory_gate` → `roe_structural_gate` → `cash_flow_gate` → `liquidity_shock_gate` 顺序输出适用状态、稳定 `reason_code`、来源、as-of 和 `action_eligible`。任一 `blocked`、`incomplete` 或 `review_required` 都必须标记相应评级/矩阵为 `not_formed` 或冻结加仓；P1 还须明确历史 PE/PB/PS 低分位不具备动作资格。P3 只作用于实际 `stop_loss_20` 第二档，500/501 为严格边界，观察窗口只能一次24小时，停牌/封板不得输出卖出股数。
+
 **操作建议写法要求**：
 - 核心逻辑须回答"在当前周期位置和价格水平下，持有/买入的完整推理链是什么"
 - 不得只罗列公司优点；须明确说明"为什么当前价格/时机下这些优点支持此仓位"

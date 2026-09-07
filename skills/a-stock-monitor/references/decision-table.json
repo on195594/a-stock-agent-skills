@@ -22,6 +22,16 @@
       "heuristic": false
     },
     {
+      "id": "D03P0",
+      "priority": 85,
+      "condition": "p0_p1_p2_status IN (blocked, incomplete, review_required)",
+      "effect": "freeze_accumulation_and_open_red_review",
+      "action_source": "none",
+      "requires_user_confirmation": false,
+      "requires_executable_sizing": false,
+      "heuristic": false
+    },
+    {
       "id": "D03",
       "priority": 80,
       "condition": "roe_yoy_drop_gt_5pts_two_quarters OR adjusted_profit_yoy_negative_two_quarters",
@@ -44,7 +54,7 @@
     {
       "id": "D04",
       "priority": 70,
-      "condition": "price <= stored_second_stop",
+      "condition": "p3_status == clear AND price <= stored_second_stop",
       "effect": "propose_trade",
       "action_source": "target_reduce_50_percent",
       "requires_user_confirmation": true,

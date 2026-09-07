@@ -696,8 +696,14 @@ def cmd_alert_open(args: list[str]) -> None:
         try:
             date.fromisoformat(review_due)
         except ValueError:
-            print("错误：复核日期必须为 YYYY-MM-DD 或 none", file=sys.stderr)
-            sys.exit(1)
+            try:
+                parsed_due = __import__("datetime").datetime.fromisoformat(review_due)
+            except ValueError:
+                print("错误：复核日期必须为 YYYY-MM-DD 或带时区 ISO 8601 或 none", file=sys.stderr)
+                sys.exit(1)
+            if parsed_due.tzinfo is None:
+                print("错误：ISO 8601 复核时间必须带时区", file=sys.stderr)
+                sys.exit(1)
     with db.db_session() as conn:
         holding_id, _, _ = commands_holdings._single_open_holding(conn, code)
         now_iso = domain.utc_now_iso()
@@ -709,7 +715,13 @@ def cmd_alert_open(args: list[str]) -> None:
                ON CONFLICT(holding_id, reason_code) WHERE status != 'resolved'
                DO UPDATE SET level=excluded.level, category=excluded.category,
                  reason=excluded.reason, evidence=excluded.evidence,
-                 review_due=excluded.review_due, updated_at=excluded.updated_at""",
+                 review_due=CASE
+                   WHEN holding_alerts.reason_code='price_stop2_liquidity_defer'
+                        AND holding_alerts.review_due IS NOT NULL
+                   THEN holding_alerts.review_due
+                   ELSE excluded.review_due
+                 END,
+                 updated_at=excluded.updated_at""",
             (
                 holding_id,
                 code,

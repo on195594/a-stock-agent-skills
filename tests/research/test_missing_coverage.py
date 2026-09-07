@@ -486,7 +486,8 @@ class TestCheckHoldingsBoundary:
         cache.cmd_check_holdings()
         out = capsys.readouterr().out
         assert "🔴 已跌破20%止损线" in out
-        assert "建议立即止损" in out
+        assert "P3:incomplete(market_snapshot_incomplete)" in out
+        assert "建议立即止损" not in out
 
     def test_price_one_cent_above_15pct_stop_is_normal(self, capsys, monkeypatch):
         """34.001 > sl15=34.000，不应触发预警"""

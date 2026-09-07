@@ -15,6 +15,53 @@ _DATA_PERIOD_RE = re.compile(r"^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$")
 QUOTE_SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 QUOTE_SNAPSHOT_RETENTION_PER_CODE = 64
 MAX_SNAPSHOT_CLOCK_SKEW = timedelta(seconds=30)
+_GATE_FIELDS = {
+    "regulatory_gate": {"clear", "blocked", "incomplete"},
+    "roe_structural_gate": {"clear", "blocked", "incomplete"},
+    "cash_flow_gate": {"clear", "blocked", "incomplete", "review_required", "not_applicable"},
+}
+
+
+def _validate_gate_payload(name: str, value: object) -> str | None:
+    if not isinstance(value, dict):
+        return f"{name} 必须是 JSON 对象"
+    status = value.get("status")
+    if status not in _GATE_FIELDS[name]:
+        return f"{name}.status 非法"
+    eligible = value.get("action_eligible")
+    if not isinstance(eligible, bool):
+        return f"{name}.action_eligible 必须为布尔值"
+    if eligible != (status in {"clear", "not_applicable"}):
+        return f"{name}.action_eligible 与 status 不一致"
+    if not isinstance(value.get("reason_code"), str) or not value["reason_code"].strip():
+        return f"{name}.reason_code 缺失"
+    sources = value.get("sources", value.get("source"))
+    if not isinstance(sources, (str, list, tuple)) or not sources:
+        return f"{name}.sources 缺失"
+    source_values = [sources] if isinstance(sources, str) else list(sources)
+    if status in {"clear", "not_applicable"} and not any(
+        isinstance(item, str) and ("official" in item.lower() or "交易所" in item or "证监会" in item or "年报" in item)
+        for item in source_values
+    ):
+        return f"{name}.sources 非官方"
+    if not isinstance(value.get("as_of"), str) or not value["as_of"].strip():
+        return f"{name}.as_of 缺失"
+    if name == "regulatory_gate":
+        if not isinstance(value.get("rule_version"), str) or not value["rule_version"].strip():
+            return "regulatory_gate.rule_version 缺失"
+        checks = value.get("checks")
+        expected = {"listing_risk", "audit_opinion", "investigation", "dividend_compliance"}
+        if not isinstance(checks, dict) or set(checks) != expected:
+            return "regulatory_gate.checks 不完整"
+        for check_name, check in checks.items():
+            if not isinstance(check, dict) or check.get("status") not in {"clear", "blocked", "incomplete", "not_applicable"}:
+                return f"regulatory_gate.checks.{check_name} 非法"
+            if not isinstance(check.get("reason_code"), str) or not check["reason_code"].strip():
+                return f"regulatory_gate.checks.{check_name}.reason_code 缺失"
+            expected_check_eligibility = check["status"] in {"clear", "not_applicable"}
+            if check.get("action_eligible") is not None and check["action_eligible"] != expected_check_eligibility:
+                return f"regulatory_gate.checks.{check_name}.action_eligible 与 status 不一致"
+    return None
 
 
 def validate_fundamentals_payload(data: dict) -> str | None:
@@ -32,6 +79,10 @@ def validate_fundamentals_payload(data: dict) -> str | None:
         return "field_provenance 必须是 JSON 对象"
 
     business_fields = set(data) - {"data_period", "null_reasons", "field_provenance"}
+    for gate_name in _GATE_FIELDS.keys() & business_fields:
+        gate_error = _validate_gate_payload(gate_name, data[gate_name])
+        if gate_error:
+            return gate_error
     for field in sorted(business_fields):
         field_provenance = provenance.get(field)
         if not isinstance(field_provenance, dict):
@@ -64,6 +115,20 @@ def validate_fundamentals_payload(data: dict) -> str | None:
     if unknown_reasons:
         return f"null_reasons 包含非缺失字段: {', '.join(sorted(unknown_reasons))}"
     return None
+
+
+def get_risk_gate(data: dict | None, name: str) -> dict:
+    """Read a gate without upgrading legacy cache; absent means incomplete."""
+    value = data.get(name) if isinstance(data, dict) else None
+    if isinstance(value, dict):
+        return value
+    return {
+        "status": "incomplete",
+        "action_eligible": False,
+        "reason_code": "legacy_field_absent",
+        "sources": [],
+        "as_of": None,
+    }
 
 
 def safe_json_value(raw: str | None, expected_type: type, default):

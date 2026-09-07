@@ -18,6 +18,16 @@ class PriceQuote:
     price: float
     quote_date: str | None
     quote_time: str | None
+    source: str | None = None
+    suspended: bool | None = None
+    limit_down_locked: bool | None = None
+    trading_status: str | None = None
+
+    @property
+    def quote_as_of(self) -> str | None:
+        if not self.quote_date or not self.quote_time:
+            return None
+        return f"{self.quote_date}T{self.quote_time}"
 
 
 def sina_query_prefix(code: str) -> str:
@@ -94,6 +104,16 @@ def fetch_sina_batch_quotes(
     return result
 
 
+def fetch_market_limit_down_snapshot() -> dict | None:
+    """Return a provider-backed full-market snapshot when one is available.
+
+    The current quote provider does not expose the required universe and
+    limit-down-price fields, so the honest default is no snapshot (P3 then
+    remains fail-closed). Tests/adapters may inject a normalized snapshot.
+    """
+    return None
+
+
 def fetch_current_price(code: str) -> float | None:
     """Fetch one current price for compatibility with existing callers."""
     try:
@@ -118,4 +138,4 @@ def fetch_current_price_quote(code: str) -> PriceQuote | None:
     raw = fetch_sina_batch_quotes([code]).get(code)
     if raw is None:
         return None
-    return PriceQuote(price=raw[0], quote_date=raw[1], quote_time=raw[2])
+    return PriceQuote(price=raw[0], quote_date=raw[1], quote_time=raw[2], source="sina")

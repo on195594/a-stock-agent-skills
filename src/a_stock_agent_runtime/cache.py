@@ -79,6 +79,7 @@ from a_stock_agent_runtime import (
     commands_monitor,
     db,
     domain,
+    risk_gates,
     schema,
     store,
 )
@@ -108,6 +109,7 @@ db_session = db.db_session
 read_only_db_session = db.read_only_db_session
 validate_fundamentals_payload = store.validate_fundamentals_payload
 _safe_json_value = store.safe_json_value
+get_risk_gate = store.get_risk_gate
 record_quote_snapshot = store.record_quote_snapshot
 get_latest_quote_snapshot = store.get_latest_quote_snapshot
 set_market_indicator_snapshot = store.set_market_indicator_snapshot
@@ -120,6 +122,10 @@ list_codes = store.list_codes
 QUOTE_SNAPSHOT_MAX_AGE = store.QUOTE_SNAPSHOT_MAX_AGE
 QUOTE_SNAPSHOT_RETENTION_PER_CODE = store.QUOTE_SNAPSHOT_RETENTION_PER_CODE
 MAX_SNAPSHOT_CLOCK_SKEW = store.MAX_SNAPSHOT_CLOCK_SKEW
+regulatory_gate = risk_gates.regulatory_gate
+roe_structural_gate = risk_gates.roe_structural_gate
+cash_flow_gate = risk_gates.cash_flow_gate
+liquidity_shock_gate = risk_gates.liquidity_shock_gate
 
 # Explicit command compatibility exports for supported direct callers.
 cmd_check = commands_analysis.cmd_check

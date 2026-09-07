@@ -24,7 +24,7 @@ from a_stock_lib.providers import (
     QuoteObservation,
 )
 
-from a_stock_agent_runtime import db, store
+from a_stock_agent_runtime import db, risk_gates, store
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -82,6 +82,9 @@ FIELDS = {
     "operating_cf_per_share": ("每股经营现金流(元)", "structured"),
     "eps": ("基本每股收益(元)", "structured"),
     "latest_report_snapshot": ("最新中报/季报方向快照", "structured"),
+    "regulatory_gate": ("P0监管合规门", "computed"),
+    "roe_structural_gate": ("P1 ROE结构门", "computed"),
+    "cash_flow_gate": ("P2自由现金流门", "computed"),
     "bps": ("每股净资产(元)", "structured"),
     "industry_status": ("行业来源状态", "structured"),
     "bond_yield_10y": ("10年期国债收益率(%)", "akshare"),
@@ -1690,6 +1693,31 @@ def _fetch_bond_yield(null_reasons: dict) -> dict | None:
     return None
 
 
+def _cache_gate_defaults(code: str, results: dict, data_period: str) -> None:
+    """Persist explicit incomplete gates when the current provider lacks facts."""
+    as_of = results.get("_quote_as_of") or data_period
+    unavailable = ["unavailable"]
+    regulatory = results.get("regulatory_gate")
+    if not isinstance(regulatory, dict):
+        regulatory = risk_gates.regulatory_gate(
+            {"code": code, "report_period": data_period, "as_of": as_of, "sources": unavailable}
+        )
+    regulatory["as_of"] = regulatory.get("as_of") or as_of
+    regulatory["sources"] = regulatory.get("sources") or unavailable
+    regulatory["rule_version"] = regulatory.get("rule_version") or "unavailable"
+    for check in regulatory.get("checks", {}).values():
+        check["as_of"] = check.get("as_of") or as_of
+        check["sources"] = check.get("sources") or unavailable
+    results["regulatory_gate"] = regulatory
+    for key, gate in (("roe_structural_gate", risk_gates.roe_structural_gate), ("cash_flow_gate", risk_gates.cash_flow_gate)):
+        value = results.get(key)
+        if not isinstance(value, dict):
+            value = gate({"as_of": as_of, "sources": unavailable, "report_period": data_period})
+        value["as_of"] = value.get("as_of") or as_of
+        value["sources"] = value.get("sources") or unavailable
+        results[key] = value
+
+
 def _build_cache_payload(
     code: str,
     name: str,
@@ -1703,6 +1731,7 @@ def _build_cache_payload(
     if data_period is None:
         logger.error("  ❌ 无法从实际财务报表确定 data_period，拒绝写入 fundamentals")
         raise SystemExit(1)
+    _cache_gate_defaults(code, results, data_period)
     business_fields = [key for key in FIELDS if key != "bond_yield_10y"]
     cache_data = {key: results.get(key) for key in business_fields}
     normalized_reasons: dict[str, str] = {}

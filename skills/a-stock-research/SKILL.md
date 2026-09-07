@@ -160,3 +160,9 @@ QA 返回后，冻结正文仍不得覆写。下方规定的 verdict 标记属�
 QA 发现 Critical/Important 问题时，只修正本次报告并说明根因。若根因疑似框架规则，
 仅提出变更建议；不得在普通投研请求中修改 `SKILL.md`、framework、rubric、版本或
 changelog。投资规则变更仍须独立 dated spec 和用户直接授权。
+
+## P0-P3 硬门顺序（2026-09-07）
+
+量化评分前依次核验 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`；P0/P2 为 `blocked`/`incomplete`/`review_required` 时对完整评分 fail-closed，P1 则仅允许机械基本面诊断展示，必须将 timing/估值矩阵标为 `incomplete`/`not_formed`，不得让 PE/PB/PS 历史低分位形成买入或加仓资格。B/证券/保险仅在有正式规则依据时将 P2 标为 `not_applicable`；C/D 的 Capex>CFO 必须完成周期、资本开支和现金分红覆盖专项。
+
+持仓监控只冻结新增买入、Tier1 后补仓和 C/D 加仓，不把四门红旗自动改写为清仓。P3 仅包装持仓实际 `stop_loss_20` 第二档：有效全市场跌停数严格 `>500` 时只延迟一次24小时；快照、报价、来源、as-of 或交易状态缺失即 `incomplete`，停牌/一字跌停为 `untradeable`，不得伪造成交或输出股数。

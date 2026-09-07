@@ -126,3 +126,9 @@ notes 只保留无法结构化的补充说明。
 
 本表汇总各步骤的持久化状态。除 PEG 计算明细和格档核查证据仍可作为补充 notes 外，
 交易、L3、Tier、预警与主力入场日期均以结构化列/表为准。
+
+P3 延迟复核复用 `holding_alerts`：固定 `reason_code=price_stop2_liquidity_defer`，`evidence` 为包含版本、`defer_started_at`、原第二档价格和原市场快照的 JSON，`review_due` 可为带时区 ISO 8601。check-holdings 只输出候选；用户确认后才执行：
+```bash
+a-stock-cache --confirm-write alert-open <代码> red holding_deterioration price_stop2_liquidity_defer <review_due> "系统性流动性休克观察中" '<evidence-json>'
+```
+首次起点不得因重复运行或持续 501 家跌停而重置，停牌/封板不可解除或伪造成交。
