@@ -45,7 +45,7 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 
 ## 持仓路由（最先执行）
 
-股票代码确定时，先只读执行 `a-stock-cache holdings <股票代码>` 核对该股票是否已持仓。可读账本返回 `NOT_HELD <代码>` 才表示已确认未持仓；`HOLDINGS_UNAVAILABLE` 表示账本不可用，不得伪装成未持仓。不得读取单股 monitor 的 `config.json` 代替真实持仓账本。
+股票代码确定时，先只读执行 `a-stock-cache holdings <股票代码> --active-only` 核对该股票是否已持仓。可读账本返回 `NOT_HELD <代码>` 才表示已确认未持仓；`HOLDINGS_UNAVAILABLE` 表示账本不可用，不得伪装成未持仓。不得读取单股 monitor 的 `config.json` 代替真实持仓账本。
 
 **确认已持仓后立即终止本 Skill**并改用 `a-stock-monitor`：不得继续执行首次研究的 fetch/check、评分或 QA，不得继续加载首次研究框架引用。只有用户明确要求重新做首次配置研究，才可在说明与当前持仓监控结论分离后继续本 Skill。账本不可用时须标注路由证据缺口；可以继续公开市场研究，但不得声称该标的是新仓，也不得据此给账户级仓位动作。
 
