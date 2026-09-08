@@ -92,7 +92,7 @@ CLI_ARGUMENT_CASES = {
     "retro-pending": ([], []),
     "retro-stats": ([], ["A通用"]),
     "retro-outliers": ([], ["--loss", "10"]),
-    "holdings": ([], ["600000", "--compact", "--json"]),
+    "holdings": ([], ["600000", "--compact", "--json", "--active-only"]),
     "remove-holding": (["600000"], ["600000"]),
     "update-return": (["600000", "10"], ["600000", "10"]),
     "position-return": (["600000"], ["600000", "10"]),

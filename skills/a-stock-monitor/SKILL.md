@@ -52,7 +52,7 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 | ID | 必检项 | 完成标准 |
 |---|---|---|
 | C01 | 组合风险 | 明确总资产分母；输出单股权重、当前净值至第二档线潜在回撤、组合潜在回撤；成本口径不一致时输出对账状态 |
-| C02 | 持仓框架 | 读取 `holdings --compact --json` 中 `status=active` 行的 `framework/framework_confident`；未知或`?`则停止框架专属动作 |
+| C02 | 持仓框架 | 读取 `holdings --compact --json --active-only` 的 `framework/framework_confident`；未知或`?`则停止框架专属动作 |
 | C03 | 活动预警 | 日常先用 `alerts <代码> --active --json`；逐项复核 active/pending 与到期日，需审计生命周期时再读完整视图 |
 | C04 | 当日异动 | ≥3%或弱于行业≥2pts时取得同日公告和行业横截面 |
 | C05 | 价格止损 | 读取持仓行实际第一/第二档价格，不按列名猜固定百分比 |
@@ -70,7 +70,7 @@ C06补充：若输出 `legacy contract`，表示该持仓尚无活动论文版�
 CACHE="a-stock-cache"
 
 # 查询
-$CACHE holdings --compact --json              # 紧凑持仓字段，不输出长 notes
+$CACHE holdings --compact --json --active-only # 仅当前持仓，不输出长 notes
 $CACHE portfolio-risk                         # 持仓风险视图（含浮盈/综合评级）
 $CACHE check-holdings                         # 持仓止损检查（当前价 vs 该框架专属止损线，系数因框架而异，非固定15%/20%）
 $CACHE check <代码>                           # 查询该股缓存状态

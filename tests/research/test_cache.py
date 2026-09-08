@@ -1602,6 +1602,48 @@ def test_portfolio_risk_with_holdings(capsys, monkeypatch):
     assert "600036" in out
     assert "框架分布" in out
     assert "+11.1%" in out
+    assert "非账户总仓位" in out
+    assert "股票总仓位" not in out
+    assert "不判定预算超限" in out
+    assert "超预算" not in out
+
+
+def test_portfolio_risk_labels_explicit_account_weight(capsys, monkeypatch):
+    cache.cmd_add_holding(["600036", "45.0", "100", "--notes", "测试招行"])
+    monkeypatch.setattr(
+        commands_holdings,
+        "fetch_current_price_quote",
+        lambda code: cache.PriceQuote(50.0, cache.cst_today(), "15:00:00"),
+    )
+
+    cache.cmd_portfolio_risk(["--portfolio-value", "10000"])
+
+    out = capsys.readouterr().out
+    assert "股票总仓位：50.0%" in out
+    assert "非账户总仓位" not in out
+
+
+def test_portfolio_risk_labels_partial_quote_weight_as_lower_bound(
+    capsys, monkeypatch
+):
+    cache.cmd_add_holding(["600036", "45.0", "100", "--notes", "测试招行"])
+    cache.cmd_add_holding(["600900", "25.0", "100", "--notes", "测试长电"])
+    monkeypatch.setattr(
+        commands_holdings,
+        "fetch_current_price_quote",
+        lambda code: (
+            cache.PriceQuote(50.0, cache.cst_today(), "15:00:00")
+            if code == "600036"
+            else None
+        ),
+    )
+
+    cache.cmd_portfolio_risk(["--portfolio-value", "10000"])
+
+    out = capsys.readouterr().out
+    assert "已取价股票仓位（下限）：50.0%" in out
+    assert "股票总仓位：" not in out
+    assert "行情覆盖：1/2只" in out
 
 
 def test_portfolio_risk_rejects_quote_without_date(capsys, monkeypatch):

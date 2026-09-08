@@ -75,6 +75,63 @@ def test_holdings_compact_text_omits_notes(tmp_path, monkeypatch, capsys) -> Non
     assert "long private note" not in out
 
 
+def test_holdings_active_only_excludes_closed_history(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    _add_holding(tmp_path, monkeypatch, capsys)
+    assert (
+        cache.main(
+            ["--confirm-write", "add-holding", "601088", "20", "200"]
+        )
+        == 0
+    )
+    assert (
+        cache.main(
+            ["--confirm-write", "sell-holding", "601088", "21", "all"]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert cache.main(["holdings", "--compact", "--json", "--active-only"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert [(item["code"], item["status"]) for item in payload] == [
+        ("600036", "active")
+    ]
+
+
+def test_holdings_active_only_returns_reopened_lifecycle(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    _add_holding(tmp_path, monkeypatch, capsys)
+    assert (
+        cache.main(
+            ["--confirm-write", "sell-holding", "600036", "51", "all"]
+        )
+        == 0
+    )
+    assert (
+        cache.main(
+            ["--confirm-write", "add-holding", "600036", "52", "100"]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert (
+        cache.main(
+            ["holdings", "600036", "--compact", "--json", "--active-only"]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload) == 1
+    assert payload[0]["status"] == "active"
+    assert payload[0]["shares"] == 100
+
+
 def test_alerts_active_json_excludes_resolved(tmp_path, monkeypatch, capsys) -> None:
     database = _add_holding(tmp_path, monkeypatch, capsys)
     with sqlite3.connect(database) as conn:

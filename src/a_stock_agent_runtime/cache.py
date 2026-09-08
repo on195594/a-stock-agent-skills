@@ -46,6 +46,7 @@ A股投研数据缓存管理器
   cache.py retro-stats [框架名]                          # 复盘统计（按框架汇总错误标签）
   cache.py retro-outliers [--loss N]                     # 亏损超阈值且未复盘的记录（默认 10）
   cache.py holdings                                     # 显示在仓持股 + 已平仓历史（含盈亏%）
+  cache.py holdings --compact --json --active-only      # 仅输出当前持仓，供监控消费
   cache.py position-return <代码> [当前价]               # 交易事件口径总回报
   cache.py remove-holding <代码>                        # 彻底删除持仓记录（慎用）
   cache.py portfolio-risk                              # 组合风险视图（持仓 + 浮盈 + 框架分布）
@@ -410,6 +411,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         if command == "holdings":
             command_parser.add_argument("--compact", action="store_true")
             command_parser.add_argument("--json", action="store_true")
+            command_parser.add_argument("--active-only", action="store_true")
         if command == "alerts":
             command_parser.add_argument("--active", action="store_true")
             command_parser.add_argument("--json", action="store_true")

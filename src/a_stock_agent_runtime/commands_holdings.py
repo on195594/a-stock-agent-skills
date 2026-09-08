@@ -453,13 +453,20 @@ def cmd_holdings(args: list[str] | None = None) -> None:
     args = args or []
     compact = "--compact" in args
     json_output = "--json" in args
+    active_only = "--active-only" in args
     positionals = [arg for arg in args if not arg.startswith("--")]
     if len(positionals) > 1:
         print("错误：holdings 最多接受一个股票代码", file=sys.stderr)
         sys.exit(1)
     code = positionals[0] if positionals else None
-    where = " WHERE code=?" if code else ""
-    params = (code,) if code else ()
+    clauses = []
+    params = []
+    if code:
+        clauses.append("code=?")
+        params.append(code)
+    if active_only:
+        clauses.append("exit_date IS NULL")
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
     try:
         with db.read_only_db_session() as conn:
             if compact or json_output:
@@ -471,7 +478,7 @@ def cmd_holdings(args: list[str] | None = None) -> None:
                        FROM holdings"""
                     + where
                     + " ORDER BY exit_date IS NULL DESC, buy_date DESC",
-                    params,
+                    tuple(params),
                 ).fetchall()
                 records = [
                     {
@@ -518,7 +525,7 @@ def cmd_holdings(args: list[str] | None = None) -> None:
                    FROM holdings"""
                 + where
                 + " ORDER BY exit_date IS NULL DESC, buy_date DESC",
-                params,
+                tuple(params),
             ).fetchall()
             lifecycle_returns: dict[int, LifecycleReturn] = {}
             for row in rows:
@@ -1438,6 +1445,7 @@ def _parse_portfolio_risk_args(args: list[str] | None) -> tuple[float | None, fl
 def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     """Market-value weighted portfolio view with explicit stop-loss risk budget."""
     portfolio_value, max_position_risk_pct = _parse_portfolio_risk_args(args)
+    account_value_supplied = portfolio_value is not None
     with db.db_session() as conn:
         holdings = conn.execute(
             """SELECT h.code, h.name, h.cost_price, h.shares, h.buy_date, h.buy_score,
@@ -1481,6 +1489,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         )
 
     stock_market_value = sum(row[9] for row in valued_rows if row[9] is not None)
+    valued_count = sum(row[9] is not None for row in valued_rows)
     if portfolio_value is None:
         portfolio_value = stock_market_value
         denominator_label = "已取价股票市值（未提供现金/其他资产）"
@@ -1534,10 +1543,12 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         risk_str = f"{stop_risk:.0f}元" if stop_risk is not None else "─"
         risk_pct_str = f"{risk_pct:.2f}%" if risk_pct is not None else "─"
         status = (
-            "超预算"
-            if risk_pct is not None and risk_pct > max_position_risk_pct
-            else "已破线"
+            "已破线"
             if sl20 is not None and curr <= sl20
+            else "临时口径"
+            if not account_value_supplied
+            else "超预算"
+            if risk_pct is not None and risk_pct > max_position_risk_pct
             else "正常"
         )
         print(
@@ -1545,13 +1556,22 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
             f"{weight_pct:>7.1f}% {pnl_str:>7} {risk_str:>9} {risk_pct_str:>8} {status:>5}"
         )
 
-    stock_weight = stock_market_value / portfolio_value * 100
+    if account_value_supplied:
+        weight_label = "股票总仓位" if valued_count == len(holdings) else "已取价股票仓位（下限）"
+        risk_summary = f"{weight_label}：{stock_market_value / portfolio_value * 100:.1f}%"
+        risk_pct_label = "占组合总资产"
+    else:
+        risk_summary = f"已取价股票市值：{stock_market_value:.2f}元（非账户总仓位）"
+        risk_pct_label = "占已取价股票市值，临时口径"
     print(
-        f"\n  股票总仓位：{stock_weight:.1f}% | "
-        f"第二档止损总风险：{total_stop_risk:.2f}元 "
-        f"({total_stop_risk / portfolio_value * 100:.2f}%)"
+        f"\n  {risk_summary} | 第二档止损总风险：{total_stop_risk:.2f}元 "
+        f"({total_stop_risk / portfolio_value * 100:.2f}%，{risk_pct_label})"
     )
-    print(f"  单股风险预算上限：{max_position_risk_pct:.2f}%")
+    print(f"  行情覆盖：{valued_count}/{len(holdings)}只")
+    if account_value_supplied:
+        print(f"  单股风险预算上限：{max_position_risk_pct:.2f}%")
+    else:
+        print("  未提供总资产：不判定预算超限")
     print(f"\n  框架分布（按市值，{len(holdings)} 只在仓）")
     for fw, value in sorted(framework_values.items()):
         print(f"    {fw}: {value:.2f}元 ({value / portfolio_value * 100:.1f}%)")
