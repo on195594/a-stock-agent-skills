@@ -52,8 +52,6 @@ optional 仅包括不会改变当前动作的未更新宏观、无异动股票�
 
 行情、估值和技术数据优先复用 `a-stock-fetch` 及其已安装 runtime provider；runtime 已取得数据时不得先探测临时第三方库。报告正文只对明确的单个文件执行一次有界提取，限制输入大小和每类命中上下文，不扫描整个临时目录。monitor 路径不得创建首次研究评分任务；`a-stock-qa` 的 monitor rubric 尚未实现，monitor 任务不得加载或调用该 Skill，合规项直接标记 `SKIP`。
 
-紧凑命令若因安装态 runtime 尚未升级而返回未知命令或 `unrecognized arguments`，本轮只降级到原有 `holdings` / `alerts` / `l3-list` 文本视图并标注 runtime 缺口；不得为一次监控自行安装或切换生产 runtime。
-
 ## 任务级执行闭环
 
 本 Skill 是持仓操作判断的 Primary Skill。Level 1 先以 `monitor-snapshot` 机器合同闭环 required 门禁；只有进入 Level 2 时，才用当前会话的 `todo` 建立 C01—C10 临时检查项。Supporting Skills 只提供证据，不接管完成判定。尚未判断适用性时保持 `pending`，取得框架和任务范围后再关闭不适用项。

@@ -27,7 +27,6 @@ def test_daily_checklist_is_complete_and_unique():
 def test_generic_single_holding_request_has_bounded_delivery_contract():
     assert "## 日常监控两级路由与停止合同" in SKILL
     assert "monitor-snapshot --portfolio-value <账户总资产> --json" in SKILL
-    assert "未知命令或 `unrecognized arguments`" in SKILL
     assert "stop_reason=clean_fast_gate" in SKILL
     assert "研究子代理数必须为 0" in SKILL
     assert "## 单股泛化请求的快速交付合同" in SKILL
