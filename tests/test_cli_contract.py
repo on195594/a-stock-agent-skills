@@ -101,6 +101,10 @@ CLI_ARGUMENT_CASES = {
         ["--portfolio-value", "100000", "--max-position-risk-pct", "2"],
     ),
     "check-holdings": ([], []),
+    "monitor-snapshot": (
+        ["--json"],
+        ["--portfolio-value", "100000", "--json"],
+    ),
     "watchlist": ([], ["--json", "--breakdown"]),
     "list": ([], []),
     "cleanup": ([], []),
@@ -255,3 +259,18 @@ def test_top_level_help_discovers_commands_and_write_gate(capsys) -> None:
     output = capsys.readouterr().out
     assert "--confirm-write" in output
     assert all(command in output for command in cache.COMMANDS)
+
+
+def test_sina_parser_preserves_price_when_previous_close_is_malformed() -> None:
+    from a_stock_agent_runtime import commands_holdings, market_quotes
+
+    for previous_close, expected in (("bad", None), ("", None), ("99", 99.0)):
+        fields = ["fixture", "100", previous_close, "101"] + [""] * 26
+        fields += ["2026-09-08", "10:00:00"]
+        line = 'var hq_str_sh600036="' + ",".join(fields) + '";'
+        expected_quote = ("600036", 101.0, "2026-09-08", "10:00:00", expected)
+        assert market_quotes.parse_sina_quote_line(line, {"600036"}) == expected_quote
+        assert commands_holdings._parse_sina_quote_line(line, {"600036"}) == expected_quote
+        fields[3] = "bad"
+        line = 'var hq_str_sh600036="' + ",".join(fields) + '";'
+        assert market_quotes.parse_sina_quote_line(line, {"600036"}) is None

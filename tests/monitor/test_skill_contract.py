@@ -21,12 +21,16 @@ def test_daily_checklist_is_complete_and_unique():
     ids = re.findall(r"^\| (C\d{2}) \|", SKILL, flags=re.MULTILINE)
     assert ids == [f"C{number:02d}" for number in range(1, 11)]
     assert len(ids) == len(set(ids))
-    assert SKILL.count("## 日常监控唯一检查表") == 1
+    assert SKILL.count("## Level 2 日常深度复核唯一检查表") == 1
 
 
 def test_generic_single_holding_request_has_bounded_delivery_contract():
+    assert "## 日常监控两级路由与停止合同" in SKILL
+    assert "monitor-snapshot --portfolio-value <账户总资产> --json" in SKILL
+    assert "stop_reason=clean_fast_gate" in SKILL
+    assert "研究子代理数必须为 0" in SKILL
     assert "## 单股泛化请求的快速交付合同" in SKILL
-    assert "C01—C10仍须全部完成" in SKILL
+    assert "只有命中 Level 2 路由时 C01—C10 才须全部完成" in SKILL
     assert "聚合检索最多一个批次" in SKILL
     assert "正式报告提取最多使用两种方法" in SKILL
     assert "优先复用 `a-stock-fetch`" in SKILL

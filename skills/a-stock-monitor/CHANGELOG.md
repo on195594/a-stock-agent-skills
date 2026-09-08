@@ -4,6 +4,11 @@
 
 ---
 
+## [2.2.0] 2026-09-08
+
+- 日常监控默认先走 Level 1 required 快速门禁；仅有触发、到期、异常、冲突或用户明确要求时进入 Level 2 C01—C10。
+- 新增 `monitor-snapshot` 单次只读聚合合同、`clean_fast_gate` 停止原因、required/optional owner 与零研究子代理边界。
+
 ## [2.1.0] 2026-08-27
 
 ### L3 重要性、动作分级与论文版本生命周期

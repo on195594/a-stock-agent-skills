@@ -6,7 +6,9 @@ import json
 import math
 import sqlite3
 import sys
+import time
 from datetime import date, datetime
+from pathlib import Path
 
 from a_stock_agent_runtime import db, domain, market_quotes, store
 from a_stock_agent_runtime.position_ledger import (
@@ -105,6 +107,11 @@ def fetch_current_prices(codes: list[str]) -> dict[str, float | None]:
 
 
 PriceQuote = market_quotes.PriceQuote
+_INDUSTRY_MAP_CACHE_PATH = (
+    Path.home() / ".cache" / "a_stock_lib" / "tushare_industry_map.json"
+)
+_INDUSTRY_MAP_TTL_SECONDS = 30 * 24 * 3600
+_MONITOR_BATCH_LIMIT = 800
 
 
 def _orig_fetch_current_price_quote(code: str) -> PriceQuote | None:
@@ -113,9 +120,13 @@ def _orig_fetch_current_price_quote(code: str) -> PriceQuote | None:
     raw = quotes.get(code)
     if raw is None:
         return None
-    price, quote_date, quote_time = raw
+    price, quote_date, quote_time, previous_close = raw
     return PriceQuote(
-        price=price, quote_date=quote_date, quote_time=quote_time, source="sina"
+        price=price,
+        quote_date=quote_date,
+        quote_time=quote_time,
+        source="sina",
+        previous_close=previous_close,
     )
 
 
@@ -147,12 +158,134 @@ def fetch_current_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]
     raw = _fetch_sina_batch_quotes(codes)
     return {
         code: (
-            PriceQuote(price=v[0], quote_date=v[1], quote_time=v[2], source="sina")
+            PriceQuote(
+                price=v[0],
+                quote_date=v[1],
+                quote_time=v[2],
+                source="sina",
+                previous_close=v[3],
+            )
             if v is not None
             else None
         )
         for code, v in raw.items()
     }
+
+
+_default_fetch_current_price_quotes = fetch_current_price_quotes
+
+
+def _fresh_industry_map() -> dict[str, str]:
+    try:
+        payload = json.loads(_INDUSTRY_MAP_CACHE_PATH.read_text(encoding="utf-8"))
+        fetched_at = payload["fetched_at_epoch"]
+        if (
+            not isinstance(fetched_at, (int, float))
+            or isinstance(fetched_at, bool)
+            or not 0 <= time.time() - fetched_at <= _INDUSTRY_MAP_TTL_SECONDS
+        ):
+            return {}
+        industry_map = payload["industry_map"]
+        if not isinstance(industry_map, dict) or any(
+            not isinstance(code, str)
+            or len(code) != 6
+            or not code.isascii()
+            or not code.isdigit()
+            or not isinstance(industry, str)
+            or not industry.strip()
+            for code, industry in industry_map.items()
+        ):
+            return {}
+        return {
+            code: industry.strip()
+            for code, industry in industry_map.items()
+        }
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def fetch_monitor_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]:
+    """Fetch holdings and same-industry constituents in one bounded quote request."""
+    if fetch_current_price_quotes is not _default_fetch_current_price_quotes:
+        return fetch_current_price_quotes(codes)
+    if not codes:
+        return {}
+    codes = sorted(set(codes))
+    if len(codes) > _MONITOR_BATCH_LIMIT:
+        return dict.fromkeys(codes)
+
+    industry_map = _fresh_industry_map()
+    requested_industries = {industry_map[code] for code in codes if code in industry_map}
+    members = {
+        code: industry
+        for code, industry in industry_map.items()
+        if industry in requested_industries
+    }
+    expanded_codes = sorted(set(codes) | set(members))
+    # ponytail: one Sina request capped at 800 symbols; use provider-side sector
+    # quotes if a future portfolio spans more constituents.
+    if len(expanded_codes) > _MONITOR_BATCH_LIMIT:
+        members = {}
+        expanded_codes = codes
+    request_codes = expanded_codes
+    raw = _fetch_sina_batch_quotes(request_codes)
+
+    today = domain.cst_today()
+    changes: dict[str, list[float]] = {industry: [] for industry in requested_industries}
+    industry_times: dict[str, list[str]] = {industry: [] for industry in requested_industries}
+    if members:
+        for code, industry in sorted(members.items()):
+            value = raw.get(code)
+            if value is None:
+                continue
+            price, quote_date, quote_time, previous_close = value
+            if (
+                quote_date == today
+                and quote_time
+                and math.isfinite(price)
+                and previous_close is not None
+                and math.isfinite(previous_close)
+                and price > 0
+                and previous_close > 0
+            ):
+                try:
+                    datetime.strptime(quote_time, "%H:%M:%S")
+                except ValueError:
+                    continue
+                change = (price - previous_close) / previous_close * 100
+                if not math.isfinite(change):
+                    continue
+                changes[industry].append(change)
+                industry_times[industry].append(quote_time)
+
+    industry_quotes: dict[str, tuple[float, str]] = {}
+    for industry, values in changes.items():
+        expected = sum(value == industry for value in members.values())
+        if expected and len(values) / expected >= 0.8:
+            industry_quotes[industry] = (
+                sum(values) / len(values),
+                f"{today}T{max(industry_times[industry])}+08:00",
+            )
+
+    result: dict[str, PriceQuote | None] = {}
+    for code in codes:
+        value = raw.get(code)
+        if value is None:
+            result[code] = None
+            continue
+        price, quote_date, quote_time, previous_close = value
+        industry_quote = industry_quotes.get(industry_map.get(code, ""))
+        result[code] = PriceQuote(
+            price=price,
+            quote_date=quote_date,
+            quote_time=quote_time,
+            source="sina",
+            previous_close=previous_close,
+            industry_change_pct=industry_quote[0] if industry_quote else None,
+            industry_source="sina.industry_mean" if industry_quote else None,
+            industry_as_of=industry_quote[1] if industry_quote else None,
+        )
+    return result
 
 
 def _parse_add_holding_args(
@@ -1416,6 +1549,39 @@ def cmd_position_return(args: list[str]) -> None:
         )
 
 
+def calculate_position_risk(
+    shares: int | None,
+    current_price: float | None,
+    stop_loss_20: float | None,
+    portfolio_value: float | None,
+) -> dict[str, float | None]:
+    """Calculate the existing market-value and second-stop risk formula."""
+    market_value = (
+        current_price * shares
+        if current_price is not None and shares is not None
+        else None
+    )
+    stop_risk = (
+        max(current_price - stop_loss_20, 0) * shares
+        if current_price is not None and stop_loss_20 is not None and shares is not None
+        else None
+    )
+    return {
+        "market_value": market_value,
+        "portfolio_weight_pct": (
+            market_value / portfolio_value * 100
+            if market_value is not None and portfolio_value is not None
+            else None
+        ),
+        "stop_risk": stop_risk,
+        "stop_risk_pct": (
+            stop_risk / portfolio_value * 100
+            if stop_risk is not None and portfolio_value is not None
+            else None
+        ),
+    }
+
+
 def _parse_portfolio_risk_args(args: list[str] | None) -> tuple[float | None, float]:
     portfolio_value = None
     max_position_risk_pct = 2.0
@@ -1483,7 +1649,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
             fw, confident = domain.infer_framework(industry)
         quote = quotes.get(code)
         curr = quote.price if quote and quote.quote_date == today_str else None
-        market_value = curr * shares if curr and shares else None
+        market_value = calculate_position_risk(shares, curr, sl20, None)["market_value"]
         valued_rows.append(
             (code, name, cost, shares, score, fw, confident, sl20, curr, market_value)
         )
@@ -1531,13 +1697,11 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
                 f"{'─':>8} {pnl_str:>7} {'─':>9} {'─':>8} {'缺数据':>5}"
             )
             continue
-        weight_pct = market_value / portfolio_value * 100
-        if sl20 is None:
-            stop_risk = None
-            risk_pct = None
-        else:
-            stop_risk = max(curr - sl20, 0) * shares
-            risk_pct = stop_risk / portfolio_value * 100
+        risk = calculate_position_risk(shares, curr, sl20, portfolio_value)
+        weight_pct = risk["portfolio_weight_pct"]
+        stop_risk = risk["stop_risk"]
+        risk_pct = risk["stop_risk_pct"]
+        if stop_risk is not None:
             total_stop_risk += stop_risk
         framework_values[fw] = framework_values.get(fw, 0.0) + market_value
         risk_str = f"{stop_risk:.0f}元" if stop_risk is not None else "─"
@@ -1557,8 +1721,12 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         )
 
     if account_value_supplied:
-        weight_label = "股票总仓位" if valued_count == len(holdings) else "已取价股票仓位（下限）"
-        risk_summary = f"{weight_label}：{stock_market_value / portfolio_value * 100:.1f}%"
+        weight_label = (
+            "股票总仓位" if valued_count == len(holdings) else "已取价股票仓位（下限）"
+        )
+        risk_summary = (
+            f"{weight_label}：{stock_market_value / portfolio_value * 100:.1f}%"
+        )
         risk_pct_label = "占组合总资产"
     else:
         risk_summary = f"已取价股票市值：{stock_market_value:.2f}元（非账户总仓位）"

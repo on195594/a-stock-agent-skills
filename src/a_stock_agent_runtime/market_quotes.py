@@ -22,6 +22,11 @@ class PriceQuote:
     suspended: bool | None = None
     limit_down_locked: bool | None = None
     trading_status: str | None = None
+    previous_close: float | None = None
+    industry_change_pct: float | None = None
+    industry_source: str | None = None
+    industry_as_of: str | None = None
+    conflicted: bool = False
 
     @property
     def quote_as_of(self) -> str | None:
@@ -41,7 +46,7 @@ def sina_query_prefix(code: str) -> str:
 def parse_sina_quote_line(
     line: str,
     codes: set[str],
-) -> tuple[str, float, str | None, str | None] | None:
+) -> tuple[str, float, str | None, str | None, float | None] | None:
     """Parse one Sina quote line into code, price and quote timestamp."""
     line = line.strip()
     if not line:
@@ -67,23 +72,27 @@ def parse_sina_quote_line(
         price = float(fields[3])
     except ValueError:
         return None
+    try:
+        previous_close = float(fields[2]) if fields[2] else None
+    except ValueError:
+        previous_close = None
     if len(fields) >= 32:
         quote_date = fields[30] or None
         quote_time = fields[31] or None
     else:
         quote_date = quote_time = None
-    return code, price, quote_date, quote_time
+    return code, price, quote_date, quote_time, previous_close
 
 
 def fetch_sina_batch_quotes(
     codes: list[str],
-) -> dict[str, tuple[float, str | None, str | None] | None]:
+) -> dict[str, tuple[float, str | None, str | None, float | None] | None]:
     """Fetch a batch of quotes once, returning ``None`` for failed symbols."""
     if not codes:
         return {}
 
     query_list = [f"{sina_query_prefix(code)}{code}" for code in codes]
-    result: dict[str, tuple[float, str | None, str | None] | None] = {
+    result: dict[str, tuple[float, str | None, str | None, float | None] | None] = {
         code: None for code in codes
     }
     code_set = set(codes)
@@ -97,8 +106,8 @@ def fetch_sina_batch_quotes(
         for line in response.text.split("\n"):
             parsed = parse_sina_quote_line(line, code_set)
             if parsed is not None:
-                code, price, quote_date, quote_time = parsed
-                result[code] = (price, quote_date, quote_time)
+                code, price, quote_date, quote_time, previous_close = parsed
+                result[code] = (price, quote_date, quote_time, previous_close)
     except requests.RequestException:
         logger.exception("Batch fetch current prices failed")
     return result
@@ -138,4 +147,10 @@ def fetch_current_price_quote(code: str) -> PriceQuote | None:
     raw = fetch_sina_batch_quotes([code]).get(code)
     if raw is None:
         return None
-    return PriceQuote(price=raw[0], quote_date=raw[1], quote_time=raw[2], source="sina")
+    return PriceQuote(
+        price=raw[0],
+        quote_date=raw[1],
+        quote_time=raw[2],
+        source="sina",
+        previous_close=raw[3],
+    )

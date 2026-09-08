@@ -47,6 +47,8 @@ A股投研数据缓存管理器
   cache.py retro-outliers [--loss N]                     # 亏损超阈值且未复盘的记录（默认 10）
   cache.py holdings                                     # 显示在仓持股 + 已平仓历史（含盈亏%）
   cache.py holdings --compact --json --active-only      # 仅输出当前持仓，供监控消费
+  cache.py monitor-snapshot --portfolio-value <总资产> --json
+                                                        # 一次只读日常监控快照
   cache.py position-return <代码> [当前价]               # 交易事件口径总回报
   cache.py remove-holding <代码>                        # 彻底删除持仓记录（慎用）
   cache.py portfolio-risk                              # 组合风险视图（持仓 + 浮盈 + 框架分布）
@@ -168,6 +170,7 @@ cmd_alert_pending = commands_monitor.cmd_alert_pending
 cmd_alerts = commands_monitor.cmd_alerts
 cmd_set_flag = commands_monitor.cmd_set_flag
 cmd_clear_flag = commands_monitor.cmd_clear_flag
+cmd_monitor_snapshot = commands_monitor.cmd_monitor_snapshot
 
 cmd_watchlist = commands_admin.cmd_watchlist
 cmd_list = commands_admin.cmd_list
@@ -224,6 +227,7 @@ COMMANDS = {
     "position-return": cmd_position_return,
     "portfolio-risk": cmd_portfolio_risk,
     "check-holdings": cmd_check_holdings,
+    "monitor-snapshot": cmd_monitor_snapshot,
     "watchlist": cmd_watchlist,
     "list": cmd_list,
     "cleanup": cmd_cleanup,
@@ -253,7 +257,9 @@ COMMAND_CLASSIFICATION = {
         ),
         "R0",
     ),
-    **dict.fromkeys(("check", "check-holdings", "portfolio-risk"), "R1"),
+    **dict.fromkeys(
+        ("check", "check-holdings", "portfolio-risk", "monitor-snapshot"), "R1"
+    ),
     **dict.fromkeys(
         (
             "set",
@@ -361,6 +367,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "position-return": (("代码", None), ("当前价", "?")),
     "portfolio-risk": (),
     "check-holdings": (),
+    "monitor-snapshot": (),
     "watchlist": (),
     "list": (),
     "cleanup": (),
@@ -376,6 +383,7 @@ _CLI_VALUE_OPTIONS = {
     "retro-add": ("--note", "--thesis", "--gap"),
     "retro-outliers": ("--loss",),
     "portfolio-risk": ("--portfolio-value", "--max-position-risk-pct"),
+    "monitor-snapshot": ("--portfolio-value",),
 }
 
 
@@ -405,8 +413,9 @@ def _build_cli_parser() -> argparse.ArgumentParser:
                 command_parser.add_argument(f"arg{index}", metavar=metavar, nargs=nargs)
         for option in _CLI_VALUE_OPTIONS.get(command, ()):
             command_parser.add_argument(option, metavar="值")
-        if command == "watchlist":
+        if command in {"watchlist", "monitor-snapshot"}:
             command_parser.add_argument("--json", action="store_true")
+        if command == "watchlist":
             command_parser.add_argument("--breakdown", action="store_true")
         if command == "holdings":
             command_parser.add_argument("--compact", action="store_true")

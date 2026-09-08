@@ -26,9 +26,27 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 | 建仓/加仓/除权及状态写入 | 步骤1 → `references/data-operations.md` |
 | 多股复查或任何加仓 | 步骤0 → `references/portfolio-risk.md` |
 
+## 日常监控两级路由与停止合同
+
+`a-stock-monitor` 是唯一 Primary Skill，不创建或委托平行“快速监控”Skill。
+
+**Level 1（日常默认）**先运行一次：
+
+```bash
+a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
+```
+
+Level 1 required 证据只有：active 持仓与实际第一/第二档线、显式账户总资产、一次批量取得的全部持仓行情及时间、同日行业对比、active/pending alerts、活动 L3、P0—P3 风险门、报价覆盖率和数据缺口。账户状态、alerts/L3/Tier 与最终动作由父级拥有；行情唯一 owner 是本轮单次批量报价。数据库本地状态必须在一次只读 session 中取完并关闭，随后才联网取价；同一报价快照同时用于估值、仓位风险和价格门禁。首结果失败、不完整、过期或冲突时才允许一次有明确原因的 fallback，不得重复委托行情子代理。同日行业涨跌缺失时属于 required gap，不得输出 `clean_fast_gate` 或确定性 `no_action`。
+
+Level 1 只回答硬触发、异常弱势、到期复核、数据阻塞和动作候选。以下任一项才对相关持仓进入 **Level 2**，并执行对应 C01—C10/reference：第一/第二档价格线；单日跌幅≥3%或弱于行业≥2pts；alert/L3 到期；L3 接近、候选或确认触发；估值、Tier、技术、论文或治理门达到既有复核入口；可能改变动作的数据冲突；用户明确要求详细审计、寻找加仓机会或再平衡。
+
+若 active 持仓一致、required 数据完整且新鲜，且无上述触发、到期、异常或冲突，立即输出 `action_status=no_action`、空异常项及时间/覆盖率、`stop_reason=clean_fast_gate`，随后停止。现金或风险容量不影响此停止；不得继续抓宏观、热点、逐股新闻、全量估值或历史材料。required 缺失、过期或冲突时不得输出 clean/no-action，须 `review_status=blocked|review_required` 并列最小补数动作。
+
+optional 仅包括不会改变当前动作的未更新宏观、无异动股票新闻、全量历史估值和无关旧材料；其失败或超时不得阻塞 required 齐备后的首轮结果。无触发快速路径研究子代理数必须为 0；required 齐备即交付，未使用 optional 任务取消或忽略。
+
 ## 单股泛化请求的快速交付合同
 
-用户只说“研究一下/看看这只股票”且账本确认已持仓时，执行单股持仓复核并默认输出精简结论；C01—C10仍须全部完成，精简只压缩展示和低价值检索，不得省略风险门禁。用户明确要求详细审计，或出现重大公告、异常波动、L3/止损/治理条件接近触发、关键来源冲突时，再展开完整证据报告。
+用户只说“研究一下/看看这只股票”且账本确认已持仓时，先执行 Level 1；只有命中 Level 2 路由时 C01—C10 才须全部完成。精简只压缩展示和低价值检索，不得省略适用风险门禁。用户明确要求详细审计，或出现重大公告、异常波动、L3/止损/治理条件接近触发、关键来源冲突时，再展开完整证据报告。
 
 来源顺序固定为：交易所/监管正式披露 → 公司正式报告与投资者关系材料 → 结构化数据提供者 → 聚合检索补缺。官方入口可用时不得为同一公告重复搜索；聚合检索最多一个批次，首批结果系统性无关时立即停用该来源。正式报告提取最多使用两种方法：结构化文档提取一次，失败后浏览器原生下载并本地提取一次；两者均失败时报告缺口并按既有 fail-closed 规则处理，不继续堆叠同类回退。
 
@@ -38,15 +56,15 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 
 ## 任务级执行闭环
 
-本 Skill 是持仓操作判断的 Primary Skill。开始调用领域工具前，用当前会话的 `todo` 建立 C01—C10 临时检查项；Supporting Skills 只提供证据，不接管完成判定。尚未判断适用性时保持 `pending`，取得框架和任务范围后再关闭不适用项。
+本 Skill 是持仓操作判断的 Primary Skill。Level 1 先以 `monitor-snapshot` 机器合同闭环 required 门禁；只有进入 Level 2 时，才用当前会话的 `todo` 建立 C01—C10 临时检查项。Supporting Skills 只提供证据，不接管完成判定。尚未判断适用性时保持 `pending`，取得框架和任务范围后再关闭不适用项。
 
-`todo` 只使用其原生状态：适用且有当前证据的项目标为 `completed` 并在内容中附证据；不适用项目也标为 `completed`，内容写 `N/A + 原因`；决策关键证据缺失的项目标为 `cancelled`，内容写 `gap + fail-closed 动作`。交付前读取一次 todo：仍有 `pending/in_progress` 时继续执行；任何 `cancelled` 项未写降级动作时，不得给出干净的“继续持有/买入/卖出”结论。对外可只展示异常、临近触发项和关键缺口；内部闭环不得因用户要求精简而省略。
+Level 2 的 `todo` 只使用其原生状态：适用且有当前证据的项目标为 `completed` 并在内容中附证据；不适用项目也标为 `completed`，内容写 `N/A + 原因`；决策关键证据缺失的项目标为 `cancelled`，内容写 `gap + fail-closed 动作`。交付前读取一次 todo：仍有 `pending/in_progress` 时继续执行；任何 `cancelled` 项未写降级动作时，不得给出干净的“继续持有/买入/卖出”结论。对外可只展示异常、临近触发项和关键缺口；内部闭环不得因用户要求精简而省略。
 
 若使用子代理，账户状态、alerts/L3/Tier和最终交易判断由父级保留。需要提前消费结果的独立证据通道分别派发；只有父级必须同时消费全部结果时才放入同一 wait-all batch。required 证据已齐时，optional 失败不得阻塞首轮交付。
 
-## 日常监控唯一检查表
+## Level 2 日常深度复核唯一检查表
 
-日常多股或单股复查都按下表顺序输出状态；不适用项写 `N/A + 原因`，不得省略。
+命中 Level 2 的相关持仓按下表顺序输出状态；不适用项写 `N/A + 原因`，不得省略。
 动作冲突按 `references/decision-table.json` 的 priority 处理。
 
 | ID | 必检项 | 完成标准 |
@@ -70,6 +88,7 @@ C06补充：若输出 `legacy contract`，表示该持仓尚无活动论文版�
 CACHE="a-stock-cache"
 
 # 查询
+$CACHE monitor-snapshot --portfolio-value <总资产> --json # Level 1 一次只读聚合快照
 $CACHE holdings --compact --json --active-only # 仅当前持仓，不输出长 notes
 $CACHE portfolio-risk                         # 持仓风险视图（含浮盈/综合评级）
 $CACHE check-holdings                         # 持仓止损检查（当前价 vs 该框架专属止损线，系数因框架而异，非固定15%/20%）

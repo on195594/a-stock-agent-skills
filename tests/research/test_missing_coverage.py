@@ -706,6 +706,7 @@ class TestFetchCurrentPrice:
         assert quote.price == 41.50
         assert quote.quote_date == "2026-07-02"
         assert quote.quote_time == "15:00:00"
+        assert quote.previous_close == 40.1
 
     def test_fetch_current_price_quotes_short_fields_degrade_to_none(self, monkeypatch):
         """字段不足32个（旧格式/异常返回）时 quote_date/quote_time 降级为 None，不报错"""
