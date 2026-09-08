@@ -86,19 +86,20 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.11` (`0.1.11-e1f5387ba2e2`, source commit
-`e1f5387ba2e2e2f5f6c05872e1b6eedd1bed8389`) with `a-stock-lib==0.6.3`.
-Rollback manifest `rollback-1788843078732695040.json` preserves the prior
-client entries, and runtime `0.1.11-7131c119ae80` remains installed and
-executable.
+The current runtime is `v0.1.11` (`0.1.11-12c48b4050a3`, runtime source
+commit `12c48b4050a3368c0f647f64752697b1f63d8f7d`) with
+`a-stock-lib==0.6.3`. Rollback manifest
+`rollback-1788860343301311760.json` preserves the prior client entries, and
+runtime `0.1.11-e1f5387ba2e2` remains installed and executable. The repository
+HEAD may be newer because this deployment record is committed after cutover.
 
-The nine active client Skill entries resolve to the canonical repository. The
-production database passed `integrity_check`; its checksum was unchanged by
-this runtime-only cutover. The systemd unit-file fingerprint was also
-unchanged. Read-only production smoke checks confirmed five active holdings,
-explicit account-value risk semantics, safe temporary semantics when account
-value is omitted, and fail-closed behavior when the selected database is
-missing.
+The nine active client Skill entries resolve to the canonical repository.
+Configuration, production database, crontab and user-systemd fingerprints were
+unchanged by this runtime-only cutover. A read-only production
+`monitor-snapshot` smoke saw five active holdings and returned fail-closed with
+`writes=false` for existing governance gaps; the production database checksum
+was unchanged. A missing-database smoke returned nonzero with
+`data_status=unavailable` and did not create a database.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in
