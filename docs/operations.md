@@ -86,20 +86,19 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.11` (`0.1.11-7131c119ae80`) with
-`a-stock-lib==0.6.3`. Rollback manifest
-`rollback-1788419772158187000.json` preserves the prior client entries and the
-previous runtime remains installed and executable.
-The authorized 002594 refresh changed cache content; database schema and
-migration-ledger fingerprints, configuration and crontab fingerprints stayed
-unchanged.
+The current runtime is `v0.1.11` (`0.1.11-e1f5387ba2e2`, source commit
+`e1f5387ba2e2e2f5f6c05872e1b6eedd1bed8389`) with `a-stock-lib==0.6.3`.
+Rollback manifest `rollback-1788843078732695040.json` preserves the prior
+client entries, and runtime `0.1.11-7131c119ae80` remains installed and
+executable.
 
 The nine active client Skill entries resolve to the canonical repository. The
-production database has the thesis-version schema and passed `integrity_check`.
-For holding `000963`, thesis v1 is active, legacy L3 rows 7/8 are retired and
-replacement rows 19/20/21 are active with evidence-backed `not_triggered`
-status. Shares, costs, buy date, reference cost and the two transaction events
-were unchanged by the rewrite.
+production database passed `integrity_check`; its checksum was unchanged by
+this runtime-only cutover. The systemd unit-file fingerprint was also
+unchanged. Read-only production smoke checks confirmed five active holdings,
+explicit account-value risk semantics, safe temporary semantics when account
+value is omitted, and fail-closed behavior when the selected database is
+missing.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in
