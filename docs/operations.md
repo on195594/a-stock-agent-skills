@@ -86,20 +86,21 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.11` (`0.1.11-12c48b4050a3`, runtime source
-commit `12c48b4050a3368c0f647f64752697b1f63d8f7d`) with
-`a-stock-lib==0.6.3`. Rollback manifest
-`rollback-1788860343301311760.json` preserves the prior client entries, and
-runtime `0.1.11-e1f5387ba2e2` remains installed and executable. The repository
+The current runtime is `v0.1.11` (`0.1.11-996e552a3463`, runtime source
+commit `996e552a3463d3e12e347bacd93142d013fbea25`) with
+`a-stock-lib==0.6.3` from source commit
+`35bfaaeaf9a5434a39a09ee26b85f42c270f32a9`. Rollback manifest
+`rollback-1788928598299347640.json` preserves the prior client entries, and
+runtime `0.1.11-12c48b4050a3` remains installed and executable. The repository
 HEAD may be newer because this deployment record is committed after cutover.
 
-The nine active client Skill entries resolve to the canonical repository.
-Configuration, production database, crontab and user-systemd fingerprints were
-unchanged by this runtime-only cutover. A read-only production
-`monitor-snapshot` smoke saw five active holdings and returned fail-closed with
-`writes=false` for existing governance gaps; the production database checksum
-was unchanged. A missing-database smoke returned nonzero with
-`data_status=unavailable` and did not create a database.
+The nine active client Skill entries still resolve to the canonical repository.
+Configuration, production database, schema/user_version and crontab were
+unchanged by this runtime-only cutover; the production database remained
+`integrity_check=ok`. A read-only production check saw five active holdings and
+returned `_decision_meta`. An isolated live `002475` fetch routed 元器件 to
+`A通用`, produced true TTM PE/PEG and retained `action_eligible=false` while P0
+and P2 were incomplete; its temporary database was removed.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in

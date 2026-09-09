@@ -12,11 +12,11 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The deployed `v0.1.11` runtime release (`0.1.11-da6a7e9c8f7d`) uses
-`a-stock-lib==0.6.1`. It adds deterministic latest-report PB/BPS compatibility
-metadata and aligns Research/QA fail-closed reporting without changing the
-database schema, investment thresholds or W1 write boundary. All nine client
-Skill entries resolve directly to `skills/`.
+The deployed `v0.1.11` runtime release (`0.1.11-996e552a3463`) uses
+`a-stock-lib==0.6.3`. It adds real TTM P1/P2 inputs and PE/PEG fields, scoped
+PB/BPS compatibility, read-only decision metadata, corrected A/F routing and
+strict QA snapshot integrity without changing the database schema or W1 write
+boundary. All nine client Skill entries resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
@@ -34,7 +34,7 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 ## Install or update
 
 Requirements for `v0.1.11`: Python 3.13+, `uv`, and an explicit checkout or wheel for
-`a-stock-lib==0.6.1`. The installer itself uses only the Python
+`a-stock-lib==0.6.3`. The installer itself uses only the Python
 standard library, so it can bootstrap the runtime:
 
 ```bash

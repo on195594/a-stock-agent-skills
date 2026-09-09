@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-09-09 (repository candidate; not deployed)
+## 2026-09-09 (deployed runtime 0.1.11-996e552a3463)
 
 - Wired existing TuShare statement history into P1 TTM ROE/five-year inputs and P2 TTM CFO/Capex/FCF without adding a provider or database schema.
 - Added true TTM profit, PE and PEG fields plus read-only decision/data-completeness metadata to `check` output.
