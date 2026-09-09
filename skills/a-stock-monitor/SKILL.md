@@ -36,13 +36,17 @@ compatibility: Requires local command execution, Python 3.13+, the a-stock-agent
 a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 ```
 
-Level 1 required 证据只有：active 持仓与实际第一/第二档线、显式账户总资产、一次批量取得的全部持仓行情及时间、同日行业对比、active/pending alerts、活动 L3、P0—P3 风险门、报价覆盖率和数据缺口。账户状态、alerts/L3/Tier 与最终动作由父级拥有；行情唯一 owner 是本轮单次批量报价。数据库本地状态必须在一次只读 session 中取完并关闭，随后才联网取价；同一报价快照同时用于估值、仓位风险和价格门禁。首结果失败、不完整、过期或冲突时才允许一次有明确原因的 fallback，不得重复委托行情子代理。同日行业涨跌缺失时属于 required gap，不得输出 `clean_fast_gate` 或确定性 `no_action`。
+保留原始退出码并始终解析 stdout：当 `data_status != complete` 时，命令会先输出有效 JSON 再退出 1。不得用嵌套终端或包装调用把该业务退出码转换成外层成功。
+
+Level 1 required 证据只有：active 持仓与实际第一/第二档线、显式账户总资产、一次批量取得的全部持仓行情及时间、同日行业对比、active/pending alerts、活动 L3、P0—P3 风险门、报价覆盖率和数据缺口。账户状态、alerts/L3/Tier 与最终动作由父级拥有；行情唯一 owner 是本轮单次批量报价。数据库本地状态必须在一次只读 session 中取完并关闭，随后才联网取价；同一报价快照同时用于估值、仓位风险和价格门禁。同一答案中的账户估值、持仓权重、止损风险与风格集中度必须全部基于这份最新快照；不得把旧券商截图与较新报价混算。首结果失败、不完整、过期或冲突时才允许一次有明确原因的 fallback，不得重复委托行情子代理。同日行业涨跌缺失时属于 required gap，不得输出 `clean_fast_gate` 或确定性 `no_action`。
 
 Level 1 只回答硬触发、异常弱势、到期复核、数据阻塞和动作候选。以下任一项才对相关持仓进入 **Level 2**，并执行对应 C01—C10/reference：第一/第二档价格线；单日跌幅≥3%或弱于行业≥2pts；alert/L3 到期；L3 接近、候选或确认触发；估值、Tier、技术、论文或治理门达到既有复核入口；可能改变动作的数据冲突；用户明确要求详细审计、寻找加仓机会或再平衡。
 
-若 active 持仓一致、required 数据完整且新鲜，且无上述触发、到期、异常或冲突，立即输出 `action_status=no_action`、空异常项及时间/覆盖率、`stop_reason=clean_fast_gate`，随后停止。现金或风险容量不影响此停止；不得继续抓宏观、热点、逐股新闻、全量估值或历史材料。required 缺失、过期或冲突时不得输出 clean/no-action，须 `review_status=blocked|review_required` 并列最小补数动作。
+若 active 持仓一致、required 数据完整且新鲜，且无上述触发、到期、异常或冲突，立即输出 `action_status=no_action`、空异常项及时间/覆盖率、`stop_reason=clean_fast_gate`，随后停止。现金或风险容量不影响此停止；不得继续抓宏观、热点、逐股新闻、全量估值或历史材料。required 缺失、过期或冲突时不得输出 clean/no-action，须 `review_status=blocked|review_required` 并列最小补数动作。若快照同时为 `review_status=blocked` 与 `action_status=review_candidate`，必须从 `data_gaps`/`escalations` 点名缺失的治理证据或其他 required gap，并写明补齐前冻结交易及风险变更；不得输出 clean `no_action`、已完整验证的“持有”或确定仓位不变。可单独说明“截至该快照未观察到当前有效的机械触发”。
 
 optional 仅包括不会改变当前动作的未更新宏观、无异动股票新闻、全量历史估值和无关旧材料；其失败或超时不得阻塞 required 齐备后的首轮结果。无触发快速路径研究子代理数必须为 0；required 齐备即交付，未使用 optional 任务取消或忽略。
+
+用户明确要求国内、美联储（Fed）或市场背景时，只核查可能改变当前动作的直接传导，并为每个相关变量取足以判断的最少官方锚点；逐项标注来源、as-of/新鲜度及“事实/推断”。严格停止条件：已判定操作影响，或已用直接披露确认无相关传导，即停止；不得做宽泛报告恢复或调用重复 supporting skills，snapshot 已拥有持仓报价时不得委托持仓查价。
 
 ## 单股泛化请求的快速交付合同
 

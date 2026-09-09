@@ -39,6 +39,22 @@ def test_generic_single_holding_request_has_bounded_delivery_contract():
     assert "合规项直接标记 `SKIP`" in SKILL
 
 
+def test_level1_failure_snapshot_and_context_contract_is_bounded():
+    for marker in (
+        "data_status != complete",
+        "有效 JSON",
+        "退出 1",
+        "review_status=blocked",
+        "action_status=review_candidate",
+        "data_gaps",
+        "冻结交易",
+        "最新快照",
+        "最少官方锚点",
+        "严格停止条件",
+    ):
+        assert marker in SKILL
+
+
 def test_decision_table_rule_ids_and_priorities_are_unique():
     rules = DECISIONS["rules"]
     assert DECISIONS["schema_version"] == 1
