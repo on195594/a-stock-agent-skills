@@ -8,7 +8,7 @@ import math
 import re
 from datetime import date, time as dtime, timedelta
 
-from a_stock_agent_runtime import db, domain
+from a_stock_agent_runtime import db, domain, risk_gates
 
 logger = logging.getLogger(__name__)
 _DATA_PERIOD_RE = re.compile(r"^(?:\d{4}年报|\d{4}半年报|\d{4}Q[1-3])$")
@@ -22,7 +22,7 @@ _GATE_FIELDS = {
 }
 
 
-def _validate_gate_payload(name: str, value: object) -> str | None:
+def validate_gate_payload(name: str, value: object) -> str | None:
     if not isinstance(value, dict):
         return f"{name} 必须是 JSON 对象"
     status = value.get("status")
@@ -39,9 +39,9 @@ def _validate_gate_payload(name: str, value: object) -> str | None:
     if not isinstance(sources, (str, list, tuple)) or not sources:
         return f"{name}.sources 缺失"
     source_values = [sources] if isinstance(sources, str) else list(sources)
-    if status in {"clear", "not_applicable"} and not any(
-        isinstance(item, str) and ("official" in item.lower() or "交易所" in item or "证监会" in item or "年报" in item)
-        for item in source_values
+    if status in {"clear", "not_applicable"} and not risk_gates.official_sources(
+        [item for item in source_values if isinstance(item, str)],
+        allow_statement_mirror=name != "regulatory_gate",
     ):
         return f"{name}.sources 非官方"
     if not isinstance(value.get("as_of"), str) or not value["as_of"].strip():
@@ -61,6 +61,11 @@ def _validate_gate_payload(name: str, value: object) -> str | None:
             expected_check_eligibility = check["status"] in {"clear", "not_applicable"}
             if check.get("action_eligible") is not None and check["action_eligible"] != expected_check_eligibility:
                 return f"regulatory_gate.checks.{check_name}.action_eligible 与 status 不一致"
+        if status == "clear" and any(
+            check["status"] not in {"clear", "not_applicable"}
+            for check in checks.values()
+        ):
+            return "regulatory_gate.status 与 checks 子项冲突"
     return None
 
 
@@ -80,7 +85,7 @@ def validate_fundamentals_payload(data: dict) -> str | None:
 
     business_fields = set(data) - {"data_period", "null_reasons", "field_provenance"}
     for gate_name in _GATE_FIELDS.keys() & business_fields:
-        gate_error = _validate_gate_payload(gate_name, data[gate_name])
+        gate_error = validate_gate_payload(gate_name, data[gate_name])
         if gate_error:
             return gate_error
     for field in sorted(business_fields):
@@ -96,7 +101,12 @@ def validate_fundamentals_payload(data: dict) -> str | None:
             return f"字段 {field} provenance.as_of 缺失"
         if status not in {"ok", "missing"}:
             return f"字段 {field} provenance.status 必须为 ok 或 missing"
-        if data[field] is None:
+        gate_incomplete = (
+            field in _GATE_FIELDS
+            and isinstance(data[field], dict)
+            and data[field].get("status") not in {"clear", "not_applicable"}
+        )
+        if data[field] is None or gate_incomplete:
             if (
                 status != "missing"
                 or not isinstance(null_reasons.get(field), str)
@@ -110,7 +120,14 @@ def validate_fundamentals_payload(data: dict) -> str | None:
     if unknown_provenance:
         return f"field_provenance 包含未写入的字段: {', '.join(sorted(unknown_provenance))}"
     unknown_reasons = set(null_reasons) - {
-        field for field in business_fields if data[field] is None
+        field
+        for field in business_fields
+        if data[field] is None
+        or (
+            field in _GATE_FIELDS
+            and isinstance(data[field], dict)
+            and data[field].get("status") not in {"clear", "not_applicable"}
+        )
     }
     if unknown_reasons:
         return f"null_reasons 包含非缺失字段: {', '.join(sorted(unknown_reasons))}"

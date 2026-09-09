@@ -20,7 +20,10 @@ output: <完整的分析报告文本>
 
 a-stock-qa 返回：
 ```
-verdict: COMPLIANT | PARTIAL | NON_COMPLIANT
+process_verdict: COMPLIANT | PARTIAL | NON_COMPLIANT | INVALID_RUN
+data_status: COMPLETE | INCOMPLETE
+decision_status: FORMED | NOT_FORMED
+input_sha256: <hash>
 checks:
   - name: <检查项名称>
     result: PASS | FAIL | SKIP
@@ -31,13 +34,13 @@ checks:
 
 | 文件 | 覆盖范围 | 状态 |
 |------|----------|------|
-| `rubrics/a-stock-research.md` | 11 项强制检查（Phase 1）| ✅ 已实现 |
+| `rubrics/a-stock-research.md` | 首次研究流程、门禁、估值、来源与交付完整性 | ✅ 已实现 |
 | `rubrics/a-stock-monitor.md` | L3 裁决质量检查（Phase 2）| 待实现 |
 | `rubrics/a-stock-tracker.md` | 批量评分一致性检查（Phase 3）| 待实现 |
 
 ## 设计决策
 
-本 skill 采用独立共享 skill 架构（Option B），而非内嵌各 skill 或接入 ai-collab。
+本 skill 采用独立共享 skill 架构（Option B），而非内嵌各 skill 或接入 ai-collab。同一模型自行阅读 rubric 不算独立调用；最终交付正文必须与输入快照哈希一致。
 历史设计记录见
 `docs/migration/source-qa-specs/2026-07-04-a-stock-qa-design.md`。
 

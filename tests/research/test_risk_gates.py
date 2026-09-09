@@ -138,6 +138,42 @@ def test_regulatory_missing_or_unofficial_evidence_fails_closed():
     )
 
 
+def test_statement_mirror_cannot_clear_regulatory_gate() -> None:
+    source = "tushare.income (company-filed statement mirror)"
+    gate = risk_gates.regulatory_gate(_p0(sources=[source]))
+
+    assert gate["status"] == "incomplete"
+    assert gate["action_eligible"] is False
+    assert (
+        store.validate_gate_payload(
+            "regulatory_gate",
+            {
+                **gate,
+                "status": "clear",
+                "action_eligible": True,
+                "reason_code": "regulatory_clear",
+            },
+        )
+        == "regulatory_gate.sources 非官方"
+    )
+
+    official_gate = risk_gates.regulatory_gate(_p0())
+    media_gate = {**official_gate, "sources": ["东方财富新闻 提及年报"]}
+    assert (
+        store.validate_gate_payload("regulatory_gate", media_gate)
+        == "regulatory_gate.sources 非官方"
+    )
+    official_gate["checks"]["listing_risk"] = {
+        "status": "blocked",
+        "action_eligible": False,
+        "reason_code": "listing_risk_st",
+    }
+    assert (
+        store.validate_gate_payload("regulatory_gate", official_gate)
+        == "regulatory_gate.status 与 checks 子项冲突"
+    )
+
+
 def test_regulatory_aggregate_prioritizes_blocked_over_incomplete():
     gate = risk_gates.regulatory_gate(_p0(listing_status="st", financial_opinion=""))
     assert gate["status"] == "blocked"
@@ -216,6 +252,51 @@ def test_cash_flow_gate_uses_true_fcf_and_strict_capex_boundary():
         risk_gates.cash_flow_gate({**base, "ttm_cfo": 0, "ttm_capex": 1})["reason_code"]
         == "cfo_non_positive"
     )
+
+
+def test_quantitative_gates_accept_statement_mirror() -> None:
+    source = "tushare.fina_indicator (company-filed statement mirror)"
+    gate = risk_gates.roe_structural_gate(
+        {
+            "latest_roe_ttm": 12,
+            "roe_5y_values": [12] * 5,
+            "sources": [source],
+            "as_of": "2026-08-25",
+        }
+    )
+
+    assert gate["status"] == "clear"
+
+
+def test_cash_flow_accepts_statement_mirror_and_keeps_quote_time_separate() -> None:
+    gate = risk_gates.cash_flow_gate(
+        {
+            "framework": "A通用",
+            "ttm_cfo": 100,
+            "ttm_capex": 40,
+            "total_market_cap": 1_000,
+            "sources": ["tushare.cashflow (company-filed statement mirror)"],
+            "as_of": "2026-08-25",
+            "quote_as_of": "2026-09-09T10:00:00",
+        }
+    )
+
+    assert gate["status"] == "clear"
+    assert gate["fcf_yield"] == pytest.approx(6.0)
+
+
+def test_cash_flow_requires_framework_before_capex_exception_decision() -> None:
+    gate = risk_gates.cash_flow_gate(
+        {
+            "ttm_cfo": 100,
+            "ttm_capex": 101,
+            "sources": ["official annual report"],
+            "as_of": "2026-09-07",
+        }
+    )
+
+    assert gate["status"] == "incomplete"
+    assert gate["reason_code"] == "framework_required_for_capex_review"
 
 
 def test_cash_flow_financial_is_not_applicable_and_cd_starts_review():

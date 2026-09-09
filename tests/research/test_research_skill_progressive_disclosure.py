@@ -27,7 +27,9 @@ def test_research_skill_routes_each_progressive_disclosure_reference_once() -> N
     report = REFERENCES["report"].read_text(encoding="utf-8")
     assert "标准评估卡" in report
     assert "操作建议禁止条款" in report
-    assert "有界首版本身就是完整报告" in report
+    assert "默认输出五段决策卡" in report
+    assert "用户明确要求详细审计时" in report
+    assert "P3：not_applicable" in report
 
 
 def test_analysis_hit_stops_before_full_research_flow() -> None:
@@ -82,12 +84,24 @@ def test_research_skill_bounds_first_pass_source_work_and_qa_handoff() -> None:
         assert marker in main
 
 
+def test_research_routes_scale_electronics_manufacturing_to_a() -> None:
+    main = MAIN.read_text(encoding="utf-8")
+    execution = REFERENCES["execution"].read_text(encoding="utf-8")
+    framework_f = (ROOT / "references/frameworks/F.md").read_text(encoding="utf-8")
+
+    for text in (main, execution, framework_f):
+        assert "EMS" in text and "ODM" in text
+        assert "连接器" in text and "A" in text
+    assert "盈利公司使用真实TTM PEG" in execution
+    assert "现金跑道/稀释" in framework_f
+
+
 def test_a_framework_inputs_and_external_risk_contract_match_qa() -> None:
     main = MAIN.read_text(encoding="utf-8")
     framework_a = (ROOT / "references/frameworks/A.md").read_text(encoding="utf-8")
 
     assert "A框架每次都必须输出" in main
     assert "状态=正常|受限|重大" in main
-    assert "异动、治理/政策与外部集中风险" in main
+    assert "异动、治理/政策" in main and "外部集中风险" in main
     assert "gross_margin_stable" in framework_a
     assert "补充指标 JSON" in framework_a

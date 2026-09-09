@@ -95,7 +95,7 @@ def _latest_bps_snapshot(*, period: str = "2026半年报", bps: float | None = 2
     }
 
 
-def test_valuation_compatibility_marks_different_period_mismatch():
+def test_valuation_compatibility_treats_newer_bps_as_update_not_global_failure():
     result = fetcher.compute_valuation_compatibility(
         current_price=86.75,
         annual_pb=3.48,
@@ -111,13 +111,15 @@ def test_valuation_compatibility_marks_different_period_mismatch():
         "pb_cache_bps": 24.9573,
         "pb_cache_bps_period": "2025年报",
         "pb_latest_report": 3.3,
+        "canonical_pb": 3.3,
+        "pb_percentile_eligible": False,
         "latest_report_bps": 26.3208,
         "latest_report_period": "2026半年报",
         "relative_difference_pct": 5.17,
-        "status": "period_mismatch",
-        "timing_eligible": False,
-        "reason_code": "different_period_value_mismatch",
-        "reason": "latest report BPS changes current-price PB by more than 2%",
+        "status": "latest_report_update",
+        "timing_eligible": True,
+        "reason_code": "latest_bps_period_update",
+        "reason": "latest-report BPS is newer; only PB-percentile frameworks must wait for a compatible series",
         "quote_source": "sina",
         "quote_as_of": "2026-09-02T11:30:00",
         "latest_report_bps_source": "tushare.fina_indicator+income+balancesheet",
@@ -131,7 +133,7 @@ def test_valuation_compatibility_includes_decimal_safe_exact_two_percent():
         annual_pb=3.0,
         annual_bps=10.0,
         annual_period="2025年报",
-        latest_snapshot=_latest_bps_snapshot(period="2026半年报", bps=10.0),
+        latest_snapshot=_latest_bps_snapshot(period="2025年报", bps=10.0),
         quote_source="sina",
         quote_as_of="2026-09-02T11:30:00",
     )
@@ -140,6 +142,7 @@ def test_valuation_compatibility_includes_decimal_safe_exact_two_percent():
     assert result["relative_difference_pct"] == 2.0
     assert result["status"] == "compatible"
     assert result["timing_eligible"] is True
+    assert result["pb_percentile_eligible"] is True
     assert result["reason_code"] == "within_2pct"
 
 
@@ -156,8 +159,9 @@ def test_valuation_compatibility_uses_frozen_python_round_before_decimal_gate():
 
     assert result["pb_latest_report"] == 0.43
     assert result["relative_difference_pct"] == 2.38
-    assert result["status"] == "period_mismatch"
-    assert result["timing_eligible"] is False
+    assert result["status"] == "latest_report_update"
+    assert result["timing_eligible"] is True
+    assert result["pb_percentile_eligible"] is False
 
 
 def test_valuation_compatibility_fails_same_period_value_mismatch():
@@ -174,6 +178,7 @@ def test_valuation_compatibility_fails_same_period_value_mismatch():
     assert result["pb_latest_report"] == 2.8
     assert result["status"] == "incomplete"
     assert result["timing_eligible"] is False
+    assert result["pb_percentile_eligible"] is False
     assert result["reason_code"] == "same_period_value_mismatch"
 
 
@@ -1251,3 +1256,31 @@ def test_compute_pb_percentile_with_split_adjusts_post_split_bps():
     # BPS 调整后所有历史 PB = 2.0 = current_pb，严格小于比较 → pct_adj = 0.0%
     assert pct_adj == 0.0
     assert pct_no_adj is not None and pct_no_adj > 0
+
+
+def test_bank_cash_flow_gate_is_not_applicable_during_fetch() -> None:
+    results = {
+        "_risk_gate_inputs": {
+            "cash_flow_gate": {
+                "ttm_cfo": -1,
+                "ttm_capex": 0,
+                "sources": [
+                    "tushare.cashflow (company-filed statement mirror)"
+                ],
+                "as_of": "2026-09-09",
+            }
+        }
+    }
+
+    fetcher._cache_gate_defaults("600036", results, "2025年报", "银行")
+
+    assert results["cash_flow_gate"]["status"] == "not_applicable"
+    assert results["cash_flow_gate"]["action_eligible"] is True
+
+    missing_source: dict = {}
+    fetcher._cache_gate_defaults("600036", missing_source, "2025年报", "银行")
+    assert missing_source["cash_flow_gate"]["status"] == "incomplete"
+    assert (
+        missing_source["cash_flow_gate"]["reason_code"]
+        == "financial_framework_source_missing"
+    )

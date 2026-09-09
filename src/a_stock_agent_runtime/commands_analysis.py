@@ -19,7 +19,10 @@ from a_stock_lib.contracts import (
 )
 from a_stock_lib.framework_scoring import score_fundamentals
 
-def _risk_gate_state(fundamentals: dict) -> tuple[str, list[str], dict[str, dict]] | None:
+
+def _risk_gate_state(
+    fundamentals: dict,
+) -> tuple[str, list[str], dict[str, dict]] | None:
     return risk_gates.aggregate_fundamentals_gates(fundamentals)
 
 
@@ -31,15 +34,105 @@ def _hard_gate_failed(gates: dict[str, dict]) -> bool:
     )
 
 
-def _not_formed_score(code: str, framework: str, reasons: list[str], gates: dict[str, dict]) -> dict:
+def _cash_gate_for_framework(
+    data: dict, framework: str, industry: str | None
+) -> dict | None:
+    gate = data.get("cash_flow_gate")
+    if not isinstance(gate, dict):
+        return None
+    if framework == "B银行" or gate.get(
+        "reason_code"
+    ) == "framework_required_for_capex_review":
+        return risk_gates.cash_flow_gate(
+            {
+                **gate,
+                "framework": framework,
+                "industry": industry,
+                "total_market_cap": data.get("total_market_cap"),
+            }
+        )
+    return gate
+
+
+def _not_formed_score(
+    code: str, framework: str, reasons: list[str], gates: dict[str, dict]
+) -> dict:
     return {
-        "framework": framework[0], "code": code, "scoring_status": "incomplete",
-        "complete": False, "blocked": True, "action_eligible": False,
-        "subtotal": None, "fundamentals_subtotal": "not_formed",
-        "configuration_rating": "not_formed", "timing_rating": "not_formed",
-        "total": "not_formed", "matrix": "not_formed",
-        "reason_code": "risk_gate_incomplete", "risk_gate_reasons": reasons,
+        "framework": framework[0],
+        "code": code,
+        "scoring_status": "incomplete",
+        "timing_status": "incomplete",
+        "complete": False,
+        "blocked": True,
+        "action_eligible": False,
+        "subtotal": None,
+        "fundamentals_subtotal": "not_formed",
+        "configuration_rating": "not_formed",
+        "timing_rating": "not_formed",
+        "total": "not_formed",
+        "matrix": "not_formed",
+        "reason_code": "risk_gate_incomplete",
+        "risk_gate_reasons": reasons,
         "risk_gates": gates,
+    }
+
+
+def _decision_meta(data: dict, industry: str | None) -> dict:
+    framework, confident = domain.infer_framework(industry)
+    cash_gate = _cash_gate_for_framework(data, framework, industry)
+    gate_data = (
+        {**data, "cash_flow_gate": cash_gate} if cash_gate is not None else data
+    )
+    gate_state = _risk_gate_state(gate_data)
+    gates = gate_state[2] if gate_state else {}
+    reasons = gate_state[1] if gate_state else ["risk_gates:not_evaluated"]
+    hard_failed = _hard_gate_failed(gates) if gates else True
+    roe_status = gates.get("roe_structural_gate", {}).get("status")
+    valuation = data.get("valuation_compatibility", {})
+    payout_ratio = None
+    if (
+        isinstance(data.get("dps"), (int, float))
+        and isinstance(data.get("eps"), (int, float))
+        and data["eps"] > 0
+    ):
+        payout_ratio = data["dps"] / data["eps"]
+    uses_pb_percentile = framework == "B银行" or (
+        framework == "C资源" and payout_ratio is not None and payout_ratio < 0.4
+    )
+    if isinstance(valuation, dict) and not valuation.get("timing_eligible", False):
+        reasons = [
+            *reasons,
+            f"valuation_compatibility:{valuation.get('reason_code', 'timing_ineligible')}",
+        ]
+    elif uses_pb_percentile and not valuation.get("pb_percentile_eligible", False):
+        reasons = [*reasons, "valuation_compatibility:pb_percentile_ineligible"]
+    timing_blocked = (
+        hard_failed
+        or roe_status not in {None, "clear"}
+        or any(reason.startswith("valuation_compatibility:") for reason in reasons)
+    )
+    provenance = data.get("field_provenance", {})
+    statuses = [
+        value.get("status")
+        for key, value in provenance.items()
+        if key not in risk_gates.GATE_NAMES and isinstance(value, dict)
+    ]
+    complete_gates = sum(
+        value.get("status") in {"clear", "not_applicable"} for value in gates.values()
+    )
+    return {
+        "framework_candidate": framework,
+        "framework_confident": confident,
+        "scoring_status": "incomplete" if hard_failed else "not_evaluated",
+        "timing_status": "incomplete" if timing_blocked else "not_evaluated",
+        "action_eligible": False,
+        "reason_codes": list(dict.fromkeys(reasons)),
+        "data_completeness": {
+            "top_level_present": sum(status == "ok" for status in statuses),
+            "top_level_total": len(statuses),
+            "risk_gates_complete": complete_gates,
+            "risk_gates_total": len(risk_gates.GATE_NAMES),
+        },
     }
 
 
@@ -118,6 +211,7 @@ def cmd_check(args: list[str]) -> None:
                 "updated_at": domain.format_timestamp_cst(updated_at),
                 "ttl_hours": ttl_hours,
             }
+            result["_decision_meta"] = _decision_meta(result, industry)
             print(
                 f"FUNDAMENTALS_HIT {code}({name}) [{industry}] 更新:{domain.format_timestamp_cst(updated_at)}"
             )
@@ -153,6 +247,7 @@ def cmd_get(args: list[str]) -> None:
         "updated_at": domain.format_timestamp_cst(updated_at),
         "ttl_hours": ttl_hours,
     }
+    result["_decision_meta"] = _decision_meta(result, industry)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -315,6 +410,12 @@ def cmd_score_fundamentals(args: list[str]) -> None:
     if not isinstance(overrides, dict):
         print("错误：补充指标必须是 JSON 对象", file=sys.stderr)
         sys.exit(1)
+    for gate_name in risk_gates.GATE_NAMES:
+        if gate_name in overrides:
+            error = store.validate_gate_payload(gate_name, overrides[gate_name])
+            if error:
+                print(f"错误：补充指标 {gate_name} 校验失败: {error}", file=sys.stderr)
+                sys.exit(1)
     fundamentals = store.get_fundamentals(code)
     if fundamentals is None:
         print(f"错误：未找到 {code} 的有效基本面缓存", file=sys.stderr)
@@ -333,11 +434,21 @@ def cmd_score_fundamentals(args: list[str]) -> None:
     ):
         metrics["operating_cf_to_net_profit"] = operating_cf / eps
     metrics.update(overrides)
+    industry = fundamentals.get("_cache_meta", {}).get("industry")
+    cash_gate = _cash_gate_for_framework(metrics, framework, industry)
+    if cash_gate is not None:
+        metrics["cash_flow_gate"] = cash_gate
     gate_state = _risk_gate_state(metrics)
     if gate_state is not None:
         _gate_status, gate_reasons, gates = gate_state
         if _hard_gate_failed(gates):
-            print(json.dumps(_not_formed_score(code, framework, gate_reasons, gates), ensure_ascii=False, indent=2))
+            print(
+                json.dumps(
+                    _not_formed_score(code, framework, gate_reasons, gates),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
             return
     report = sys.stdin.read().strip()
     cycle_assessment = parse_cycle_stage_tag(report)
@@ -353,18 +464,19 @@ def cmd_score_fundamentals(args: list[str]) -> None:
         _, gate_reasons, gates = gate_state
         roe_gate = gates.get("roe_structural_gate", {})
         if roe_gate.get("status") != "clear":
-            payload.update({
-                "timing_status": "incomplete",
-                "scoring_status": "incomplete",
-                "complete": False,
-                "blocked": True,
-                "valuation_action_eligible": False,
-                "valuation_score": 0,
-                "total": "not_formed",
-                "matrix": "not_formed",
-                "action_eligible": False,
-                "risk_gate_reasons": gate_reasons,
-            })
+            payload.update(
+                {
+                    "timing_status": "incomplete",
+                    "scoring_status": "complete"
+                    if score.complete and not score.blocked
+                    else "incomplete",
+                    "valuation_action_eligible": False,
+                    "total": "not_formed",
+                    "matrix": "not_formed",
+                    "action_eligible": False,
+                    "risk_gate_reasons": gate_reasons,
+                }
+            )
     payload["code"] = code
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 

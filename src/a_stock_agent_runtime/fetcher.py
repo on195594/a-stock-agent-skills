@@ -61,6 +61,11 @@ DATA_SOURCE = (
 FIELDS = {
     "pe_static": ("PE_静态（年报EPS，非TTM）", "computed"),
     "pe_ttm": ("PE_静态兼容别名（deprecated）", "compatibility"),
+    "pe_ttm_true": ("PE_TTM（总市值/TTM归母净利润）", "computed"),
+    "net_profit_ttm": ("TTM归母净利润(元)", "computed"),
+    "net_profit_ttm_yoy": ("TTM归母净利润同比(%)", "computed"),
+    "peg_ttm": ("PEG_TTM", "computed"),
+    "total_market_cap": ("总市值(元)", "structured"),
     "pb": ("PB（当前价/同期BPS）", "computed"),
     "valuation_compatibility": ("PB/BPS最新报告口径兼容性", "computed"),
     "roe_3y_avg": ("ROE近3年均值(%)", "structured"),
@@ -454,6 +459,75 @@ def _deduplicated_report_rows(frame: Any) -> Any:
     return rows.drop_duplicates("_period", keep="last").reset_index(drop=True)
 
 
+def _row_at_period(frame: Any, period: Any) -> Any:
+    if frame is None or getattr(frame, "empty", True):
+        return None
+    rows = frame[frame["_period"] == period]
+    return rows.iloc[-1] if not rows.empty else None
+
+
+def _row_number(row: Any, *columns: str) -> float | None:
+    if row is None:
+        return None
+    for column in columns:
+        if column in row.index:
+            value = parse_float(row[column])
+            if value is not None:
+                return value
+    return None
+
+
+def _ttm_pair(
+    frame: Any, latest_period: Any, *columns: str
+) -> tuple[float | None, float | None]:
+    """Return current/prior TTM values without annualising an interim period."""
+    import pandas as pd
+
+    if frame is None or getattr(frame, "empty", True):
+        return None, None
+    annual_periods = frame.loc[
+        frame["_period"].dt.month.eq(12) & frame["_period"].le(latest_period),
+        "_period",
+    ]
+    if annual_periods.empty:
+        return None, None
+    annual_period = annual_periods.max()
+    current_ytd = _row_number(_row_at_period(frame, latest_period), *columns)
+    prior_ytd_period = latest_period - pd.DateOffset(years=1)
+    prior_ytd = _row_number(_row_at_period(frame, prior_ytd_period), *columns)
+    if latest_period.month == 12:
+        return current_ytd, prior_ytd
+    annual = _row_number(_row_at_period(frame, annual_period), *columns)
+    prior_annual = _row_number(
+        _row_at_period(frame, annual_period - pd.DateOffset(years=1)), *columns
+    )
+    prior_prior_ytd = _row_number(
+        _row_at_period(frame, latest_period - pd.DateOffset(years=2)), *columns
+    )
+    current_ttm = (
+        annual + current_ytd - prior_ytd
+        if None not in (annual, current_ytd, prior_ytd)
+        else None
+    )
+    prior_ttm = (
+        prior_annual + prior_ytd - prior_prior_ytd
+        if None not in (prior_annual, prior_ytd, prior_prior_ytd)
+        else None
+    )
+    return current_ttm, prior_ttm
+
+
+def _announcement_date(*rows: Any) -> str | None:
+    import pandas as pd
+
+    values = [
+        row["_announcement"]
+        for row in rows
+        if row is not None and pd.notna(row.get("_announcement"))
+    ]
+    return max(values).date().isoformat() if values else None
+
+
 def _build_latest_report_snapshot(
     indicator: Any,
     income: Any,
@@ -488,6 +562,12 @@ def _build_latest_report_snapshot(
 
     latest = {name: row_at(name, latest_period) for name in frames}
     previous = {name: row_at(name, previous_period) for name in frames}
+    net_profit_ttm, prior_net_profit_ttm = _ttm_pair(
+        frames["income"], latest_period, "n_income_attr_p"
+    )
+    revenue_ttm, prior_revenue_ttm = _ttm_pair(
+        frames["income"], latest_period, "total_revenue", "revenue"
+    )
 
     def value(row: Any, *columns: str) -> float | None:
         if row is None:
@@ -552,6 +632,16 @@ def _build_latest_report_snapshot(
                 value(prior_income, "n_income_attr_p"),
             ),
             "net_profit_yoy": field(value(indicator_row, "netprofit_yoy"), yoy=True),
+            "net_profit_ttm": field(net_profit_ttm, prior_net_profit_ttm),
+            "net_profit_ttm_yoy": field(
+                None
+                if net_profit_ttm is None
+                or prior_net_profit_ttm is None
+                or prior_net_profit_ttm <= 0
+                else (net_profit_ttm / prior_net_profit_ttm - 1) * 100,
+                yoy=True,
+            ),
+            "revenue_ttm": field(revenue_ttm, prior_revenue_ttm),
             "deducted_net_profit_yoy": field(
                 value(indicator_row, "dt_netprofit_yoy"), yoy=True
             ),
@@ -563,6 +653,135 @@ def _build_latest_report_snapshot(
             ),
         },
     }
+
+
+def _build_risk_gate_inputs(
+    indicator: Any, income: Any, balance: Any, cashflow: Any
+) -> dict[str, dict[str, Any]]:
+    """Build P1/P2 inputs from the already-fetched company statement history."""
+    import pandas as pd
+
+    indicator_rows = _deduplicated_report_rows(indicator)
+    income_rows = _deduplicated_report_rows(income)
+    balance_rows = _deduplicated_report_rows(balance)
+    cashflow_rows = _deduplicated_report_rows(cashflow)
+    result: dict[str, dict[str, Any]] = {}
+
+    if income_rows is not None and balance_rows is not None:
+        common = set(income_rows["_period"]) & set(balance_rows["_period"])
+        if common:
+            latest = max(common)
+            prior = latest - pd.DateOffset(years=1)
+            latest_income = _row_at_period(income_rows, latest)
+            latest_balance = _row_at_period(balance_rows, latest)
+            prior_balance = _row_at_period(balance_rows, prior)
+            net_profit, _ = _ttm_pair(income_rows, latest, "n_income_attr_p")
+            revenue, _ = _ttm_pair(income_rows, latest, "total_revenue", "revenue")
+            equity_values = (
+                _row_number(latest_balance, "total_hldr_eqy_exc_min_int"),
+                _row_number(prior_balance, "total_hldr_eqy_exc_min_int"),
+            )
+            asset_values = (
+                _row_number(latest_balance, "total_assets"),
+                _row_number(prior_balance, "total_assets"),
+            )
+            average_equity = (
+                sum(equity_values) / 2 if None not in equity_values else None
+            )
+            average_assets = sum(asset_values) / 2 if None not in asset_values else None
+            annual_roe: list[float] = []
+            annual_periods: list[Any] = []
+            if indicator_rows is not None:
+                annual = (
+                    indicator_rows[
+                        indicator_rows["_period"].dt.month.eq(12)
+                        & indicator_rows["_period"].le(latest)
+                    ]
+                    .sort_values("_period")
+                    .tail(5)
+                )
+                annual_periods = list(annual["_period"])
+                annual_roe = [
+                    value
+                    for value in (
+                        _row_number(row, "roe_waa") for _, row in annual.iterrows()
+                    )
+                    if value is not None
+                ]
+            current_dupont = {
+                "net_margin": net_profit / revenue
+                if net_profit is not None and revenue not in (None, 0)
+                else None,
+                "asset_turnover": revenue / average_assets
+                if revenue is not None and average_assets not in (None, 0)
+                else None,
+                "equity_multiplier": average_assets / average_equity
+                if average_assets is not None and average_equity not in (None, 0)
+                else None,
+            }
+            dupont_history = {
+                "net_margin": [],
+                "asset_turnover": [],
+                "equity_multiplier": [],
+            }
+            for period in annual_periods:
+                income_row = _row_at_period(income_rows, period)
+                balance_row = _row_at_period(balance_rows, period)
+                previous_balance = _row_at_period(
+                    balance_rows, period - pd.DateOffset(years=1)
+                )
+                annual_profit = _row_number(income_row, "n_income_attr_p")
+                annual_revenue = _row_number(income_row, "total_revenue", "revenue")
+                annual_equity = (
+                    _row_number(balance_row, "total_hldr_eqy_exc_min_int"),
+                    _row_number(previous_balance, "total_hldr_eqy_exc_min_int"),
+                )
+                annual_assets = (
+                    _row_number(balance_row, "total_assets"),
+                    _row_number(previous_balance, "total_assets"),
+                )
+                if (
+                    annual_profit is None
+                    or annual_revenue in (None, 0)
+                    or None in annual_equity
+                    or None in annual_assets
+                ):
+                    dupont_history = {}
+                    break
+                mean_equity = sum(annual_equity) / 2
+                mean_assets = sum(annual_assets) / 2
+                dupont_history["net_margin"].append(annual_profit / annual_revenue)
+                dupont_history["asset_turnover"].append(annual_revenue / mean_assets)
+                dupont_history["equity_multiplier"].append(mean_assets / mean_equity)
+            result["roe_structural_gate"] = {
+                "latest_roe_ttm": net_profit / average_equity * 100
+                if net_profit is not None and average_equity not in (None, 0)
+                else None,
+                "roe_5y_values": annual_roe,
+                "dupont_current": current_dupont,
+                "dupont_5y": dupont_history,
+                "sources": [
+                    "tushare.fina_indicator (company-filed statement mirror)",
+                    "tushare.income (company-filed statement mirror)",
+                    "tushare.balancesheet (company-filed statement mirror)",
+                ],
+                "as_of": _announcement_date(latest_income, latest_balance),
+                "report_period": _report_period_label(latest),
+            }
+
+    if cashflow_rows is not None and not cashflow_rows.empty:
+        latest = cashflow_rows["_period"].max()
+        latest_row = _row_at_period(cashflow_rows, latest)
+        cfo, _ = _ttm_pair(cashflow_rows, latest, "n_cashflow_act")
+        capex, _ = _ttm_pair(cashflow_rows, latest, "c_pay_acq_const_fiolta")
+        result["cash_flow_gate"] = {
+            "ttm_cfo": cfo,
+            "ttm_capex": capex,
+            "sources": ["tushare.cashflow (company-filed statement mirror)"],
+            "as_of": _announcement_date(latest_row),
+            "report_period": _report_period_label(latest),
+        }
+    return result
 
 
 def _fetch_financials_tushare(code: str) -> Any:
@@ -679,11 +898,12 @@ def _fetch_financials_tushare(code: str) -> Any:
         )
 
     annual = annual.sort_values("报告期").reset_index(drop=True)
+    annual_period = annual["报告期"].iloc[-1] if not annual.empty else None
     annual.attrs["latest_report_snapshot"] = _build_latest_report_snapshot(
-        indicator,
-        income,
-        balance,
-        annual_period=annual["报告期"].iloc[-1] if not annual.empty else None,
+        indicator, income, balance, annual_period=annual_period
+    )
+    annual.attrs["risk_gate_inputs"] = _build_risk_gate_inputs(
+        indicator, income, balance, cashflow
     )
     return annual
 
@@ -1296,10 +1516,20 @@ def _fetch_spot_data(
     results["_quote_source"] = quote.source
     total_mv = parse_float(info.get("总市值"))
     float_mv = parse_float(info.get("流通市值"))
+    if total_mv and total_mv > 0:
+        # TuShare daily_basic reports market value in CNY 10,000; AKShare uses CNY.
+        results["total_market_cap"] = (
+            total_mv * 10_000 if DATA_SOURCE == "tushare" else total_mv
+        )
+        results["_total_market_cap_source"] = (
+            "tushare.daily_basic" if DATA_SOURCE == "tushare" else "akshare"
+        )
+    else:
+        null_reasons["total_market_cap"] = "总市值字段缺失"
     if total_mv and total_mv > 0 and float_mv is not None:
         results["float_to_total_ratio"] = round(float_mv / total_mv * 100, 1)
     else:
-        null_reasons["float_to_total_ratio"] = "stock_individual_info_em 市值字段缺失"
+        null_reasons["float_to_total_ratio"] = "市值字段缺失"
     logger.info(
         f"  ✅ {name}({code}) | 行业: {industry} | 当前价: {current_price}({quote.source}) | "
         f"流通比: {results.get('float_to_total_ratio', '─')}%"
@@ -1332,17 +1562,59 @@ def _fetch_fin_data(
         results[k] = v
         if v is None:
             null_reasons[k] = "数据含缺失值"
-    snapshot = getattr(fin_df, "attrs", {}).get("latest_report_snapshot")
+    attrs = getattr(fin_df, "attrs", {})
+    snapshot = attrs.get("latest_report_snapshot")
     if snapshot is not None:
         results["latest_report_snapshot"] = snapshot
     else:
         null_reasons["latest_report_snapshot"] = "数据源未返回可核验的最新报告快照"
+    gate_inputs = attrs.get("risk_gate_inputs")
+    if isinstance(gate_inputs, dict):
+        results["_risk_gate_inputs"] = gate_inputs
     logger.info(
         f"  ✅ ROE3y={results.get('roe_3y_avg')}% | "
         f"净利增速3年均值={results.get('net_profit_growth')}% | "
         f"负债率={results.get('debt_ratio')}% | EPS={eps} | BPS={bps}"
     )
     return fin_df, eps, bps
+
+
+def _compute_ttm_valuation(results: dict, null_reasons: dict) -> None:
+    snapshot = results.get("latest_report_snapshot")
+    fields = snapshot.get("fields", {}) if isinstance(snapshot, dict) else {}
+    net_profit_field = fields.get("net_profit_ttm", {})
+    growth_field = fields.get("net_profit_ttm_yoy", {})
+    net_profit = (
+        net_profit_field.get("value") if isinstance(net_profit_field, dict) else None
+    )
+    growth = growth_field.get("value") if isinstance(growth_field, dict) else None
+    market_cap = results.get("total_market_cap")
+    if isinstance(net_profit, (int, float)):
+        results["net_profit_ttm"] = net_profit
+    else:
+        null_reasons["net_profit_ttm"] = "缺少构造TTM利润所需的同口径期间"
+    if isinstance(growth, (int, float)):
+        results["net_profit_ttm_yoy"] = growth
+    else:
+        null_reasons["net_profit_ttm_yoy"] = "缺少上年同口径TTM利润或基期非正"
+    if (
+        isinstance(market_cap, (int, float))
+        and isinstance(net_profit, (int, float))
+        and market_cap > 0
+        and net_profit > 0
+    ):
+        results["pe_ttm_true"] = round(market_cap / net_profit, 2)
+    else:
+        null_reasons["pe_ttm_true"] = "总市值或TTM归母净利润缺失/非正"
+    pe_ttm_true = results.get("pe_ttm_true")
+    if (
+        isinstance(pe_ttm_true, (int, float))
+        and isinstance(growth, (int, float))
+        and growth > 0
+    ):
+        results["peg_ttm"] = round(pe_ttm_true / growth, 2)
+    else:
+        null_reasons["peg_ttm"] = "真实TTM PE或正的TTM利润增速缺失"
 
 
 def _fetch_pb_pe_data(
@@ -1396,6 +1668,8 @@ def compute_valuation_compatibility(
         "pb_cache_bps": annual_bps,
         "pb_cache_bps_period": annual_period,
         "pb_latest_report": None,
+        "canonical_pb": None,
+        "pb_percentile_eligible": False,
         "latest_report_bps": latest_bps,
         "latest_report_period": latest_period,
         "relative_difference_pct": None,
@@ -1446,30 +1720,34 @@ def compute_valuation_compatibility(
         abs(pb_decimal - pb_latest_decimal) / pb_decimal * Decimal("100")
     )
     base["pb_latest_report"] = pb_latest_report
+    base["canonical_pb"] = pb_latest_report
     base["relative_difference_pct"] = round(float(difference_for_gate), 2)
 
-    if difference_for_gate <= Decimal("2.0"):
+    if annual_period != latest_period:
+        base.update(
+            {
+                "status": "latest_report_update",
+                "timing_eligible": True,
+                "pb_percentile_eligible": False,
+                "reason_code": "latest_bps_period_update",
+                "reason": "latest-report BPS is newer; only PB-percentile frameworks must wait for a compatible series",
+            }
+        )
+    elif difference_for_gate <= Decimal("2.0"):
         base.update(
             {
                 "status": "compatible",
                 "timing_eligible": True,
+                "pb_percentile_eligible": True,
                 "reason_code": "within_2pct",
                 "reason": "current-price PB differs by no more than 2%",
-            }
-        )
-    elif annual_period == latest_period:
-        base.update(
-            {
-                "reason_code": "same_period_value_mismatch",
-                "reason": "same-period BPS values produce PB difference above 2%",
             }
         )
     else:
         base.update(
             {
-                "status": "period_mismatch",
-                "reason_code": "different_period_value_mismatch",
-                "reason": "latest report BPS changes current-price PB by more than 2%",
+                "reason_code": "same_period_value_mismatch",
+                "reason": "same-period BPS values produce PB difference above 2%",
             }
         )
     return base
@@ -1693,14 +1971,21 @@ def _fetch_bond_yield(null_reasons: dict) -> dict | None:
     return None
 
 
-def _cache_gate_defaults(code: str, results: dict, data_period: str) -> None:
-    """Persist explicit incomplete gates when the current provider lacks facts."""
+def _cache_gate_defaults(
+    code: str, results: dict, data_period: str, industry: str
+) -> None:
+    """Persist explicit gates; P0 stays incomplete until official evidence is supplied."""
     as_of = results.get("_quote_as_of") or data_period
     unavailable = ["unavailable"]
     regulatory = results.get("regulatory_gate")
     if not isinstance(regulatory, dict):
         regulatory = risk_gates.regulatory_gate(
-            {"code": code, "report_period": data_period, "as_of": as_of, "sources": unavailable}
+            {
+                "code": code,
+                "report_period": data_period,
+                "as_of": as_of,
+                "sources": unavailable,
+            }
         )
     regulatory["as_of"] = regulatory.get("as_of") or as_of
     regulatory["sources"] = regulatory.get("sources") or unavailable
@@ -1709,10 +1994,39 @@ def _cache_gate_defaults(code: str, results: dict, data_period: str) -> None:
         check["as_of"] = check.get("as_of") or as_of
         check["sources"] = check.get("sources") or unavailable
     results["regulatory_gate"] = regulatory
-    for key, gate in (("roe_structural_gate", risk_gates.roe_structural_gate), ("cash_flow_gate", risk_gates.cash_flow_gate)):
+
+    inputs = results.get("_risk_gate_inputs", {})
+    for key, gate in (
+        ("roe_structural_gate", risk_gates.roe_structural_gate),
+        ("cash_flow_gate", risk_gates.cash_flow_gate),
+    ):
         value = results.get(key)
         if not isinstance(value, dict):
-            value = gate({"as_of": as_of, "sources": unavailable, "report_period": data_period})
+            payload = dict(inputs.get(key, {})) if isinstance(inputs, dict) else {}
+            payload.setdefault("report_period", data_period)
+            if key == "cash_flow_gate":
+                payload.update(
+                    {
+                        "total_market_cap": results.get("total_market_cap"),
+                        "quote_as_of": results.get("_quote_as_of"),
+                        "industry": industry,
+                    }
+                )
+            value = gate(payload or {"as_of": as_of, "sources": unavailable})
+        if (
+            key == "cash_flow_gate"
+            and value.get("status") == "not_applicable"
+            and not risk_gates.official_sources(
+                value.get("sources", []), allow_statement_mirror=True
+            )
+        ):
+            value.update(
+                {
+                    "status": "incomplete",
+                    "action_eligible": False,
+                    "reason_code": "financial_framework_source_missing",
+                }
+            )
         value["as_of"] = value.get("as_of") or as_of
         value["sources"] = value.get("sources") or unavailable
         results[key] = value
@@ -1731,7 +2045,7 @@ def _build_cache_payload(
     if data_period is None:
         logger.error("  ❌ 无法从实际财务报表确定 data_period，拒绝写入 fundamentals")
         raise SystemExit(1)
-    _cache_gate_defaults(code, results, data_period)
+    _cache_gate_defaults(code, results, data_period, industry)
     business_fields = [key for key in FIELDS if key != "bond_yield_10y"]
     cache_data = {key: results.get(key) for key in business_fields}
     normalized_reasons: dict[str, str] = {}
@@ -1740,6 +2054,9 @@ def _build_cache_payload(
     quote_derived_fields = {
         "pe_static",
         "pe_ttm",
+        "pe_ttm_true",
+        "peg_ttm",
+        "total_market_cap",
         "pb",
         "valuation_compatibility",
         "dividend_yield",
@@ -1755,10 +2072,23 @@ def _build_cache_payload(
         )
         if key == "industry_status":
             provenance_source = results.get("_industry_source", provenance_source)
+        elif key == "total_market_cap":
+            provenance_source = results.get(
+                "_total_market_cap_source", provenance_source
+            )
+        gate_status = (
+            cache_data[key].get("status")
+            if key in risk_gates.GATE_NAMES and isinstance(cache_data[key], dict)
+            else None
+        )
         if cache_data[key] is None:
             reason = null_reasons.get(key) or (
                 "需要WebSearch补充" if source_layer == "web" else "数据源未返回有效值"
             )
+            normalized_reasons[key] = reason
+            status = "missing"
+        elif gate_status not in (None, "clear", "not_applicable"):
+            reason = str(cache_data[key].get("reason_code") or gate_status)
             normalized_reasons[key] = reason
             status = "missing"
         else:
@@ -1798,6 +2128,12 @@ def _build_cache_payload(
                 snapshot.get("source") or provenance[key]["source"]
             )
             provenance[key]["as_of"] = snapshot.get("announcement_date") or data_period
+        elif key in {"net_profit_ttm", "net_profit_ttm_yoy"}:
+            snapshot = results.get("latest_report_snapshot", {})
+            provenance[key]["source"] = (
+                snapshot.get("source") or provenance[key]["source"]
+            )
+            provenance[key]["as_of"] = snapshot.get("announcement_date") or data_period
     cache_data.update(
         {
             "data_period": data_period,
@@ -1811,10 +2147,19 @@ def _build_cache_payload(
         logger.error("  ❌ fundamentals校验失败: %s", exc)
         raise SystemExit(1) from exc
     logger.info(f"  ✅ {msg}")
-    fetched_count = sum(1 for key in business_fields if results.get(key) is not None)
+    gate_names = set(risk_gates.GATE_NAMES)
+    ordinary_fields = [key for key in business_fields if key not in gate_names]
+    fetched_count = sum(1 for key in ordinary_fields if results.get(key) is not None)
+    complete_gates = sum(
+        1
+        for key in gate_names
+        if isinstance(results.get(key), dict)
+        and results[key].get("status") in {"clear", "not_applicable"}
+    )
     logger.info(
         f"\n=== {name}({code}) 完成 | "
-        f"获取: {fetched_count}字段 | null: {len(null_reasons)}字段 | "
+        f"普通字段: {fetched_count}/{len(ordinary_fields)} | "
+        f"决策门完整: {complete_gates}/{len(gate_names)} | "
         f"{datetime.now().strftime('%H:%M:%S')} ==="
     )
     if null_reasons:
@@ -1839,6 +2184,7 @@ def cmd_fetch(args: list[str]) -> None:
 
     name, industry, current_price = _fetch_spot_data(code, results, null_reasons)
     fin_df, _eps, _bps = _fetch_fin_data(code, results, null_reasons)
+    _compute_ttm_valuation(results, null_reasons)
     data_period = _extract_data_period(fin_df)
     latest_report_year = int(data_period[:4]) if data_period else None
     split_ratio, split_ex_date = _fetch_dividend(

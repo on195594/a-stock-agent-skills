@@ -69,6 +69,7 @@ OFFICIAL_SOURCE_MARKERS = (
     "年报",
     "审计",
 )
+_STATEMENT_MIRROR_MARKER = "company-filed statement mirror"
 _UNTRUSTED_SOURCE_MARKERS = ("news", "search", "media", "雪球", "东方财富", "新闻")
 
 
@@ -92,13 +93,24 @@ def _sources(value: Any) -> list[str]:
     return []
 
 
-def _official(sources: list[str]) -> bool:
+def _official(
+    sources: list[str], *, allow_statement_mirror: bool = False
+) -> bool:
     if not sources:
         return False
     lowered = " ".join(sources).lower()
+    markers = OFFICIAL_SOURCE_MARKERS + (
+        (_STATEMENT_MIRROR_MARKER,) if allow_statement_mirror else ()
+    )
     return not any(
         marker.lower() in lowered for marker in _UNTRUSTED_SOURCE_MARKERS
-    ) and any(marker.lower() in lowered for marker in OFFICIAL_SOURCE_MARKERS)
+    ) and any(marker.lower() in lowered for marker in markers)
+
+
+def official_sources(
+    sources: list[str], *, allow_statement_mirror: bool = False
+) -> bool:
+    return _official(sources, allow_statement_mirror=allow_statement_mirror)
 
 
 def _as_of(value: Any) -> str | None:
@@ -596,9 +608,13 @@ def roe_structural_gate(
             if current_value is not None and mean_value is not None
             else "incomplete",
         }
-    if status in {"clear", "blocked"} and not (as_of and _official(source_list)):
+    if status in {"clear", "blocked"} and not (
+        as_of and _official(source_list, allow_statement_mirror=True)
+    ):
         status, reason = "incomplete", "missing_official_evidence"
-    eligible = status == "clear" and bool(as_of and _official(source_list))
+    eligible = status == "clear" and bool(
+        as_of and _official(source_list, allow_statement_mirror=True)
+    )
     if status == "clear" and not eligible:
         status, reason = "incomplete", "missing_official_evidence"
     return {
@@ -666,11 +682,7 @@ def cash_flow_gate(
     flow_as_of = _as_of(data.get("as_of"))
     fcf_yield = (
         fcf / market_cap * 100
-        if fcf is not None
-        and market_cap is not None
-        and market_cap > 0
-        and quote_as_of
-        and flow_as_of == quote_as_of
+        if fcf is not None and market_cap is not None and market_cap > 0 and quote_as_of
         else None
     )
     capex_to_cfo = (
@@ -706,7 +718,7 @@ def cash_flow_gate(
         or capex is None
         or not source_list
         or not flow_as_of
-        or not _official(source_list)
+        or not _official(source_list, allow_statement_mirror=True)
     ):
         return {
             "status": "incomplete",
@@ -741,6 +753,25 @@ def cash_flow_gate(
             "cash_generation_redline": "breached",
             "capex_redline": "not_triggered",
             "cd_capex_review": {"status": "not_applicable"},
+            "sources": source_list,
+            "as_of": flow_as_of,
+            "quote_as_of": quote_as_of,
+        }
+    elif capex > cfo and not framework:
+        return {
+            "status": "incomplete",
+            "action_eligible": False,
+            "reason_code": "framework_required_for_capex_review",
+            "framework": framework,
+            "ttm_cfo": cfo,
+            "ttm_capex": capex,
+            "ttm_cash_dividends": dividends,
+            "fcf": fcf,
+            "fcf_yield": fcf_yield,
+            "capex_to_cfo": capex_to_cfo,
+            "cash_generation_redline": "clear",
+            "capex_redline": "review_required",
+            "cd_capex_review": {"status": "incomplete"},
             "sources": source_list,
             "as_of": flow_as_of,
             "quote_as_of": quote_as_of,

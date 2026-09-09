@@ -11,12 +11,12 @@ compatibility: Reads this Skill's rubric and checks supplied report text.
 
 独立合规检查层。在投研分析完成后调用，验证强制步骤执行情况和数据完整性。
 
-> **能力边界**：QA PASS 仅代表报告文本符合流程规则，不证明外部数据真实、周期判断正确、评分已校准或策略具有投资有效性；不得把 `COMPLIANT` 表述为“投资结论可靠/可直接交易”。
+> **能力边界**：QA PASS 仅代表报告文本符合流程规则，不证明外部数据真实、周期判断正确、评分已校准或策略具有投资有效性；不得把 `COMPLIANT` 表述为“投资结论可靠/可直接交易”。QA必须由宿主真正独立调用；生成研究报告的同一模型自行阅读 rubric、手工输出检查表不算独立调用，应返回 `SKIP`/“QA未执行”。
 
 ## 调用前提
 
 必须已有完整 a-stock-research 分析输出正文，并以正文直接传入或提供当前宿主可读的**不可变快照**。文件输入必须使用本轮唯一版本路径；宿主在 QA 开始前记录内容哈希，并在形成 verdict 前再次核对。QA 开始后不得覆写该路径。QA verdict 仅适用于该快照；正文发生任何修订时必须生成新快照并重新执行 QA，不得沿用旧 verdict。
-如缺少完整正文、只提供摘要/修订说明、路径不可读或工具异常，直接返回 `verdict: INVALID_RUN` 并说明缺失项；不得返回 `NON_COMPLIANT`，也不得把该次运行计入报告合规结果。
+如缺少完整正文、只提供摘要/修订说明、路径不可读或工具异常，直接返回 `verdict: INVALID_RUN` 并说明缺失项；不得返回 `NON_COMPLIANT`，也不得把该次运行计入报告合规结果。QA输出后，宿主还必须验证最终交付正文（不含固定verdict元数据行）的SHA-256与QA输入哈希一致；不一致时旧verdict立即失效，必须对新快照重新执行。
 当前仅支持已有的 a-stock-research rubric；其他类型返回 `SKIP`。
 
 ## 执行步骤
@@ -71,7 +71,10 @@ NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
 **Skill type**: <skill_type>
 **股票**: <代码 + 名称，如可从输出中提取>
 **检查时间**: <今日日期>
-**整体 verdict**: COMPLIANT | PARTIAL | NON_COMPLIANT | INVALID_RUN
+**Process verdict**: COMPLIANT | PARTIAL | NON_COMPLIANT | INVALID_RUN
+**Data status**: COMPLETE | INCOMPLETE
+**Decision status**: FORMED | NOT_FORMED
+**Input SHA-256**: <hash>
 
 ### 检查明细
 
@@ -82,7 +85,7 @@ NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
 
 ### 结论
 
-<如果 COMPLIANT>：分析流程合规，所有强制步骤均已执行。
+<如果 COMPLIANT>：报告文本流程合规；这不代表数据完整、事实真实或建议可交易。
 <如果 PARTIAL>：存在 Minor 问题，不影响分析结论可用性，建议下次修正。
 <如果 NON_COMPLIANT>：存在以下问题需在报告首部置顶警告：
   - [FAIL 项列表，各一句说明]
@@ -92,6 +95,8 @@ NON_COMPLIANT = 有任意 Critical/Important 级别 FAIL
 ## 注意事项
 
 - 本 skill **不修改**原始分析报告，只输出检查报告
+- `Data status` 根据正文中的 gate/关键字段状态汇总；`Decision status` 根据评级/矩阵是否形成汇总，两者不影响按 rubric 级别计算的 Process verdict
+- 正式PDF作为关键证据时，检查正文是否写明与首页一致的文件标题、公告日期和发布主体；只有搜索摘要或模糊“正式材料”时按 rubric 失败
 - 本 skill **不发表投资意见**，只判断流程合规性
 - 检查结果基于报告文本，无法核验外部数据源的实际准确性
   （如 fetcher 数据本身是否正确，不在本 skill 职责范围内）

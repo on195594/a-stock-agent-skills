@@ -33,6 +33,9 @@ def test_qa_verdict_is_bound_to_an_immutable_report_snapshot() -> None:
     assert "新快照" in qa_skill and "重新执行 QA" in qa_skill
     assert "内容哈希" in qa_skill
     assert "再次核对" in qa_skill
+    assert "SHA-256" in qa_skill
+    assert "最终交付正文" in qa_skill
+    assert "同一模型" in qa_skill and "不算独立调用" in qa_skill
 
 
 def test_held_stock_route_hard_stops_research_work() -> None:
@@ -54,6 +57,15 @@ def test_standalone_smoke_uses_isolated_python() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_qa_separates_process_data_and_decision_status() -> None:
+    qa_skill = (ROOT / "skills/a-stock-qa/SKILL.md").read_text(encoding="utf-8")
+    research = (ROOT / "skills/a-stock-research/SKILL.md").read_text(encoding="utf-8")
+
+    for marker in ("Process verdict", "Data status", "Decision status"):
+        assert marker in qa_skill
+    assert "不代表数据完整、事实真实或建议可交易" in research
+
+
 def test_research_routing_and_checklist_rubric_match_research_skill() -> None:
     rubric = (
         ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
@@ -64,6 +76,7 @@ def test_research_routing_and_checklist_rubric_match_research_skill() -> None:
     )
 
     assert "商业银行→B" in rubric
+    assert "元器件/精密电子制造→A" in rubric
     assert "保险/券商/证券→不适用量化框架" in rubric
     assert "所有 A-F 量化框架" in rubric
     assert "B/D/E 框架不需要 checklist" not in rubric
@@ -112,6 +125,7 @@ def test_second_investment_review_fail_closed_contract() -> None:
     assert "只输出观察/试探/标准阶段标签" in research
     assert "industry_status=stale_cache" in research
     assert "关键估值能力与最新财报核验" in rubric
+    assert "正式来源身份核验" in rubric
     assert "银行核心数据完整性" in rubric
     assert "QA PASS 仅代表报告文本符合流程规则" in qa_skill
 
@@ -191,7 +205,7 @@ def test_research_qa_and_report_contract_share_incomplete_semantics() -> None:
     assert "无合法原因" in rubric
     assert "若基本面评分完整，仍必须输出配置评级" in research
     assert "基本面小计、配置评级、时机评级、综合分和矩阵均标为 `not_formed`" in rubric
-    assert "配置评级仍必须输出，时机评级写 `not_formed`" in report
+    assert "P1" in report and "保留完整的基本面小计和配置评级" in report
     assert "综合分与仓位建议均明确写 `not_formed`" in report
 
 
@@ -211,6 +225,9 @@ def test_fundamentals_hit_minimum_data_card_contract_is_pinned() -> None:
             "fields.revenue_yoy",
             "fields.net_profit_yoy",
             "valuation_compatibility",
+            "pe_ttm_true",
+            "peg_ttm",
+            "data_completeness",
         ):
             assert field in text
         assert "null_reasons" in text

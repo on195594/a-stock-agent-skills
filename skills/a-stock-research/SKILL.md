@@ -60,7 +60,7 @@ a-stock-cache check <股票代码>
 
 输出状态码处理：
 - `ANALYSIS_HIT`：直接输出今日缓存结论并附注“[来自今日缓存]”，**终止流程**；不得加载完整流程、继续搜索、评分、写缓存或运行 QA。
-- `FUNDAMENTALS_HIT`：复用缓存，只补异动、治理/政策与外部集中风险；B银行另补 NIM、不良率、拨备覆盖率。**B框架三项核心数据全缺**时必须 `scoring_status=incomplete`，基本面总分、配置评级、时机评级、综合总分和仓位矩阵均输出 `not_formed`。静态PE（`pe_static`；`pe_ttm` 仅为 deprecated 兼容别名）不得用于 PEG；实时价不得重复搜索。
+- `FUNDAMENTALS_HIT`：复用缓存，只补异动、治理/政策、外部集中风险与 P0 正式证据；B银行另补 NIM、不良率、拨备覆盖率。P0 只能由公司、交易所或证监会正式文件补齐，并通过本轮 `score-fundamentals` overrides 传入，不得用 TuShare 或“未搜到”判 clear。**B框架三项核心数据全缺**时必须 `scoring_status=incomplete`，基本面总分、配置评级、时机评级、综合总分和仓位矩阵均输出 `not_formed`。静态PE（`pe_static`；`pe_ttm` 仅为 deprecated 兼容别名）不得用于 PEG；盈利 F 只使用 `pe_ttm_true`、`net_profit_ttm_yoy` 与 `peg_ttm`；实时价不得重复搜索。
 - `FULL_MISS`：读取[完整投研执行流](references/research-execution-flow.md)并执行全部适用步骤。
 
 **所有量化框架的数据质量门仍在主入口生效**：
@@ -71,9 +71,9 @@ a-stock-cache check <股票代码>
 
 ### FUNDAMENTALS_HIT 最小数据卡
 
-命中后必须先从同一份 `check` JSON 展示：当前价/quote as-of/来源、`price_change_5d`、`pe_static`/`pe_percentile_5y`、`pb`/`bps`及各自报告期、`dividend_yield`/`dps`、`latest_report_snapshot.report_period`、`fields.revenue_yoy`、`fields.net_profit_yoy`、`valuation_compatibility`、`scoring_status`、`timing_status` 与缺失原因。顶层字段无值时展示 `missing` 及 `null_reasons`；nested snapshot 字段无值时展示其自身 `status`，不得因正文未提到就把已取得字段误判为缺失。
+命中后必须先从同一份 `check` JSON 展示：当前价/quote as-of/来源、`price_change_5d`、`pe_static`/`pe_percentile_5y`、真实 `pe_ttm_true`/`net_profit_ttm_yoy`/`peg_ttm`、`pb`/`bps`及各自报告期、`dividend_yield`/`dps`、`latest_report_snapshot.report_period`、`fields.revenue_yoy`、`fields.net_profit_yoy`、`valuation_compatibility`、`_decision_meta.scoring_status`、`_decision_meta.timing_status`、`_decision_meta.data_completeness` 与缺失原因。`not_evaluated` 表示尚未执行确定性 scorer，不得写成 complete。顶层字段无值时展示 `missing` 及 `null_reasons`；nested snapshot 字段无值时展示其自身 `status`，不得把 gate dict 非空写成“全部字段完整”。
 
-`valuation_compatibility` 仅控制择时：`timing_eligible=false` 时 `timing_status=incomplete`，停止时机评级、综合分和仓位矩阵；若基本面评分完整，仍必须输出配置评级。旧缓存没有该字段时按 `reason_code=legacy_field_absent` 处理为 timing incomplete；不得在读取时重算、不得写回。只有基本面必需输入缺失或 latest-report 基本面冲突才能令 `scoring_status=incomplete`，此时基本面总分、配置评级、时机评级、综合分和仓位矩阵均明确输出 `not_formed`。
+`valuation_compatibility` 按框架控制择时：同一报告期数值冲突且 `timing_eligible=false` 时停止时机评级、综合分和仓位矩阵；不同报告期正常更新为 `latest_report_update`，只令 `pb_percentile_eligible=false`，仅阻断实际依赖 PB 历史分位的 B 与 C成长分支，不得阻断 A/E/F 的 PE、PS 或 PEG。若基本面评分完整，仍必须输出配置评级。旧缓存没有该字段时按 `reason_code=legacy_field_absent` 处理为相应 PB 择时 incomplete；不得在读取时重算、不得写回。
 
 ## 缓存写入边界
 
@@ -87,7 +87,7 @@ a-stock-cache check <股票代码>
 
 - 格雷厄姆门：EPS_TTM≤0 跳过；B用 PB<1.0；F用 PS分位+PEG；A 的警戒线为格雷厄姆数×2，E为×3，C/D仅作参考；C成长分支（派息率<40%）主轴改为PB历史分位。
 - 5日内涨停/连板或3日涨幅>15%即异动股：市场情绪=0，再追加-3，时机评级上限★（≤12/20），且必须置顶追高风险；不得在矩阵后重复处罚。政策压制须置顶“政策逆风”。
-- 行业路由：商业银行→B；能源/资源→C；水电/电网/水务/燃气/高速→D；消费→E；科技/互联网→F；其余→A。保险/券商/证券、亏损 Biotech、公募REITs不适用量化框架，只输出定性路线并终止评分/矩阵，不调用 `set-analysis`。混合业务按最近财年主营占比>50%路由，恰好50%的创新药+仿制药选A；无法判定时请用户确认。
+- 行业路由：商业银行→B；能源/资源→C；水电/电网/水务/燃气/高速→D；消费→E；半导体/软件/AI/互联网平台/信创/新能源设备→F；其余→A。**EMS、ODM、电子组装、连接器、线束、声学器件、元器件和精密电子制造默认 A**，不得只凭“科技”知名度路由 F。保险/券商/证券、亏损 Biotech、公募REITs不适用量化框架，只输出定性路线并终止评分/矩阵，不调用 `set-analysis`。混合业务按最近财年主营占比>50%路由，恰好50%的创新药+仿制药选A；无法判定时请用户确认。
 
 ## 第1.5步：周期位置判断（C/D/B框架必做，其余可选）
 
@@ -111,9 +111,10 @@ C/D/B 评分前必须判断周期位置；C还须核对动态变量、多业务�
 | C成长（派息率<40%） | PB低于近10年40%分位且周期底部/上行 |
 | D | 股息率相对国债溢价>200bps |
 | E | PEG<1，或PE低于近5年40%分位 |
-| F | PS低于近5年40%分位；盈利时PEG<1.5 |
+| F盈利 | 真实TTM PEG<1.5 |
+| F亏损 | PS低于近5年40%分位；现金跑道/稀释模型落地前仅定性观察，不形成买入矩阵 |
 
-A/E/F 使用5年分位时**不得用10年分位替代5年分位**；E/F PEG 必须使用真实TTM盈利与可复核增长，静态 `pe_static`/兼容 `pe_ttm` 不得代替；F必须有同口径 `ps_ttm`/`ps_percentile_5y`。证据完整且满足信号记15，完整但不满足时**估值项记0/15**；任一所需分位、PS、真实PEG、报告期或交叉估值缺失/冲突时，估值项进入 `incomplete`，不得输出时机评级、综合总分或矩阵。
+A/E/F 使用5年分位时**不得用10年分位替代5年分位**；E/F PEG 必须使用真实TTM盈利与可复核增长，静态 `pe_static`/兼容 `pe_ttm` 不得代替；盈利 F 使用 `peg_ttm`，PS仅作交叉参考。亏损 F 必须有同口径 `ps_ttm`/`ps_percentile_5y`，但在现金跑道/稀释风险规则落地前不得仅凭低PS形成动作。证据完整且满足适用分支信号记15，完整但不满足时**估值项记0/15**；任一所需分位、PS、真实PEG、报告期或交叉估值缺失/冲突时，估值项进入 `incomplete`，不得输出时机评级、综合总分或矩阵。
 
 C成长分支还须核验至少一个前瞻/周期归一化指标；与PB方向冲突时输出 `估值冲突[...]`，该项不得记0/15，`set-analysis` 不传分。D溢价<150bps时择时上限10/20。历史分位<5%时必须排除ROE/盈利中枢结构性下移后才能解释为低估。
 
@@ -133,7 +134,7 @@ C成长分支还须核验至少一个前瞻/周期归一化指标；与PB方向�
 
 ## 输出格式
 
-报告必须按标准评估卡输出基本信息、估值/周期、基本面、红线、择时、双轨评级、唯一仓位建议、防韭菜与操作建议；多股使用统一横向对比。完整模块顺序、证据标签、持有期限要求和操作建议禁止条款见[报告与操作建议合同](references/report-contract.md)。
+默认报告按五段标准评估卡输出：结论语义、最小数据卡、基本面/估值、P0—P2门、唯一动作与复核条件；用户明确要求详细审计时再展开原12模块。P3对未持仓研究只写“不适用”。多股使用统一横向对比。证据标签、持有期限要求和操作建议禁止条款见[报告与操作建议合同](references/report-contract.md)。
 
 主文件中的数据完整性门、评分公式、唯一操作出口和 W1 写入授权始终优先；reference 不得形成第二套评分或动作。
 
@@ -143,15 +144,14 @@ C成长分支还须核验至少一个前瞻/周期归一化指标；与PB方向�
 
 完整分析报告输出完成后，先将正文冻结为**不可变快照**：优先直接按值传入；若使用文件，默认写入宿主按**本轮唯一临时目录**生成的版本路径，不得仅为一次报告新建 durable project，并记录内容哈希，QA 返回前不得覆写。任何正文修订都必须生成新快照并重新执行 QA，旧 verdict 只适用于旧快照。随后通过当前宿主的 Skill discovery/invocation 调用
 `a-stock-qa`，传入 `skill_type=a-stock-research` 和该完整报告快照。宿主无法发现或执行
-该 Skill 时，明确标记“QA 未执行”及原因；不得把未执行伪装为通过，也不得改用
-客户端专属命令或子代理名称。
+该 Skill 时，明确标记“QA 未执行”及原因；**同一模型自行阅读 rubric、手工生成 QA 表不算独立 Skill 调用**，不得把未执行伪装为通过，也不得改用客户端专属命令或子代理名称。
 
 异步宿主必须依赖完成通知，不得轮询 QA 状态，不得用 `sleep` 等待，也不得在 QA 运行期间继续修改或补充其输入快照。**QA verdict 返回前不得向用户交付完整报告正文**；只能发送简短进度，最终报告在 verdict 合并后一次性交付。
 
-QA 返回后，冻结正文仍不得覆写。下方规定的 verdict 标记属于交付元数据：需要文件交付时，从冻结正文生成新的交付副本并只追加对应的固定标记；任何其他正文变化都必须成为新快照并重新 QA。
+QA 返回后，冻结正文仍不得覆写。交付前必须再次计算正文哈希并与 QA 输入哈希逐字节一致；摘要、翻译、删节或格式整理都属于正文变化，必须生成新快照并重新 QA。下方规定的 verdict 标记属于交付元数据：需要文件交付时，从冻结正文生成新的交付副本并只追加对应的固定标记。
 
 **根据 verdict 处理**：
-- COMPLIANT → 在报告末尾追加一行：`✓ a-stock-qa 合规检查通过`
+- COMPLIANT → 在报告末尾追加一行：`✓ a-stock-qa 文本流程检查通过（不代表数据完整、事实真实或建议可交易）`
 - PARTIAL → 在报告末尾追加：`⚠️ a-stock-qa Minor问题：[FAIL检查项及说明（来自QA明细表）]`
 - NON_COMPLIANT → **在报告首部置顶警告**（重新输出报告开头）：`⛔ a-stock-qa：以下步骤存在合规问题，报告可信度降低：[FAIL检查项及说明]`
 - INVALID_RUN → 在报告末尾追加：`⚠️ a-stock-qa 输入无效，未形成合规结论：[原因]`；不得表述为报告不合规或合规通过
@@ -163,6 +163,6 @@ changelog。投资规则变更仍须独立 dated spec 和用户直接授权。
 
 ## P0-P3 硬门顺序（2026-09-07）
 
-量化评分前依次核验 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`；P0/P2 为 `blocked`/`incomplete`/`review_required` 时对完整评分 fail-closed，P1 则仅允许机械基本面诊断展示，必须将 timing/估值矩阵标为 `incomplete`/`not_formed`，不得让 PE/PB/PS 历史低分位形成买入或加仓资格。B/证券/保险仅在有正式规则依据时将 P2 标为 `not_applicable`；C/D 的 Capex>CFO 必须完成周期、资本开支和现金分红覆盖专项。
+量化评分前依次核验 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`；P0/P2 为 `blocked`/`incomplete`/`review_required` 时 `scoring_status=incomplete` 并对完整评分 fail-closed。P1 未通过时仍执行确定性基本面评分并保留 subtotal/配置评级，只将 `timing_status=incomplete`、时机/综合分/矩阵标为 `not_formed`，不得让 PE/PB/PS 历史低分位形成买入或加仓资格。B/证券/保险仅在有正式规则依据时将 P2 标为 `not_applicable`；C/D 的 Capex>CFO 必须完成周期、资本开支和现金分红覆盖专项。
 
 持仓监控只冻结新增买入、Tier1 后补仓和 C/D 加仓，不把四门红旗自动改写为清仓。P3 仅包装持仓实际 `stop_loss_20` 第二档：有效全市场跌停数严格 `>500` 时只延迟一次24小时；快照、报价、来源、as-of 或交易状态缺失即 `incomplete`，停牌/一字跌停为 `untradeable`，不得伪造成交或输出股数。

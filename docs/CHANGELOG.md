@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-09 (repository candidate; not deployed)
+
+- Wired existing TuShare statement history into P1 TTM ROE/five-year inputs and P2 TTM CFO/Capex/FCF without adding a provider or database schema.
+- Added true TTM profit, PE and PEG fields plus read-only decision/data-completeness metadata to `check` output.
+- Treated newer-report BPS as a normal update and scoped PB-percentile incompatibility to frameworks that actually use PB.
+- Routed EMS/ODM, components and precision electronics manufacturing to A instead of F; clarified profitable-F PEG and loss-making-F PS branches.
+- Preserved fundamental subtotal/configuration rating when only P1 blocks timing, compacted the default report, and made QA self-invocation/hash/source-identity limits explicit.
+
 ## 2026-09-07
 
 - Added pure functional P0–P3 risk control gates (`risk_gates.py`) evaluated before valuation scoring and holding trade proposals.

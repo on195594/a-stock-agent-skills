@@ -25,12 +25,12 @@ a-stock-cache check <股票代码>
 输出状态码处理：
 - `ANALYSIS_HIT`：今日分析结论已缓存，直接输出结论，附注"[来自今日缓存]"，**终止流程**
 - `FUNDAMENTALS_HIT`：基本面有缓存，直接使用缓存数据：
-    - **以下字段从缓存读取，跳过搜索**：静态PE（`pe_static`；旧字段 `pe_ttm` 仅为 deprecated 兼容别名，不能作为真正 PE_TTM 用于 PEG）、PB、ROE、净利润增速、负债率、股息率、每股分红（dps）、PE历史5年分位（`pe_percentile_5y`）、PE历史10年分位、PB历史10年分位、近5个交易日涨跌（`price_change_5d`）、PS_TTM（`ps_ttm`）、PS历史5年分位（`ps_percentile_5y`）、最新中报/季报方向快照（`latest_report_snapshot`）、10年期国债收益率、流通比、毛利率、收入增速、流动比率、每股经营现金流、基本每股收益、每股净资产（bps）
+    - **以下字段从缓存读取，跳过搜索**：静态PE（`pe_static`；旧字段 `pe_ttm` 仅为 deprecated 兼容别名）、真实 `pe_ttm_true`、`net_profit_ttm`、`net_profit_ttm_yoy`、`peg_ttm`、总市值、PB、ROE、净利润增速、负债率、股息率、每股分红（dps）、PE历史5年分位、PE历史10年分位、PB历史10年分位、近5个交易日涨跌、PS_TTM及其5年分位、最新中报/季报方向快照、10年期国债收益率、流通比、毛利率、收入增速、流动比率、每股经营现金流、基本每股收益、每股净资产（bps）
     - **⚠️ B银行框架必须补搜（AKShare 无此字段，不可跳过）**：净息差（nim）、不良贷款率（npl_ratio）、拨备覆盖率（provision_coverage）。保险/券商不进入 B 框架，只做定性摘要后终止量化评分。
     - **⚠️ B框架银行 WebSearch 补搜失败降级规则**（仅适用净息差/不良率/拨备三字段）：
       - 单字段缺失：该维度记0分（净息差→0/10；不良率→0/15；拨备覆盖率→0/10），并在输出格式第5项前标注"⚠️ B框架[字段名]数据缺失，对应维度0分，基本面总分可靠性受限"
       - 三字段全缺：报告首部置顶"⚠️ B框架核心数据不可获取，本次评估结果不适用于投资决策，须补充数据后重新执行（建议直接查阅[公司名]最近年报或银行业监管信息披露页）"；**B框架三项核心数据全缺时必须 `scoring_status=incomplete`，停止基本面总分、时机评级、综合总分和仓位矩阵，不得把三个0分包装成完整结果**
-    - **只补缓存缺口**：异动、治理/政策与外部集中风险；B银行框架另补净息差/不良率/拨备覆盖率。实时价格已由 fetcher 获取，不得用 WebSearch 重新获取价格
+    - **只补缓存缺口**：异动、治理/政策、外部集中风险与 P0 正式证据；B银行框架另补净息差/不良率/拨备覆盖率。P0 正式证据可作为本轮 `score-fundamentals` overrides，不在读取时回填缓存。实时价格已由 fetcher 获取，不得用 WebSearch 重新获取价格
 - `FULL_MISS`：完全未命中，执行下方完整分析流程
 
 **⚠️ 股息率交叉验证（仅 FULL_MISS 必做；FUNDAMENTALS_HIT 直接信任缓存 dps，跳过本节）**：
@@ -43,7 +43,7 @@ a-stock-cache check <股票代码>
 **⚠️ 数据口径标注（所有框架必做）**：
 - ROE、NIM、净利增速等财务指标必须标注来源报告期，格式：`ROE 13.44%（2025年报）`
 - 若缓存中 `data_period` 字段早于上一个完整年报，前置警告：「⚠️ 数据可能已过期，建议补搜最新年报」
-- PB 必须使用当前已验证股价 ÷ 与历史 PB 分位相同报告期/复权口径的 BPS 计算，并同时列出股价时点、BPS 报告期和公式。若报告列示 PB 与重算值相差超过2%，视为口径冲突：PB、PB分位和择时估值均标记不可用，停止输出时机总分、综合总分和仓位矩阵，不得用第三方不同报告期 PB 继续评分。
+- PB 同时展示年度历史分位口径与最新报告 BPS 重算值。若两者报告期不同，记 `latest_report_update`：最新 PB 为当前展示口径，年度 PB 只保留为历史序列锚点，`pb_percentile_eligible=false`；仅实际依赖 PB 历史分位的 B/C成长分支停止该估值项，A/E/F 不受影响。只有同一报告期 BPS 重算差异超过2%才是 `same_period_value_mismatch`，此时 PB 相关择时 fail-closed。
 
 **⚠️ 最新中报/季报冲突门（所有量化框架必做）**：当前结构化财务缓存以完整年报口径为主。先读取非评分 `latest_report_snapshot` 核验年报后是否已披露更新的中报/季报；如有，至少核对收入、扣非净利润、ROE/净资产及对应框架核心变量的方向。快照字段缺失时再查公司正式披露，不得把缺失方向补成“无冲突”。若新一期与缓存年度趋势方向冲突，或无法取得同口径数据完成核验，则 `scoring_status=incomplete`，停止配置评级、时机评级、综合总分和仓位矩阵；不得用单季利润机械年化替代TTM，也不得把“年报仍在TTL内”视为最新财务状态。
 
@@ -88,6 +88,6 @@ JSON数据结构示例：
 
 ## P0-P2 JSON 门合同
 
-新版 payload 可包含 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`。每个门必须保留 `status`、`action_eligible`、稳定 `reason_code`、`sources`、`as_of` 和适用报告期；P0 还必须保留交易所/板块、`rule_version` 与四个子门。旧缓存没有门字段时按 `legacy_field_absent` 处理为不具备买入资格，读取不得回填。
+新版 payload 可包含 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`。每个门必须保留 `status`、`action_eligible`、稳定 `reason_code`、`sources`、`as_of` 和适用报告期；P0 还必须保留交易所/板块、`rule_version` 与四个子门。`company-filed statement mirror` 仅可满足 P1/P2 数值来源门，不能充当 P0 的交易所、证监会或公司正式文件。旧缓存没有门字段时按 `legacy_field_absent` 处理为不具备买入资格，读取不得回填。`check` 额外输出只读 `_decision_meta`；`not_evaluated` 表示尚未运行 scorer，`data_completeness` 必须把普通字段与完整 gate 分开计数。
 
-P1 使用同口径最新 TTM ROE 与最近五个完整年度均值，负 ROE 无条件阻断，保留率严格低于 0.75 才阻断。P2 只使用合并现金流量表 CFO 与“购建固定资产、无形资产和其他长期资产支付的现金”计算 `FCF=CFO-Capex`；金融框架可经正式依据标记 `not_applicable`，C/D 的 Capex>CFO 只能进入有证据的周期专项复核。
+P1 使用同口径最新 TTM ROE 与最近五个完整年度均值，负 ROE无条件取消历史估值动作资格，保留率严格低于0.75同样处理；P1 不得清空已完整形成的基本面 subtotal/配置评级，只令 `timing_status=incomplete`。P2 只使用合并现金流量表 CFO 与“购建固定资产、无形资产和其他长期资产支付的现金”计算 `FCF=CFO-Capex`；财报 as-of 与行情 quote as-of 分别保留，FCF Yield 使用 quote as-of 的总市值，不要求财报公告时点等于行情时点。金融框架可经正式依据标记 `not_applicable`，C/D 的 Capex>CFO 只能进入有证据的周期专项复核。

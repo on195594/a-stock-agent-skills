@@ -14,7 +14,14 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache, commands_holdings, domain, schema, store
+from a_stock_agent_runtime import (
+    cache,
+    commands_analysis,
+    commands_holdings,
+    domain,
+    schema,
+    store,
+)
 from tests.helpers import record_valid_quote, set_valid_fundamentals
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -166,6 +173,87 @@ def test_cmd_check_fundamentals_hit(capsys):
     out = capsys.readouterr().out
     assert out.startswith("FUNDAMENTALS_HIT")
     assert "601318" in out
+
+
+def test_cmd_check_exposes_decision_and_leaf_completeness(capsys):
+    set_valid_fundamentals("002475", "立讯精密", "元器件", {"roe_3y_avg": 20})
+
+    cache.cmd_check(["002475"])
+
+    lines = capsys.readouterr().out.splitlines()
+    payload = json.loads("\n".join(lines[1:]))
+    meta = payload["_decision_meta"]
+    assert meta["framework_candidate"] == "A通用"
+    assert meta["scoring_status"] == "incomplete"
+    assert meta["timing_status"] == "incomplete"
+    assert meta["action_eligible"] is False
+    assert meta["data_completeness"] == {
+        "top_level_present": 1,
+        "top_level_total": 1,
+        "risk_gates_complete": 0,
+        "risk_gates_total": 3,
+    }
+
+
+def test_newer_bps_only_blocks_pb_percentile_frameworks() -> None:
+    clear = {"status": "clear", "action_eligible": True, "reason_code": "clear"}
+    data = {
+        "regulatory_gate": clear,
+        "roe_structural_gate": clear,
+        "cash_flow_gate": clear,
+        "valuation_compatibility": {
+            "status": "latest_report_update",
+            "timing_eligible": True,
+            "pb_percentile_eligible": False,
+        },
+    }
+
+    general = commands_analysis._decision_meta(data, "元器件")
+    bank = commands_analysis._decision_meta(data, "银行")
+
+    assert general["timing_status"] == "not_evaluated"
+    assert bank["timing_status"] == "incomplete"
+    assert "valuation_compatibility:pb_percentile_ineligible" in bank["reason_codes"]
+
+    data["valuation_compatibility"] = {
+        "status": "incomplete",
+        "timing_eligible": False,
+        "pb_percentile_eligible": False,
+        "reason_code": "same_period_value_mismatch",
+    }
+    conflict = commands_analysis._decision_meta(data, "元器件")
+    assert conflict["timing_status"] == "incomplete"
+    assert (
+        "valuation_compatibility:same_period_value_mismatch"
+        in conflict["reason_codes"]
+    )
+
+
+def test_bank_decision_meta_normalizes_cash_flow_gate_to_not_applicable() -> None:
+    clear = {"status": "clear", "action_eligible": True, "reason_code": "clear"}
+    data = {
+        "regulatory_gate": clear,
+        "roe_structural_gate": clear,
+        "cash_flow_gate": {
+            "status": "blocked",
+            "action_eligible": False,
+            "reason_code": "cfo_non_positive",
+            "ttm_cfo": -1,
+            "ttm_capex": 0,
+            "sources": ["official annual report"],
+            "as_of": "2026-09-09",
+        },
+        "valuation_compatibility": {
+            "timing_eligible": True,
+            "pb_percentile_eligible": True,
+        },
+    }
+
+    meta = commands_analysis._decision_meta(data, "银行")
+
+    assert meta["scoring_status"] == "not_evaluated"
+    assert "cash_flow_gate:cfo_non_positive" not in meta["reason_codes"]
+    assert meta["data_completeness"]["risk_gates_complete"] == 3
 
 
 def test_cmd_check_fundamentals_expired_is_full_miss(capsys, monkeypatch):
@@ -631,6 +719,20 @@ def test_infer_framework_known_industry_is_confident():
     """industry 是真实值（哪怕落到默认A通用）时，confident 应为 True"""
     framework, confident = cache.infer_framework("煤炭开采")
     assert framework == "C资源"
+    assert confident is True
+
+
+@pytest.mark.parametrize("industry", ["元器件", "连接器", "精密制造", "电子组装"])
+def test_ems_and_precision_manufacturing_route_to_a(industry):
+    framework, confident = cache.infer_framework(industry)
+    assert framework == "A通用"
+    assert confident is True
+
+
+@pytest.mark.parametrize("industry", ["半导体", "软件服务", "互联网平台"])
+def test_product_and_platform_technology_still_route_to_f(industry):
+    framework, confident = cache.infer_framework(industry)
+    assert framework == "F科技"
     assert confident is True
 
 
@@ -1623,9 +1725,7 @@ def test_portfolio_risk_labels_explicit_account_weight(capsys, monkeypatch):
     assert "非账户总仓位" not in out
 
 
-def test_portfolio_risk_labels_partial_quote_weight_as_lower_bound(
-    capsys, monkeypatch
-):
+def test_portfolio_risk_labels_partial_quote_weight_as_lower_bound(capsys, monkeypatch):
     cache.cmd_add_holding(["600036", "45.0", "100", "--notes", "测试招行"])
     cache.cmd_add_holding(["600900", "25.0", "100", "--notes", "测试长电"])
     monkeypatch.setattr(
