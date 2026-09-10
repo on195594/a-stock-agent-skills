@@ -55,6 +55,19 @@ def test_level1_failure_snapshot_and_context_contract_is_bounded():
         assert marker in SKILL
 
 
+def test_daily_monitoring_has_a_hard_tool_call_budget():
+    for marker in (
+        "工具调用硬预算",
+        "解析 `monitor-snapshot` 前",
+        "不得为本任务额外调用 `holdings`、Wiki、Web 或子代理",
+        "父级一次并行批量",
+        "每个外部主题只取 1 个主来源",
+        "仅失败、不完整、过期或冲突的主题允许 1 次 fallback",
+        "默认不得启动研究子代理",
+    ):
+        assert marker in SKILL
+
+
 def test_decision_table_rule_ids_and_priorities_are_unique():
     rules = DECISIONS["rules"]
     assert DECISIONS["schema_version"] == 1
