@@ -15,8 +15,6 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      A_STOCK_LIB_SHA: "35bfaaeaf9a5434a39a09ee26b85f42c270f32a9"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,13 +25,4 @@ jobs:
           cache: pip
       - run: python -m pip install uv==0.11.14
       - run: uv sync --frozen
-      - name: Install current owner package
-        run: |
-          git init /tmp/a-stock-lib
-          git -C /tmp/a-stock-lib remote add origin https://github.com/on195594/a-stock-lib.git
-          git -C /tmp/a-stock-lib fetch --depth 1 origin "$A_STOCK_LIB_SHA"
-          git -C /tmp/a-stock-lib checkout --detach FETCH_HEAD
-          test "$(git -C /tmp/a-stock-lib rev-parse HEAD)" = "$A_STOCK_LIB_SHA"
-          printf 'a-stock-lib SHA: %s\n' "$A_STOCK_LIB_SHA"
-          uv pip install --python .venv/bin/python /tmp/a-stock-lib
-      - run: A_STOCK_LIB_SOURCE=/tmp/a-stock-lib bash scripts/check.sh
+      - run: bash scripts/check.sh

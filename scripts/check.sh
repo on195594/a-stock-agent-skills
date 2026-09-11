@@ -10,12 +10,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export RUFF_CACHE_DIR="${RUFF_CACHE_DIR:-/tmp/ruff_cache}"
 
-# --inexact keeps the externally provisioned a-stock-lib installed.  It is
-# deliberately not a declared dependency (the installer supplies it explicitly and
-# records its provenance), so a plain `uv sync --frozen` would uninstall it and
-# break every runtime import.
 if command -v uv >/dev/null 2>&1; then
-    uv sync --frozen --inexact
+    uv sync --frozen
     uv run pytest -q
     uv run ruff check .
     uv run python scripts/validate.py

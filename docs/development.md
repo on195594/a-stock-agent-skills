@@ -6,28 +6,27 @@ database, production credentials or the active client directories.
 
 ## Setup
 
-Requirements are Python 3.13+, `uv`, and an explicit `a-stock-lib` checkout or
-wheel. Install the locked development environment with:
+Requirements are Python 3.13+ and `uv`. Install the locked development
+environment with:
 
 ```bash
-uv sync --frozen --inexact
+uv sync --frozen
 ```
 
-`--inexact` is required, not cosmetic. `a-stock-lib` is deliberately not a
-declared dependency — the installer takes an explicit checkout or wheel and
-records its provenance — so it is absent from the lockfile and a plain
-`uv sync --frozen` uninstalls it, breaking every runtime import.
+The frozen lock includes the immutable `a-stock-lib` GitHub Release wheel and
+its SHA256. Source/wheel installer overrides are reserved for release-candidate
+checks.
 
-The source checkout is only needed when exercising the installer or the
-external prompt renderer. It must be passed explicitly; the project never
-guesses a sibling home-directory path. Tests locate it at `~/a-stock-lib` or at
-`A_STOCK_LIB_SOURCE`, and skip when it is not provisioned.
+An owner source checkout is only needed for release-candidate override checks or
+the external prompt renderer. It must be passed explicitly; the project never
+guesses a sibling home-directory path. Those tests locate it at `~/a-stock-lib`
+or `A_STOCK_LIB_SOURCE`, and skip when it is not provisioned.
 
 ## Validation matrix
 
 Run the smallest relevant check while iterating, then run the full automated
-matrix before committing. `scripts/check.sh` runs this matrix in one command;
-this repository has no git remote, so there is no hosted CI gate.
+matrix before committing. `scripts/check.sh` runs this matrix in one command and
+the hosted CI runs the same gate.
 
 ```bash
 uv run pytest -q
