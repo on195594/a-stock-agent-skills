@@ -12,8 +12,10 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The deployed `v0.1.11` runtime release (`0.1.11-996e552a3463`) uses
-`a-stock-lib==0.6.3`. It adds real TTM P1/P2 inputs and PE/PEG fields, scoped
+The deployed `v0.1.11` runtime release (`0.1.11-996e552a3463`) still uses
+`a-stock-lib==0.6.3`. The current repository candidate pins the immutable
+`a-stock-lib==0.6.4` GitHub Release wheel and its SHA256 in `uv.lock`. It adds
+real TTM P1/P2 inputs and PE/PEG fields, scoped
 PB/BPS compatibility, read-only decision metadata, corrected A/F routing and
 strict QA snapshot integrity without changing the database schema or W1 write
 boundary. All nine client Skill entries resolve directly to `skills/`.
@@ -33,22 +35,20 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 
 ## Install or update
 
-Requirements for `v0.1.11`: Python 3.13+, `uv`, and an explicit checkout or wheel for
-`a-stock-lib==0.6.3`. The installer itself uses only the Python
-standard library, so it can bootstrap the runtime:
+Requirements: Python 3.13+ and `uv`. The installer resolves the hash-pinned
+`a-stock-lib==0.6.4` Release wheel from project metadata:
 
 ```bash
 python3 scripts/install.py \
   --client all \
   --mode symlink \
-  --source "$PWD" \
-  --a-stock-lib-source /path/to/a-stock-lib
+  --source "$PWD"
 ```
 
-Use `--a-stock-lib-wheel /path/to/a-stock-lib.whl` instead when a validated
-wheel is available. Run the same command with `--dry-run` first when changing
-an existing client installation. `--mode copy` is available for clients that
-cannot discover symlinks.
+`--a-stock-lib-source` and `--a-stock-lib-wheel` are limited to release-candidate
+checks. Run the normal command with `--dry-run` first when changing an existing
+client installation. `--mode copy` is available for clients that cannot discover
+symlinks.
 
 The installer exposes these stable commands through `PATH`:
 
@@ -91,12 +91,11 @@ Run the automated test and validation gates with one command:
 bash scripts/check.sh
 ```
 
-It runs the individual checks below. Use `--inexact` whenever syncing by hand:
-`a-stock-lib` is deliberately absent from the lockfile, so a plain
-`uv sync --frozen` uninstalls it and breaks every runtime import.
+It runs the individual checks below. The frozen lock includes the immutable
+`a-stock-lib` Release wheel and hash.
 
 ```bash
-uv sync --frozen --inexact
+uv sync --frozen
 uv run pytest -q
 uv run ruff check .
 uv run python scripts/validate.py

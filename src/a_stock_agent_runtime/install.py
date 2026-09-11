@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import tomllib
+from urllib.parse import parse_qs, unquote, urlsplit
 
 
 CLIENT_ROOTS = {
@@ -22,7 +23,29 @@ CLIENT_ROOTS = {
 }
 SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
 CONSOLE_SCRIPTS = ("a-stock-cache", "a-stock-fetch", "a-stock-install")
-REQUIRED_A_STOCK_LIB_VERSION = "0.6.3"
+
+
+def _lib_release(source: Path) -> tuple[str, str, str]:
+    data = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))
+    prefix = "a-stock-lib @ "
+    requirement = next(
+        (
+            str(item)
+            for item in data["project"]["dependencies"]
+            if str(item).startswith(prefix)
+        ),
+        None,
+    )
+    if requirement is None:
+        raise RuntimeError("pyproject.toml must declare the a-stock-lib release wheel")
+    url = requirement.removeprefix(prefix)
+    parsed = urlsplit(url)
+    hashes = parse_qs(parsed.fragment).get("sha256", [])
+    filename = Path(unquote(parsed.path)).name
+    parts = filename.split("-")
+    if len(hashes) != 1 or len(hashes[0]) != 64 or len(parts) < 2:
+        raise RuntimeError("invalid a-stock-lib release wheel requirement")
+    return parts[1].replace("_", "-"), url, hashes[0]
 
 
 def _sha256(path: Path) -> str:
@@ -153,11 +176,12 @@ def _install_runtime(
     suite_wheel: Path,
 ) -> tuple[Path, str]:
     release = _release(source)
+    expected_version, release_url, release_hash = _lib_release(source)
     runtime_root = root / ".local" / "share" / "a-stock-agent" / "runtime" / release
     venv = runtime_root / "venv"
     runtime_root.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     subprocess.run(
-        [sys.executable, "-m", "venv", "--system-site-packages", str(venv)],
+        [sys.executable, "-m", "venv", str(venv)],
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -165,55 +189,53 @@ def _install_runtime(
     )
     python = venv / "bin" / "python"
     wheel = lib_wheel
-    wheel_hash = ""
-    wheel_display = ""
+    lib_version = expected_version
+    wheel_hash = release_hash
+    wheel_display = release_url
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     try:
         if lib_source is not None:
             temp_dir = tempfile.TemporaryDirectory(prefix="a-stock-lib-wheel-")
             wheel = _build_lib_wheel(lib_source, Path(temp_dir.name))
-        if wheel is None:
-            raise ValueError(
-                "one of --a-stock-lib-source or --a-stock-lib-wheel is required"
-            )
-        lib_version = wheel.name.split("-", 2)[1].replace("_", "-")
-        if lib_version != REQUIRED_A_STOCK_LIB_VERSION:
-            raise RuntimeError(
-                f"a-stock-lib version mismatch: expected {REQUIRED_A_STOCK_LIB_VERSION}, got {lib_version}"
-            )
-        artifact_dir = runtime_root / "artifacts"
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        artifact_wheel = artifact_dir / wheel.name
-        shutil.copy2(wheel, artifact_wheel)
-        wheel = artifact_wheel
-        wheel_hash = _sha256(wheel)
-        wheel_display = str(wheel)
         installer = shutil.which("uv")
         if installer is None:
             raise RuntimeError("uv is required for immutable runtime installation")
-        install_cmd = [
-            installer,
-            "pip",
-            "install",
-            "--python",
-            str(python),
-            "--no-deps",
-            "--force-reinstall",
-        ]
         subprocess.run(
-            [*install_cmd, str(wheel)],
+            [installer, "pip", "install", "--python", str(python), str(suite_wheel)],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
-        subprocess.run(
-            [*install_cmd, str(suite_wheel)],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        if wheel is not None:
+            lib_version = wheel.name.split("-", 2)[1].replace("_", "-")
+            if lib_version != expected_version:
+                raise RuntimeError(
+                    f"a-stock-lib version mismatch: expected {expected_version}, got {lib_version}"
+                )
+            artifact_dir = runtime_root / "artifacts"
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            artifact_wheel = artifact_dir / wheel.name
+            shutil.copy2(wheel, artifact_wheel)
+            wheel = artifact_wheel
+            wheel_hash = _sha256(wheel)
+            wheel_display = str(wheel)
+            subprocess.run(
+                [
+                    installer,
+                    "pip",
+                    "install",
+                    "--python",
+                    str(python),
+                    "--no-deps",
+                    "--force-reinstall",
+                    str(wheel),
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
@@ -232,7 +254,13 @@ def _install_runtime(
     metadata = {
         "name": "a-stock-lib",
         "version": lib_version,
-        "source_commit": _git_commit(lib_source) if lib_source else "wheel-input",
+        "source_commit": (
+            _git_commit(lib_source)
+            if lib_source
+            else "wheel-input"
+            if lib_wheel
+            else "release-artifact"
+        ),
         "wheel": wheel_display,
         "wheel_sha256": wheel_hash,
     }
@@ -272,9 +300,9 @@ def main(argv: list[str] | None = None) -> int:
     if not (source / "pyproject.toml").is_file():
         print(f"source is not a canonical suite: {source}", file=sys.stderr)
         return 2
-    if bool(args.a_stock_lib_source) == bool(args.a_stock_lib_wheel):
+    if args.a_stock_lib_source and args.a_stock_lib_wheel:
         print(
-            "exactly one of --a-stock-lib-source or --a-stock-lib-wheel is required",
+            "--a-stock-lib-source and --a-stock-lib-wheel are mutually exclusive",
             file=sys.stderr,
         )
         return 2
