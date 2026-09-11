@@ -200,8 +200,52 @@ def _install_runtime(
         installer = shutil.which("uv")
         if installer is None:
             raise RuntimeError("uv is required for immutable runtime installation")
+        requirements = runtime_root / "requirements.lock.txt"
         subprocess.run(
-            [installer, "pip", "install", "--python", str(python), str(suite_wheel)],
+            [
+                installer,
+                "export",
+                "--project",
+                str(source),
+                "--frozen",
+                "--no-dev",
+                "--no-emit-project",
+                "--format",
+                "requirements-txt",
+                "--output-file",
+                str(requirements),
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        subprocess.run(
+            [
+                installer,
+                "pip",
+                "install",
+                "--python",
+                str(python),
+                "--require-hashes",
+                "--requirements",
+                str(requirements),
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        subprocess.run(
+            [
+                installer,
+                "pip",
+                "install",
+                "--python",
+                str(python),
+                "--no-deps",
+                str(suite_wheel),
+            ],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
