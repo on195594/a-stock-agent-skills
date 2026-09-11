@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+import tomllib
 
 import pytest
 
@@ -109,6 +110,32 @@ def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
     assert metadata["wheel_sha256"] == (
         "14235b314b8af7304d72ee1d6a9754ee4034d64e637741fc7a5e2c8690228396"
     )
+    installed = json.loads(
+        subprocess.check_output(
+            [
+                str(runtime / "venv/bin/python"),
+                "-c",
+                (
+                    "import importlib.metadata as m,json; "
+                    "print(json.dumps({d.metadata['Name'].lower().replace('_','-'): "
+                    "d.version for d in m.distributions()}))"
+                ),
+            ],
+            text=True,
+        )
+    )
+    locked = {
+        package["name"].lower().replace("_", "-"): package["version"]
+        for package in tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))[
+            "package"
+        ]
+    }
+    mismatches = {
+        name: (version, locked[name])
+        for name, version in installed.items()
+        if name in locked and version != locked[name]
+    }
+    assert mismatches == {}
 
 
 @requires_lib_checkout
