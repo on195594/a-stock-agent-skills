@@ -4,8 +4,8 @@
 # Hosted CI and local development both call this script; keep it as the single
 # source of truth and keep docs/development.md's validation matrix in sync.
 #
-# Requires an `a-stock-lib` checkout or wheel.  Point A_STOCK_LIB_SOURCE at it when
-# it does not sit at ~/a-stock-lib; the installer tests skip when it is absent.
+# Optional source/wheel overrides are exercised only when A_STOCK_LIB_SOURCE points
+# to a checkout; those release-candidate tests skip when it is absent.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export RUFF_CACHE_DIR="${RUFF_CACHE_DIR:-/tmp/ruff_cache}"
