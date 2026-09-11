@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run every repository gate in one command.
 #
-# This repository has no git remote, so there is no hosted CI to be the source of
-# truth; this script is it.  Keep docs/development.md's validation matrix in sync.
+# Hosted CI and local development both call this script; keep it as the single
+# source of truth and keep docs/development.md's validation matrix in sync.
 #
 # Requires an `a-stock-lib` checkout or wheel.  Point A_STOCK_LIB_SOURCE at it when
 # it does not sit at ~/a-stock-lib; the installer tests skip when it is absent.

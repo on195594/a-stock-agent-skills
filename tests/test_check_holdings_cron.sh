@@ -70,7 +70,7 @@ if FAKE_OUTPUT='招商银行 🔴 已跌破止损线' bash "$ROOT/scripts/check-
 fi
 grep -Fq 'Telegram request failed' "$TMP/state/logs/check-holdings.log"
 
-if rg -n 'a-stock-tracker/\.env|\.claude/skills|cache\.py|python3' "$ROOT/scripts/check-holdings-cron.sh"; then
+if grep -En 'a-stock-tracker/\.env|\.claude/skills|cache\.py|python3' "$ROOT/scripts/check-holdings-cron.sh"; then
   echo 'legacy cron path found' >&2
   exit 1
 fi
