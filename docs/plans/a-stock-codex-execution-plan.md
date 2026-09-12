@@ -5,6 +5,9 @@
 > 独立审查：AGY，结论 `REQUEST_CHANGES`，conversation id `3b0a7973-57de-4b5e-ab92-2a7388a0181d`
 >
 > 本修订版只保留能直接降低规则漂移、跨仓耦合和不可复现安装风险的工作。未经单独授权，不改变生产数据库、cron、真实持仓、W1 状态、仓库设置或发布状态。
+>
+> **状态：已完成（2026-09-12）。** 最终跨仓独立验收结论为
+> `APPROVE_PLAN_COMPLETE`；实际落地证据与复盘见第 12 节。
 
 ## 0. 审查整改结论
 
@@ -534,19 +537,71 @@ expected_block_reason
 全部满足才可宣告完成：
 
 ```text
-[ ] a-stock-lib 默认分支仍为 master
-[ ] a-stock-agent-skills 默认分支仍为 main
-[ ] 无直接 push 默认分支、无 force push
-[ ] 每个 Phase 使用独立 PR，CI 与只读审查证据可追溯
-[ ] 一个业务规则只有一个 executable owner
-[ ] consumer 只依赖 public contract，不读取 owner 私有 cache
-[ ] 新机器可从不可变 artifact + frozen lock 复现
-[ ] Agent 不承担可确定计算
-[ ] report 不再充当 machine API
-[ ] release-only downstream compatibility gate 可重复执行
-[ ] 无生产数据库、cron、真实持仓或 W1 修改
-[ ] 无凭据进入仓库
-[ ] 原工作树中的既有未跟踪/未提交文件未被删除或覆盖
+[x] a-stock-lib 默认分支仍为 master
+[x] a-stock-agent-skills 默认分支仍为 main
+[x] 无直接 push 默认分支、无 force push
+[x] 每个 Phase 使用独立 PR，CI 与只读审查证据可追溯
+[x] 一个业务规则只有一个 executable owner
+[x] consumer 只依赖 public contract，不读取 owner 私有 cache
+[x] 新机器可从不可变 artifact + frozen lock 复现
+[x] Agent 不承担可确定计算
+[x] report 不再充当 machine API
+[x] release-only downstream compatibility gate 可重复执行
+[x] 无生产数据库、cron、真实持仓或 W1 修改
+[x] 无凭据进入仓库
+[x] 原工作树中的既有未跟踪/未提交文件未被删除或覆盖
 ```
 
 若任一项失败，报告具体 blocker、证据和最小下一步；不得用扩大重构、跳过测试或绕过默认分支保护来“完成”计划。
+
+---
+
+# 12. 实际落地与任务复盘（2026-09-12）
+
+## 12.1 最终状态
+
+- `a-stock-lib/master`：`9f669ffb2729063e8fa7d94e69ab835f7fef49e4`；
+- `a-stock-agent-skills/main`：`6078b8d73ff75e41728dea87c2cd4ad8e3194ae0`；
+- `a-stock-tracker/master`：`32590f8b71320f367a8d19830d1608da7d0f4f86`；
+- `a-stock-lib v0.7.0` wheel：
+  `sha256:7c4a16d452f34574584531bab6fe9d150f3cb844e5c9b2fe072295f6bb2ee385`；
+- 三个仓库的默认分支与远端一致，完整测试、静态检查、fresh frozen
+  install、随机 cwd import、Release wheel 下载与元数据检查均通过；
+- 最终跨仓只读验收：`APPROVE_PLAN_COMPLETE`。
+
+Phase 1-3 通过 `a-stock-lib` PR #1-#4、`a-stock-agent-skills` PR #2-#5
+和 `a-stock-tracker` PR #1-#2 落地；Phase 4-6 分别通过
+`a-stock-agent-skills` PR #6、#7、#8 落地。Phase 6 最终 reviewed head 为
+`69dab4051a3e5048ac80f158e6e1c2a4ccfb1d89`，merge commit 为
+`6078b8d73ff75e41728dea87c2cd4ad8e3194ae0`。行为 eval 的复现方式、
+隔离边界与单样本限制见 [`../agent-behavior-eval.md`](../agent-behavior-eval.md)。
+
+## 12.2 复盘
+
+**有效做法**
+
+1. 先固定 owner contract 和不可变 Release wheel，再迁移 consumer，避免了
+   两仓必须同步合并的脆弱窗口；回滚顺序保持 consumer-first。
+2. 所有开发都在短生命周期 worktree 和主题分支中完成；每个 reviewed head
+   均重新核对 CI、PR head 和独立审查结论，没有把“审查已启动”当成“审查通过”。
+3. Phase 6 从手写 trace validator 改为真实 Hermes capture 加离线 scorer；
+   capture 与 expected behavior 分离，CI 保持离线、确定性且无生产副作用。
+4. 对 prompt oracle leakage、空 provenance、宽松 tool descriptor 和无效
+   mutation coverage 的两轮审查意见都做了有界修复，并在新 exact head 上复审。
+
+**暴露的问题与修正**
+
+1. 初版行为 eval 同时生成 trace 和答案，属于自证式测试；修正为外部 Agent
+   observed artifact，并让 golden oracle 只存在于 evaluator/test 侧。
+2. provenance 不能只验证“像 SHA 的字符串”；修正为逐记录绑定实际
+   Hermes session/model/provider、capture source commit 和非空 Skill hash 集合。
+3. 缺少持仓、stale、missing、conflicted 必须各自拥有 fail-closed mutation；
+   不能以一个宽泛 data-quality case 代替关键分支覆盖。
+4. 组合验收命令隐藏了失败步骤；最终改为分仓、分 gate 运行并保存明确结论，
+   环境缺少 `python -m build` 时使用仓库已有 `uv build`，没有把工具缺失误报为代码失败。
+
+**保留边界**
+
+- 没有修改生产数据库、cron、真实持仓、W1 状态或凭据；
+- 不把一次 backend capture 宣称为模型稳定性证明；release candidate 仍需重捕获八个场景；
+- 预设 DDD 分层、大规模目录迁移和新 policy 仓库继续延后，没有为本计划新增无消费者抽象。

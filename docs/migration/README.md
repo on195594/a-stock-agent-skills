@@ -18,14 +18,17 @@ The per-milestone review packets live in the external Git repository
 [`docs/reviews/README.md`](../reviews/README.md) records its verified commit,
 manifest and recovery command.
 
-## Current state
+## Migration snapshot
 
-M0-M6 fixture and shadow validation is complete. M7 production cutover
-completed on 2026-08-09 with release tag `v0.1.0`; the redacted parent
-disposition is `PASS`. Subsequent maintenance releases up to `v0.1.11`
-(`0.1.11-da6a7e9c8f7d`) with `a-stock-lib==0.6.1` have deployed without
-database schema, configuration or crontab changes; see [`docs/operations.md`](../operations.md)
-and [`docs/CHANGELOG.md`](../CHANGELOG.md) for post-cutover operational records.
+This section is the migration-era snapshot through 2026-08-11, not the current
+runtime status. M0-M6 fixture and shadow validation is complete. M7 production
+cutover completed on 2026-08-09 with release tag `v0.1.0`; the redacted parent
+disposition is `PASS`. Maintenance releases through the snapshot's
+`0.1.11-da6a7e9c8f7d` used `a-stock-lib==0.6.1` and deployed without database
+schema, configuration or crontab changes. See
+[`docs/operations.md`](../operations.md) and
+[`docs/CHANGELOG.md`](../CHANGELOG.md) for the current runtime and later
+operational records.
 Rollback manifests remain outside the repository. M8 completed on 2026-08-11 when
 all nine active `a-stock-*` client entries were verified against the canonical repository
 and the superseded Skill directories were confirmed in the external archive.
