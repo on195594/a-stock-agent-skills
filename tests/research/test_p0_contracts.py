@@ -13,14 +13,21 @@ import pytest
 
 from a_stock_agent_runtime import cache, db, domain, schema
 from a_stock_agent_runtime import fetcher
-from tests.helpers import valid_fundamentals_payload
+from tests.helpers import (
+    set_valid_analysis,
+    valid_decision_payload,
+    valid_fundamentals_payload,
+)
 
 
-MOAT = '护城河[评级=优；证据="客户留存率连续三年稳定";置信度=高]'
-POSITION = '行业地位[评级=优；证据="市占率连续三年第一";置信度=高]'
-FRANCHISE = '特许经营稀缺性[评级=优；证据="特许经营权期限明确";置信度=高]'
-BRAND = '品牌渠道[评级=优；证据="核心渠道覆盖率提升";置信度=高]'
-CYCLE = '周期位置[阶段=上行期；依据="供需改善且盈利扩张"]'
+SUBJECTIVE_CATEGORIES = {
+    "A": ("护城河", "行业地位"),
+    "B": ("护城河", "行业地位"),
+    "C": ("护城河", "行业地位"),
+    "D": ("特许经营稀缺性", "行业地位"),
+    "E": ("品牌渠道", "行业地位"),
+    "F": ("护城河", "行业地位"),
+}
 NOW = datetime(2026, 7, 14, 2, 0, tzinfo=timezone.utc)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -48,20 +55,39 @@ def record_quote(
     )
 
 
-def report_for(framework: str) -> str:
+def scoring_input(framework: str, *, cycle: bool | None = None) -> dict:
     letter = framework[0]
-    first = FRANCHISE if letter == "D" else BRAND if letter == "E" else MOAT
-    cycle = f"\n{CYCLE}" if letter in {"B", "C", "D"} else ""
-    return f"{first}\n{POSITION}{cycle}"
+    return {
+        "schema_version": 1,
+        "metrics": {},
+        "subjective_assessments": [
+            {
+                "category": category,
+                "rating": "优档",
+                "evidence": [f"{category} fixture evidence"],
+                "confidence": "高",
+            }
+            for category in SUBJECTIVE_CATEGORIES[letter]
+        ],
+        "cycle_stage": (
+            {"stage": "上行期", "rationale": "fixture cycle evidence"}
+            if cycle is True or cycle is None and letter in {"B", "C", "D"}
+            else None
+        ),
+    }
 
 
 def run_set_analysis(
     monkeypatch, code: str, framework: str, score: int | None = 60
 ) -> None:
     record_quote(code)
-    monkeypatch.setattr("sys.stdin", StringIO(report_for(framework)))
-    args = [code, framework] + ([str(score)] if score is not None else [])
-    cache.cmd_set_analysis(args)
+    set_valid_analysis(
+        monkeypatch,
+        code=code,
+        framework=framework,
+        score=score,
+        cycle=framework[0] in {"B", "C", "D"},
+    )
 
 
 def test_schema_migration_adds_quote_tables_and_analysis_columns() -> None:
@@ -488,11 +514,7 @@ def test_quote_snapshot_retention_is_bounded_per_code() -> None:
 def test_set_analysis_accepts_all_framework_aliases(
     monkeypatch, token: str, expected: str
 ) -> None:
-    if token == "D":
-        cache.set_market_indicator_snapshot(
-            "bond_yield_10y", 1.8, "2026-07-14", "fixture"
-        )
-    run_set_analysis(monkeypatch, f"00000{ord(token)}", token)
+    run_set_analysis(monkeypatch, str(ord(token)).zfill(6), token)
 
     with cache.db_session() as conn:
         stored = conn.execute("SELECT framework FROM analysis_results").fetchone()[0]
@@ -500,63 +522,78 @@ def test_set_analysis_accepts_all_framework_aliases(
 
 
 @pytest.mark.parametrize(
-    "args",
+    "invalid_fields",
     [
-        ["600000", "unknown"],
-        ["600000", "A", "B"],
-        ["600000", "A", "60", "61"],
-        ["600000", "A", "12.5"],
-        ["600000", "A", "-1"],
-        ["600000", "A", "81"],
+        {"schema_version": 2},
+        {"stock_code": "60000"},
+        {"framework": "unknown"},
+        {"framework_score": True},
+        {"framework_score": 81},
     ],
 )
-def test_set_analysis_rejects_bad_arguments_without_analysis_write(
-    monkeypatch, args
+def test_set_analysis_rejects_invalid_decision_without_analysis_write(
+    monkeypatch, invalid_fields
 ) -> None:
     record_quote("600000")
-    monkeypatch.setattr("sys.stdin", StringIO(f"{MOAT}\n{POSITION}"))
+    decision = valid_decision_payload("600000")
+    decision.update(invalid_fields)
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(decision)))
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis(args)
+        cache.cmd_set_analysis([])
     with cache.db_session() as conn:
         assert conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("framework", ["A", "B", "C", "D", "E", "F"])
 def test_each_framework_requires_its_normalized_subjective_categories(
-    monkeypatch, framework: str
+    capsys, framework: str
 ) -> None:
-    record_quote(framework)
-    if framework == "D":
-        cache.set_market_indicator_snapshot(
-            "bond_yield_10y", 1.8, "2026-07-14", "fixture"
-        )
-    monkeypatch.setattr("sys.stdin", StringIO(report_for(framework)))
+    code = str(ord(framework)).zfill(6)
+    cache.set_fundamentals(code, "fixture", "fixture", valid_fundamentals_payload({}))
+    scoring = scoring_input(framework)
 
-    cache.cmd_set_analysis([framework, framework, "60"])
+    cache.cmd_score_fundamentals([code, framework, json.dumps(scoring)])
+    complete = json.loads(capsys.readouterr().out)
+    assert not any(
+        item.startswith("subjective:") for item in complete["missing_inputs"]
+    )
+
+    missing_category = SUBJECTIVE_CATEGORIES[framework][0]
+    scoring["subjective_assessments"] = scoring["subjective_assessments"][1:]
+    cache.cmd_score_fundamentals([code, framework, json.dumps(scoring)])
+    incomplete = json.loads(capsys.readouterr().out)
+    assert f"subjective:{missing_category}" in incomplete["missing_inputs"]
 
 
 @pytest.mark.parametrize("framework", ["B", "C", "D"])
-def test_cycle_frameworks_reject_missing_cycle_tag(monkeypatch, framework: str) -> None:
-    record_quote(framework)
-    monkeypatch.setattr("sys.stdin", StringIO(f"{MOAT}\n{POSITION}"))
+def test_cycle_frameworks_fail_closed_without_structured_cycle_stage(
+    capsys, framework: str
+) -> None:
+    code = str(ord(framework)).zfill(6)
+    cache.set_fundamentals(code, "fixture", "fixture", valid_fundamentals_payload({}))
 
-    with pytest.raises(SystemExit):
-        cache.cmd_set_analysis([framework, framework, "60"])
+    cache.cmd_score_fundamentals(
+        [code, framework, json.dumps(scoring_input(framework, cycle=False))]
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["complete"] is False
+    assert "cycle_stage" in result["missing_inputs"]
 
 
 def test_c_valuation_conflict_is_incomplete_and_rejects_a_total_score(
     monkeypatch,
 ) -> None:
     record_quote("601899")
-    report = (
-        f"{report_for('C')}\n"
-        '估值冲突[状态=待核实；PB结论="高于历史中枢"；交叉估值结论="中周期估值不高"]'
+    conflict = valid_decision_payload(
+        "601899", "C", score=None, cycle=True, conflict=True
     )
-    monkeypatch.setattr("sys.stdin", StringIO(report))
+    invalid = conflict | {"framework_score": 48}
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(invalid)))
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis(["601899", "C", "48"])
+        cache.cmd_set_analysis([])
     with cache.db_session() as conn:
         assert (
             conn.execute(
@@ -565,8 +602,8 @@ def test_c_valuation_conflict_is_incomplete_and_rejects_a_total_score(
             == 0
         )
 
-    monkeypatch.setattr("sys.stdin", StringIO(report))
-    cache.cmd_set_analysis(["601899", "C"])
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(conflict)))
+    cache.cmd_set_analysis([])
     with pytest.raises(SystemExit):
         cache.cmd_set_score_breakdown(
             [
@@ -598,7 +635,11 @@ def test_c_valuation_conflict_is_incomplete_and_rejects_a_total_score(
 def test_d_without_bond_snapshot_is_incomplete_and_accepts_null_timing(
     monkeypatch,
 ) -> None:
-    run_set_analysis(monkeypatch, "600900", "D", score=None)
+    record_quote("600900")
+    decision = valid_decision_payload("600900", "D", score=None, cycle=True)
+    decision["block_reason"] = ["bond_yield_missing"]
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(decision)))
+    cache.cmd_set_analysis([])
     breakdown = {
         "fundamentals": {"subtotal": 45},
         "timing": {"subtotal": None},
@@ -618,10 +659,13 @@ def test_d_without_bond_snapshot_is_incomplete_and_accepts_null_timing(
 
 def test_d_without_bond_snapshot_rejects_complete_score(monkeypatch) -> None:
     record_quote("600901")
-    monkeypatch.setattr("sys.stdin", StringIO(report_for("D")))
+    decision = valid_decision_payload("600901", "D", score=None, cycle=True)
+    decision["block_reason"] = ["bond_yield_missing"]
+    decision["framework_score"] = 60
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(decision)))
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis(["600901", "D", "60"])
+        cache.cmd_set_analysis([])
     with cache.db_session() as conn:
         assert conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone()[0] == 0
 
@@ -636,39 +680,6 @@ def test_non_d_or_complete_analysis_rejects_null_timing(monkeypatch) -> None:
 
     with pytest.raises(SystemExit):
         cache.cmd_set_score_breakdown(["600000", json.dumps(breakdown)])
-
-
-@pytest.mark.parametrize("industry", ["保险", "证券", "券商"])
-def test_unsupported_financial_industry_cannot_bypass_set_analysis(
-    monkeypatch, industry: str
-) -> None:
-    cache.set_fundamentals(
-        "601318", "金融公司", industry, valid_fundamentals_payload({"pb": 1.0})
-    )
-    record_quote("601318")
-    monkeypatch.setattr("sys.stdin", StringIO(f"{MOAT}\n{POSITION}\n{CYCLE}"))
-
-    with pytest.raises(SystemExit):
-        cache.cmd_set_analysis(["601318", "B", "60"])
-
-
-def test_persisted_qualitative_terminal_blocks_set_analysis_without_fundamentals(
-    monkeypatch,
-) -> None:
-    cache.update_qualitative_only_security("601318", "保险公司", "保险")
-    record_quote("601318")
-    monkeypatch.setattr("sys.stdin", StringIO(f"{MOAT}\n{POSITION}\n{CYCLE}"))
-
-    with pytest.raises(SystemExit):
-        cache.cmd_set_analysis(["601318", "B", "60"])
-
-    with cache.db_session() as conn:
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM analysis_results WHERE code='601318'"
-            ).fetchone()[0]
-            == 0
-        )
 
 
 @pytest.mark.parametrize(

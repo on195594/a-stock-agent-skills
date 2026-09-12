@@ -77,7 +77,7 @@ a-stock-cache check <股票代码>
 
 ## 缓存写入边界
 
-分析缓存、基本面、分数或预警的命令与字段结构见上方数据合同。任何写入仍属 W1：只有用户确认具体写入内容后才可使用 `--confirm-write`；`set-flag` 必须在同日 `set-analysis` 后执行。框架冲突、分数越界、必需输入缺失或 `incomplete` 时不得补造得分；D公用缺少24小时内可信国债收益率时 `score=null`、`timing.subtotal=null`。
+分析缓存、基本面、分数或预警的命令见上方数据合同。`set-analysis` 不接受位置参数，只从 stdin 接收完整的 decision-v1 JSON；可选 `narrative` 仅用于人类阅读，不是权威机器状态。任何写入仍属 W1：只有用户确认具体写入内容后才可使用 `--confirm-write`；`set-flag` 必须在同日 `set-analysis` 后执行。框架冲突、分数越界、必需输入缺失或 `incomplete` 时不得补造得分；D公用缺少24小时内可信国债收益率时 `score=null`、`timing.subtotal=null`。
 
 ## FULL_MISS 主流程硬合同
 
@@ -91,15 +91,14 @@ a-stock-cache check <股票代码>
 
 ## 第1.5步：周期位置判断（C/D/B框架必做，其余可选）
 
-C/D/B 评分前必须判断周期位置；C还须核对动态变量、多业务段和分红压力。相邻阶段证据冲突取更保守情景。结构化标签、折扣顺序与压力测试见[周期位置与压力测试细则](references/cycle-assessment.md)。
+C/D/B 评分前必须判断周期位置；C还须核对动态变量、多业务段和分红压力。相邻阶段证据冲突取更保守情景，并把主场景及依据写入评分输入的 `cycle_stage`。折扣顺序与压力测试见[周期位置与压力测试细则](references/cycle-assessment.md)。
 
 ## 第二步：基本面评分（60分）
 
 - 框架只能按上方路由读取 A—F 对应文件。所有框架必须执行 `a-stock-cache checklist <代码> <框架>`；失败即停止，禁止纯人工加总。
-- 主观“优/强”档至少需1—2项可验证证据，并输出映射后的两个 ASCII 双引号结构化标签；缺证据最高“格”。**A框架每次都必须输出** `外部集中风险[状态=正常|受限|重大；...]`；“重大”必须紧邻标注“置信度受限”，不得自动升级动作。
-- checklist：达优可满分；简化判定未人工核验最高格档；达格最高格档（仅 note 明示“优档需人工判断”可凭证据上调）；未达只能0或红线；缺失按0并警告。框架未明确格档分时按满分50%。
-- 汇兑损益绝对值>当期净利润绝对值30%时，净利增速必须对当期与基期都剔除汇兑损益后同口径比较。
-- 报告草稿标签完成后必须执行 `a-stock-cache score-fundamentals <代码> <框架A-F> '<补充指标JSON>' < report-draft.md`。命令 `subtotal` 是唯一基本面分；保留 rule_version/hash、dimensions、missing_inputs、red_flags。`complete=false`、`blocked=true` 或命令失败时停止配置/择时/综合分和矩阵，禁止手工覆盖。
+- 主观“优/强”档至少需1—2项可验证证据；缺证据最高“格”。把框架映射后的两个判断写入评分输入的 `subjective_assessments`，不要用 Markdown 标签传递机器状态。A框架还必须核验外部集中风险；“重大”须标注“置信度受限”，不得自动升级动作。
+- checklist 只作事实锚点；人工核验与缓存补充要求见完整执行流，分档、缺失、红线和 subtotal 由 scorer 裁决，禁止手工复算或覆盖。
+- 执行 `a-stock-cache score-fundamentals <代码> <框架A-F> '<含 metrics、subjective_assessments、cycle_stage 的 v1 JSON>'`，不得从报告 stdin 取值。保留命令输出；`complete=false`、`blocked=true` 或命令失败时停止配置/择时/综合分和矩阵。
 
 ## 第三步：择时评分（20分）
 
@@ -116,7 +115,7 @@ C/D/B 评分前必须判断周期位置；C还须核对动态变量、多业务�
 
 A/E/F 使用5年分位时**不得用10年分位替代5年分位**；E/F PEG 必须使用真实TTM盈利与可复核增长，静态 `pe_static`/兼容 `pe_ttm` 不得代替；盈利 F 使用 `peg_ttm`，PS仅作交叉参考。亏损 F 必须有同口径 `ps_ttm`/`ps_percentile_5y`，但在现金跑道/稀释风险规则落地前不得仅凭低PS形成动作。证据完整且满足适用分支信号记15，完整但不满足时**估值项记0/15**；任一所需分位、PS、真实PEG、报告期或交叉估值缺失/冲突时，估值项进入 `incomplete`，不得输出时机评级、综合总分或矩阵。
 
-C成长分支还须核验至少一个前瞻/周期归一化指标；与PB方向冲突时输出 `估值冲突[...]`，该项不得记0/15，`set-analysis` 不传分。D溢价<150bps时择时上限10/20。历史分位<5%时必须排除ROE/盈利中枢结构性下移后才能解释为低估。
+C成长分支还须核验至少一个前瞻/周期归一化指标；与PB方向冲突时，decision-v1 置 `blocked=true`、`framework_score=null`，在 `block_reason` 加入 `valuation_conflict`，并把证据写入 `source_provenance`；不得补造分数。D溢价<150bps时择时上限10/20。历史分位<5%时必须排除ROE/盈利中枢结构性下移后才能解释为低估。
 
 市场情绪只有融资余额和近期涨停/连板热度都有时点且均不亢奋才记5；明确亢奋记0；任一缺失即 `incomplete`。预期差、除权/除息、市场风格与异动的证据门和档位见[择时调整细则](references/timing-adjustments.md)。唯一顺序为 `raw = 估值分 + 市场情绪分 + 周期调整 + 预期差调整 + 除权/除息调整 + 市场风格调整 + 异动股调整`，再 `bounded=max(0,min(20,raw))`，最后应用D的10分和异动股12分上限；输入缺失不得计算。
 

@@ -19,7 +19,10 @@ def test_research_skill_routes_each_progressive_disclosure_reference_once() -> N
         assert path.is_file()
         assert main.count(f"](references/{path.name})") == 1
 
-    assert "周期位置[阶段=" in REFERENCES["cycle"].read_text(encoding="utf-8")
+    cycle = REFERENCES["cycle"].read_text(encoding="utf-8")
+    assert "decision-v1" in cycle
+    assert "cycle_stage" in cycle
+    assert "周期位置[阶段=" not in cycle
     timing = REFERENCES["timing"].read_text(encoding="utf-8")
     assert "预期差分析" in timing
     assert "除权/除息贴权检查" in timing
@@ -100,8 +103,10 @@ def test_a_framework_inputs_and_external_risk_contract_match_qa() -> None:
     main = MAIN.read_text(encoding="utf-8")
     framework_a = (ROOT / "references/frameworks/A.md").read_text(encoding="utf-8")
 
-    assert "A框架每次都必须输出" in main
-    assert "状态=正常|受限|重大" in main
+    assert "A框架还必须核验外部集中风险" in main
+    assert "Markdown 标签" in main
     assert "异动、治理/政策" in main and "外部集中风险" in main
     assert "gross_margin_stable" in framework_a
     assert "补充指标 JSON" in framework_a
+    assert "source_provenance" in framework_a
+    assert "外部集中风险[" not in framework_a

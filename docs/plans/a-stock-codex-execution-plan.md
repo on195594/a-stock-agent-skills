@@ -357,6 +357,20 @@ freshness
 - schema/version 兼容策略和 golden fixture 同时落地。
 - 不引入 schema registry 或新服务；一个仓库内 schema 文件/typed model 足够。
 
+### Phase 4 落地合同（v1）
+
+- 一个 envelope 只描述一只股票；`stock_code` 是六位代码。`framework` 持久化为现有规范值 `A通用`—`F科技`。
+- `schema_version` 必须是整数 `1`。未知顶层/嵌套字段保留并接受；缺字段、错误类型、非有限数值和不支持版本在任何写入前拒绝。
+- `framework_score` 是 `0—80` 的有限数值或 `null`；`framework_classification` 使用现有 `A级|B级|C级|D级|not_formed`。`rule_version`/`rule_hash` 是非空 scorer 标识。
+- `l3_status` 使用现有 `not_applicable|not_triggered|pending|watch|triggered|invalid`；首次研究为 `not_applicable`，不得把 legacy/pending/watch/invalid 当作 clear。
+- `portfolio_risk` 是本股票的投影对象，不是账户级第二 envelope；至少含现有状态词 `clear|blocked|incomplete|not_evaluated` 之一的 `status` 和字符串数组 `reason_codes`。
+- `suggested_action` 使用报告合同现有唯一出口 `回避|等待|买入候选|观望|轻仓试探|小仓观察|买入1/3仓|积极买入2/3仓`。
+- `blocked` 是布尔值；`block_reason` 是稳定代码数组。v1 代码为 `risk_gate_incomplete`、`valuation_conflict`、`bond_yield_missing`、`score_incomplete`、`portfolio_risk_blocked`、`l3_triggered`。估值冲突只能以此字段表达，证据放 `source_provenance`，不再匹配正文。
+- `source_provenance` 是对象；`freshness` 是对象且必须含非空 ISO-8601 `as_of`。两者是结构化证据/时效状态，不从 Markdown 重建。
+- 安全一致性：`blocked=true` 必须有 `block_reason` 且动作只能为 `回避|等待|观望`；`blocked=false` 必须没有 block reason；`framework_score=null` 与 `framework_classification=not_formed` 必须同时出现，且该状态必须 blocked；`portfolio_risk.status=blocked|incomplete|not_evaluated` 必须 blocked；`l3_status=triggered|invalid` 必须 blocked。
+- `score-fundamentals` 的主观评估和周期输入改为一个结构化 JSON 对象；scorer 继续拥有枚举、规则版本/hash 和计算。`set-analysis` 从 stdin 只接收一个 v1 decision JSON，可选 `narrative` 仅用于展示；持久化 `decision_json TEXT`，并从已校验对象渲染 Markdown `result`。
+- 新写只写 JSON 权威状态；有 `decision_json` 的当前行绝不调用旧 parser。历史 `decision_json IS NULL` 行原样保留，仅允许窄命名、fail-closed 的临时只读兼容，不自动回填或重建权威状态。
+
 ## Step 4C — 迁移与删除旧协议
 
 先双读对比但单写 JSON；确认 fixture/golden 一致后切断 regex consumer，随后删除旧 parser。双写只允许作为有截止条件的迁移步骤，不得长期保留两套事实源。

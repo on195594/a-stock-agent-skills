@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from io import StringIO
 
 import pytest
 
@@ -9,15 +8,41 @@ from a_stock_agent_runtime import cache, commands_analysis, risk_gates
 from tests.helpers import set_valid_fundamentals, valid_fundamentals_payload
 
 
-REPORT = "\n".join(
-    [
-        '护城河[评级=优；证据="客户留存率稳定";置信度=高]',
-        '行业地位[评级=优；证据="市占率连续5年第一";置信度=高]',
-    ]
-)
+ASSESSMENTS = [
+    {
+        "category": "护城河",
+        "rating": "优档",
+        "evidence": ["客户留存率稳定"],
+        "confidence": "高",
+    },
+    {
+        "category": "行业地位",
+        "rating": "优档",
+        "evidence": ["市占率连续5年第一"],
+        "confidence": "高",
+    },
+]
 
 
-def test_score_fundamentals_uses_cache_and_typed_report(capsys, monkeypatch) -> None:
+def scoring_input(
+    metrics: dict,
+    assessments: list[dict] | None = None,
+    cycle_stage: dict | None = None,
+) -> str:
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "metrics": metrics,
+            "subjective_assessments": ASSESSMENTS
+            if assessments is None
+            else assessments,
+            "cycle_stage": cycle_stage,
+        },
+        ensure_ascii=False,
+    )
+
+
+def test_score_fundamentals_uses_cache_and_structured_assessments(capsys) -> None:
     set_valid_fundamentals(
         "600036",
         "测试公司",
@@ -29,10 +54,8 @@ def test_score_fundamentals_uses_cache_and_typed_report(capsys, monkeypatch) -> 
             "gross_margin": 31.0,
         },
     )
-    monkeypatch.setattr("sys.stdin", StringIO(REPORT))
-
     commands_analysis.cmd_score_fundamentals(
-        ["600036", "A", json.dumps({"gross_margin_stable": True})]
+        ["600036", "A", scoring_input({"gross_margin_stable": True})]
     )
 
     payload = json.loads(capsys.readouterr().out)
@@ -43,9 +66,7 @@ def test_score_fundamentals_uses_cache_and_typed_report(capsys, monkeypatch) -> 
     assert len(payload["rule_hash"]) == 64
 
 
-def test_score_fundamentals_missing_manual_input_fails_closed(
-    capsys, monkeypatch
-) -> None:
+def test_score_fundamentals_missing_manual_input_fails_closed(capsys) -> None:
     set_valid_fundamentals(
         "600036",
         "测试公司",
@@ -57,9 +78,7 @@ def test_score_fundamentals_missing_manual_input_fails_closed(
             "gross_margin": 31.0,
         },
     )
-    monkeypatch.setattr("sys.stdin", StringIO(REPORT))
-
-    commands_analysis.cmd_score_fundamentals(["600036", "A", "{}"])
+    commands_analysis.cmd_score_fundamentals(["600036", "A", scoring_input({})])
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["complete"] is False
@@ -115,7 +134,9 @@ def test_score_fundamentals_routes_cash_ratio_through_owner(
         ),
     )
 
-    commands_analysis.cmd_score_fundamentals(["688111", "F", "{}"])
+    commands_analysis.cmd_score_fundamentals(
+        ["688111", "F", scoring_input({}, assessments=[])]
+    )
 
     assert calls == [(operating_cf, eps)]
     assert json.loads(capsys.readouterr().out)["blocked"] is True
@@ -168,10 +189,8 @@ def test_p1_only_blocks_timing_not_fundamental_subtotal(capsys, monkeypatch) -> 
     data["field_provenance"]["roe_structural_gate"]["status"] = "missing"
     data["null_reasons"]["roe_structural_gate"] = p1["reason_code"]
     cache.set_fundamentals("600036", "测试公司", "制造业", data)
-    monkeypatch.setattr("sys.stdin", StringIO(REPORT))
-
     commands_analysis.cmd_score_fundamentals(
-        ["600036", "A", json.dumps({"gross_margin_stable": True})]
+        ["600036", "A", scoring_input({"gross_margin_stable": True})]
     )
 
     payload = json.loads(capsys.readouterr().out)
@@ -216,7 +235,9 @@ def test_score_fundamentals_rejects_unofficial_p0_override(capsys) -> None:
     }
 
     with pytest.raises(SystemExit):
-        commands_analysis.cmd_score_fundamentals(["600036", "A", json.dumps(override)])
+        commands_analysis.cmd_score_fundamentals(
+            ["600036", "A", scoring_input(override)]
+        )
 
     assert "regulatory_gate.sources 非官方" in capsys.readouterr().err
 

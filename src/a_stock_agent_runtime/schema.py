@@ -116,6 +116,10 @@ SCHEMA_MIGRATIONS = [
         "033-l3-materiality-basis",
         "ALTER TABLE holding_l3_conditions ADD COLUMN materiality_basis TEXT",
     ),
+    (
+        "035-analysis-decision-json",
+        "ALTER TABLE analysis_results ADD COLUMN decision_json TEXT",
+    ),
 ]
 
 
@@ -187,6 +191,7 @@ def _create_core_tables(conn: sqlite3.Connection) -> None:
         quote_as_of TEXT,
         quote_source TEXT,
         scoring_status TEXT DEFAULT 'complete',
+        decision_json TEXT,
         PRIMARY KEY (code, date)
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS holdings (
