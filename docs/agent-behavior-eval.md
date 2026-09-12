@@ -8,9 +8,12 @@ expected block reason.
 
 `tests/fixtures/agent_behavior_observed.json` contains responses captured from a
 real Hermes Agent with the canonical Research, Monitor, and QA Skills preloaded.
-Prompt and Skill hashes bind each response to its inputs and policy text. The
-pytest suite scores those external responses; fixture expectations are not copied
-into the Agent prompt.
+Prompt, capture-source, and exact Skill-key/hash bindings tie each response to its
+inputs and policy text. Each record also carries the actual Hermes session model,
+provider, source, and zero-tool-call count read from local session metadata; capture
+retries and then fails if the pinned model/provider was not used. The pytest suite
+scores those external responses; fixture expectations and expected decisions are
+not included in the Agent prompt.
 
 ## Re-capture
 

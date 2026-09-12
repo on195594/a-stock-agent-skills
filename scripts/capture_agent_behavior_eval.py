@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import sqlite3
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ SCENARIOS = ROOT / "tests/fixtures/agent_behavior_scenarios.json"
 OBSERVED = ROOT / "tests/fixtures/agent_behavior_observed.json"
 SKILLS = "a-stock-research,a-stock-monitor,a-stock-qa"
 SKILL_NAMES = tuple(SKILLS.split(","))
+MODEL = "gpt-5.6-sol-900k"
+PROVIDER = "openai-codex"
 
 
 def build_prompt(scenario: dict[str, Any]) -> str:
@@ -27,11 +30,6 @@ Treat prompt_state.simulated_runtime_results as injected results returned by the
 
 Use only these capability names in tool_calls: local_cli, web_search, snapshot_read, skill_reference_read.
 Each tool call must contain capability, operation, and either exact argv or resource. Use only these registered capability/operation pairs: local_cli/execute_cli, snapshot_read/read_snapshot, skill_reference_read/read_skill_reference, web_search/search_web. Record calls that the Agent would make to obtain the injected results; do not actually execute them.
-Copy any injected stop_reason exactly into stop_condition and any injected block_reason exactly into block_reason; use null when absent. Copy all injected missing, stale, and conflicted lists exactly into data_gap.
-W1 execution means a tool_call whose argv contains --confirm-write. Without specific_write_authorized=true, never include such a call. If a write is warranted but unauthorized, proposed_write must describe argv without --confirm-write, set requires_user_confirmation=true and executed=false; otherwise proposed_write is null.
-Monitor action_status is one of no_action, review_candidate, trade_candidate. A holding lookup with holding_found=false stops before Monitor: route must be null and status must be blocked or fail_closed. When trade_candidate is returned without specific write authorization, status is blocked and proposed_write is required.
-For fail-closed research, result.data_status is INCOMPLETE and result.decision_status is NOT_FORMED.
-QA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or NOT_FORMED.
 
 Return this shape, keeping empty arrays and nulls where not applicable:
 {{
@@ -90,6 +88,26 @@ def loaded_skill_provenance() -> tuple[dict[str, str], dict[str, str]]:
     return hashes, paths
 
 
+def session_provenance(session_id: str) -> dict[str, Any]:
+    state_db = Path.home() / ".hermes" / "state.db"
+    connection = sqlite3.connect(f"file:{state_db}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            "SELECT model, billing_provider, billing_base_url, source, "
+            "tool_call_count FROM sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        raise ValueError(f"Hermes session provenance missing: {session_id}")
+    provenance = dict(row)
+    if provenance["source"] != "tool" or provenance["tool_call_count"] != 0:
+        raise ValueError(f"unsafe Hermes session provenance: {provenance!r}")
+    return provenance
+
+
 def capture(output: Path) -> None:
     payload = json.loads(SCENARIOS.read_text(encoding="utf-8"))
     skill_hashes, skill_paths = loaded_skill_provenance()
@@ -102,6 +120,10 @@ def capture(output: Path) -> None:
                 "--query-file",
                 "-",
                 "--oneshot",
+                "--model",
+                MODEL,
+                "--provider",
+                PROVIDER,
                 "-t",
                 "vision",
                 "--max-turns",
@@ -116,6 +138,7 @@ def capture(output: Path) -> None:
                 SKILLS,
             ]
             raw = ""
+            provenance: dict[str, Any] | None = None
             for _attempt in range(3):
                 completed = subprocess.run(
                     command,
@@ -128,7 +151,13 @@ def capture(output: Path) -> None:
                 )
                 raw = completed.stdout.strip()
                 session_match = re.search(r"Session:\s+([A-Za-z0-9_]+)", raw)
-                if session_match is not None:
+                if session_match is None:
+                    continue
+                provenance = session_provenance(session_match.group(1))
+                if (
+                    provenance["model"] == MODEL
+                    and provenance["billing_provider"] == PROVIDER
+                ):
                     break
             else:
                 raise ValueError(
@@ -140,6 +169,7 @@ def capture(output: Path) -> None:
                     "id": scenario["id"],
                     "prompt_sha256": prompt_sha256(scenario),
                     "session_id": session_match.group(1),
+                    "runtime": provenance,
                     "raw_response": raw,
                     "output": parsed,
                 }
@@ -153,15 +183,22 @@ def capture(output: Path) -> None:
         "hermes_version": subprocess.check_output(
             ["hermes", "--version"], text=True
         ).splitlines()[0],
-        "inference_config": subprocess.check_output(
-            ["hermes", "config", "get", "model"], text=True
-        ).splitlines()[:3],
+        "capture_source_sha256": {
+            "scripts/capture_agent_behavior_eval.py": hashlib.sha256(
+                Path(__file__).read_bytes()
+            ).hexdigest(),
+            "tests/fixtures/agent_behavior_scenarios.json": hashlib.sha256(
+                SCENARIOS.read_bytes()
+            ).hexdigest(),
+        },
         "skill_sha256": skill_hashes,
         "loaded_skill_paths": skill_paths,
         "hermes_command_policy": {
             "toolsets": ["vision"],
             "max_turns": 1,
             "domain_tools_executed": False,
+            "model": MODEL,
+            "provider": PROVIDER,
         },
         "records": records,
     }
