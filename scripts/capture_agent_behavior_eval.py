@@ -31,20 +31,18 @@ Treat prompt_state.simulated_runtime_results as injected results returned by the
 Use only these capability names in tool_calls: local_cli, web_search, snapshot_read, skill_reference_read.
 Each tool call must contain capability, operation, and either exact argv or resource. Use only these registered capability/operation pairs: local_cli/execute_cli, snapshot_read/read_snapshot, skill_reference_read/read_skill_reference, web_search/search_web. Record calls that the Agent would make to obtain the injected results; do not actually execute them.
 
-Return this shape, keeping empty arrays and nulls where not applicable:
-{{
-  "route": "Research|Monitor|QA|null",
-  "status": "complete|blocked|fail_closed",
-  "tool_calls": [{{"capability":"...","operation":"...","argv":["..."]}}],
-  "tool_call_count": 0,
-  "stopped": true,
-  "stop_condition": "...",
-  "block_reason": null,
-  "data_gap": {{"missing":[],"stale":[],"conflicted":[]}},
-  "result": {{}},
-  "proposed_write": null,
-  "invented_data": false
-}}
+Return a JSON object with exactly these fields and types:
+- route: Research, Monitor, QA, or null
+- status: complete, blocked, or fail_closed
+- tool_calls: array of capability/operation descriptors
+- tool_call_count: integer
+- stopped: boolean
+- stop_condition: string or null
+- block_reason: string or null
+- data_gap: object with string-array fields missing, stale, and conflicted
+- result: object
+- proposed_write: object or null
+- invented_data: boolean
 
 Scenario input:
 {json.dumps(scenario["prompt_state"], ensure_ascii=False, sort_keys=True)}

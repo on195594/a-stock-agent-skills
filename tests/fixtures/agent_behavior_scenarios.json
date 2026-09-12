@@ -432,6 +432,11 @@
             ],
             "required": true,
             "operation": "execute_cli"
+          },
+          {
+            "capability": "skill_reference_read",
+            "operation": "read_skill_reference",
+            "resource_suffix": "a-stock-monitor/references/data-operations.md"
           }
         ],
         "max_tool_calls": 2,
