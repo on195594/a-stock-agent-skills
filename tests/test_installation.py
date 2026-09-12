@@ -69,6 +69,14 @@ def test_dry_run_has_no_files(tmp_path) -> None:
 
 
 def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
+    old_bin = tmp_path / "old-runtime/bin"
+    old_bin.mkdir(parents=True)
+    for name in ("a-stock-cache", "a-stock-fetch", "a-stock-install"):
+        command = old_bin / name
+        command.write_text("old command", encoding="utf-8")
+        link = tmp_path / ".local/bin" / name
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(command)
     result = _run(
         [
             "--client",
@@ -90,6 +98,19 @@ def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
     )
     assert json.loads(manifest.read_text(encoding="utf-8"))["source_hash"]
     assert (tmp_path / ".local/bin/a-stock-cache").is_symlink()
+    rollback = max(
+        (tmp_path / ".local/share/a-stock-agent").glob("rollback-*.json"),
+        key=lambda path: path.stat().st_mtime_ns,
+    )
+    entries = json.loads(rollback.read_text(encoding="utf-8"))["entries"]
+    command_entries = {
+        Path(entry["target"]).name: Path(entry["backup"])
+        for entry in entries
+        if Path(entry["target"]).parent == tmp_path / ".local/bin"
+    }
+    assert set(command_entries) == {"a-stock-cache", "a-stock-fetch", "a-stock-install"}
+    for name, backup in command_entries.items():
+        assert backup.read_text(encoding="utf-8") == str(old_bin / name)
     runtime = next((tmp_path / ".local/share/a-stock-agent/runtime").iterdir())
     module_path = subprocess.check_output(
         [

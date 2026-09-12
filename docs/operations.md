@@ -86,21 +86,20 @@ choosing a recovery path.
 
 ## Current deployment record
 
-The current runtime is `v0.1.11` (`0.1.11-996e552a3463`, runtime source
-commit `996e552a3463d3e12e347bacd93142d013fbea25`) with
-`a-stock-lib==0.6.3` from source commit
-`35bfaaeaf9a5434a39a09ee26b85f42c270f32a9`. Rollback manifest
-`rollback-1788928598299347640.json` preserves the prior client entries, and
-runtime `0.1.11-12c48b4050a3` remains installed and executable. The repository
-HEAD may be newer because this deployment record is committed after cutover.
+The current runtime is `v0.1.11` (`0.1.11-2c2d6018d411`, runtime source
+commit `2c2d6018d4115fbea4dcdf214ce1786f50b478bf`) with the immutable
+`a-stock-lib==0.7.0` release wheel (SHA-256
+`7c4a16d452f34574584531bab6fe9d150f3cb844e5c9b2fe072295f6bb2ee385`).
+Rollback manifest `rollback-1789186222598162920.json` preserves the prior
+client Skill entries; runtime `0.1.11-75a3bee8068e` remains installed and
+executable for CLI rollback. The repository HEAD may be newer because this
+deployment record is committed after cutover.
 
-The nine active client Skill entries still resolve to the canonical repository.
-Configuration, production database, schema/user_version and crontab were
-unchanged by this runtime-only cutover; the production database remained
-`integrity_check=ok`. A read-only production check saw five active holdings and
-returned `_decision_meta`. An isolated live `002475` fetch routed 元器件 to
-`A通用`, produced true TTM PE/PEG and retained `action_eligible=false` while P0
-and P2 were incomplete; its temporary database was removed.
+The nine active client Skill entries and all three public CLI links resolve to
+the current canonical/runtime targets. Package provenance, isolated imports,
+CLI help, `pip check`, and installed-file hashes were verified. Production DB
+and crontab hashes remained unchanged during the runtime-only cutover; no
+holdings, W1 state, credentials, or production DB contents were read or written.
 
 The original `v0.1.0` cutover record, redacted DB invariants, client links,
 cron before/after snapshots and review disposition are in
