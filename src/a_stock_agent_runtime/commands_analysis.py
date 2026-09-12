@@ -17,7 +17,7 @@ from a_stock_lib.contracts import (
     parse_subjective_assessment_tags,
     required_subjective_categories,
 )
-from a_stock_lib.framework_scoring import score_fundamentals
+from a_stock_lib import framework_scoring
 
 
 def _risk_gate_state(
@@ -40,9 +40,10 @@ def _cash_gate_for_framework(
     gate = data.get("cash_flow_gate")
     if not isinstance(gate, dict):
         return None
-    if framework == "B银行" or gate.get(
-        "reason_code"
-    ) == "framework_required_for_capex_review":
+    if (
+        framework == "B银行"
+        or gate.get("reason_code") == "framework_required_for_capex_review"
+    ):
         return risk_gates.cash_flow_gate(
             {
                 **gate,
@@ -80,24 +81,25 @@ def _not_formed_score(
 def _decision_meta(data: dict, industry: str | None) -> dict:
     framework, confident = domain.infer_framework(industry)
     cash_gate = _cash_gate_for_framework(data, framework, industry)
-    gate_data = (
-        {**data, "cash_flow_gate": cash_gate} if cash_gate is not None else data
-    )
+    gate_data = {**data, "cash_flow_gate": cash_gate} if cash_gate is not None else data
     gate_state = _risk_gate_state(gate_data)
     gates = gate_state[2] if gate_state else {}
     reasons = gate_state[1] if gate_state else ["risk_gates:not_evaluated"]
     hard_failed = _hard_gate_failed(gates) if gates else True
     roe_status = gates.get("roe_structural_gate", {}).get("status")
     valuation = data.get("valuation_compatibility", {})
-    payout_ratio = None
-    if (
-        isinstance(data.get("dps"), (int, float))
-        and isinstance(data.get("eps"), (int, float))
-        and data["eps"] > 0
-    ):
-        payout_ratio = data["dps"] / data["eps"]
+    payout_ratio = framework_scoring.calculate_payout_ratio(
+        data.get("dps"), data.get("eps")
+    )
+    payout_band = (
+        framework_scoring.classify_framework_rule(
+            "C", "payout_ratio", payout_ratio
+        ).band
+        if payout_ratio is not None
+        else framework_scoring.RuleBand.MISSING
+    )
     uses_pb_percentile = framework == "B银行" or (
-        framework == "C资源" and payout_ratio is not None and payout_ratio < 0.4
+        framework == "C资源" and payout_band is framework_scoring.RuleBand.FAIL
     )
     if isinstance(valuation, dict) and not valuation.get("timing_eligible", False):
         reasons = [
@@ -423,16 +425,11 @@ def cmd_score_fundamentals(args: list[str]) -> None:
     metrics = dict(fundamentals)
     if "net_profit_growth" in metrics:
         metrics["net_profit_growth_3y"] = metrics["net_profit_growth"]
-    operating_cf = metrics.get("operating_cf_per_share")
-    eps = metrics.get("eps")
-    if (
-        isinstance(operating_cf, (int, float))
-        and not isinstance(operating_cf, bool)
-        and isinstance(eps, (int, float))
-        and not isinstance(eps, bool)
-        and eps > 0
-    ):
-        metrics["operating_cf_to_net_profit"] = operating_cf / eps
+    operating_cf_ratio = framework_scoring.calculate_operating_cf_to_net_profit(
+        metrics.get("operating_cf_per_share"), metrics.get("eps")
+    )
+    if operating_cf_ratio is not None:
+        metrics["operating_cf_to_net_profit"] = operating_cf_ratio
     metrics.update(overrides)
     industry = fundamentals.get("_cache_meta", {}).get("industry")
     cash_gate = _cash_gate_for_framework(metrics, framework, industry)
@@ -452,7 +449,7 @@ def cmd_score_fundamentals(args: list[str]) -> None:
             return
     report = sys.stdin.read().strip()
     cycle_assessment = parse_cycle_stage_tag(report)
-    score = score_fundamentals(
+    score = framework_scoring.score_fundamentals(
         FrameworkKey(framework[0]),
         metrics,
         parse_subjective_assessment_tags(report),

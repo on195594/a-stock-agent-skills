@@ -6,9 +6,9 @@ import json
 import math
 import sqlite3
 import sys
-import time
 from datetime import date, datetime
-from pathlib import Path
+
+from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
 
 from a_stock_agent_runtime import db, domain, market_quotes, store
 from a_stock_agent_runtime.position_ledger import (
@@ -107,10 +107,6 @@ def fetch_current_prices(codes: list[str]) -> dict[str, float | None]:
 
 
 PriceQuote = market_quotes.PriceQuote
-_INDUSTRY_MAP_CACHE_PATH = (
-    Path.home() / ".cache" / "a_stock_lib" / "tushare_industry_map.json"
-)
-_INDUSTRY_MAP_TTL_SECONDS = 30 * 24 * 3600
 _MONITOR_BATCH_LIMIT = 800
 
 
@@ -176,32 +172,8 @@ _default_fetch_current_price_quotes = fetch_current_price_quotes
 
 
 def _fresh_industry_map() -> dict[str, str]:
-    try:
-        payload = json.loads(_INDUSTRY_MAP_CACHE_PATH.read_text(encoding="utf-8"))
-        fetched_at = payload["fetched_at_epoch"]
-        if (
-            not isinstance(fetched_at, (int, float))
-            or isinstance(fetched_at, bool)
-            or not 0 <= time.time() - fetched_at <= _INDUSTRY_MAP_TTL_SECONDS
-        ):
-            return {}
-        industry_map = payload["industry_map"]
-        if not isinstance(industry_map, dict) or any(
-            not isinstance(code, str)
-            or len(code) != 6
-            or not code.isascii()
-            or not code.isdigit()
-            or not isinstance(industry, str)
-            or not industry.strip()
-            for code, industry in industry_map.items()
-        ):
-            return {}
-        return {
-            code: industry.strip()
-            for code, industry in industry_map.items()
-        }
-    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return {}
+    result = TushareFundamentalsProvider().read_cached_industry_map()
+    return result.value if result.status == "ok" and result.value is not None else {}
 
 
 def fetch_monitor_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]:
@@ -215,7 +187,9 @@ def fetch_monitor_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]
         return dict.fromkeys(codes)
 
     industry_map = _fresh_industry_map()
-    requested_industries = {industry_map[code] for code in codes if code in industry_map}
+    requested_industries = {
+        industry_map[code] for code in codes if code in industry_map
+    }
     members = {
         code: industry
         for code, industry in industry_map.items()
@@ -231,8 +205,12 @@ def fetch_monitor_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]
     raw = _fetch_sina_batch_quotes(request_codes)
 
     today = domain.cst_today()
-    changes: dict[str, list[float]] = {industry: [] for industry in requested_industries}
-    industry_times: dict[str, list[str]] = {industry: [] for industry in requested_industries}
+    changes: dict[str, list[float]] = {
+        industry: [] for industry in requested_industries
+    }
+    industry_times: dict[str, list[str]] = {
+        industry: [] for industry in requested_industries
+    }
     if members:
         for code, industry in sorted(members.items()):
             value = raw.get(code)

@@ -7,7 +7,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
+
+from a_stock_lib import framework_scoring
 
 from a_stock_agent_runtime import framework_metadata
 from a_stock_agent_runtime import store
@@ -36,9 +37,6 @@ class ChecklistDefinition:
     key: str
     label: str
     unit: str
-    direction: str
-    excellent_threshold: float | None
-    pass_threshold: float | None
     note: str | None = None
     trend_unverified: bool = False
 
@@ -55,153 +53,73 @@ class FundamentalsCacheMissingError(ChecklistError, LookupError):
     """指定股票没有可用的基本面缓存。"""
 
 
-def _to_float_or_none(value: object) -> float | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
-        return None
-    try:
-        parsed = float(value)
-    except (ValueError, OverflowError):
-        return None
-    if not math.isfinite(parsed):
-        return None
-    return parsed
+_RESULT_LABELS = {
+    "excellent": "达优",
+    "pass": "达格",
+    "fail": "未达",
+    "missing": "数据缺失",
+}
 
 
-def _evaluate_result(
-    value: float,
-    direction: str,
-    excellent_threshold: float | None,
-    pass_threshold: float | None,
-) -> str:
-    if excellent_threshold is None and pass_threshold is None:
-        raise ValueError("excellent_threshold/pass_threshold 不能同时为空")
-
-    if direction == "higher_better":
-        if excellent_threshold is not None and value >= excellent_threshold:
-            return "达优"
-        if pass_threshold is not None and value >= pass_threshold:
-            return "达格"
-        return "未达"
-
-    if direction == "lower_better":
-        if excellent_threshold is not None and value <= excellent_threshold:
-            return "达优"
-        if pass_threshold is not None and value <= pass_threshold:
-            return "达格"
-        return "未达"
-
-    raise ValueError(f"未知 direction: {direction!r}")
-
-
-def _build_item(definition: ChecklistDefinition, value: object) -> ChecklistItem:
-    raw_value = _to_float_or_none(value)
-    if raw_value is None:
-        return ChecklistItem(
-            key=definition.key,
-            label=definition.label,
-            raw_value=None,
-            unit=definition.unit,
-            direction=definition.direction,
-            excellent_threshold=definition.excellent_threshold,
-            pass_threshold=definition.pass_threshold,
-            result="数据缺失",
-            data_status="缺失",
-            note=definition.note,
-        )
-
+def _build_item(
+    framework: str,
+    definition: ChecklistDefinition,
+    value: object,
+) -> ChecklistItem:
+    classification = framework_scoring.classify_framework_rule(
+        framework,
+        definition.key,
+        value,
+    )
+    rule = classification.rule
     data_status = (
-        "简化判定（不判断趋势/连续性）" if definition.trend_unverified else "完整"
+        "缺失"
+        if classification.value is None
+        else "简化判定（不判断趋势/连续性）"
+        if definition.trend_unverified
+        else "完整"
     )
     return ChecklistItem(
         key=definition.key,
         label=definition.label,
-        raw_value=raw_value,
+        raw_value=classification.value,
         unit=definition.unit,
-        direction=definition.direction,
-        excellent_threshold=definition.excellent_threshold,
-        pass_threshold=definition.pass_threshold,
-        result=_evaluate_result(
-            raw_value,
-            definition.direction,
-            definition.excellent_threshold,
-            definition.pass_threshold,
-        ),
+        direction=rule.direction.value,
+        excellent_threshold=rule.excellent_threshold,
+        pass_threshold=rule.pass_threshold,
+        result=_RESULT_LABELS[classification.band.value],
         data_status=data_status,
         note=definition.note,
     )
 
 
 def _build_f_operating_cf_quality_item(fundamentals: dict) -> ChecklistItem:
-    operating_cf_per_share = _to_float_or_none(
-        fundamentals.get("operating_cf_per_share")
-    )
-    eps = _to_float_or_none(fundamentals.get("eps"))
-    note = "优档需要FCF（经营现金流-资本支出）连续多年数据，cache未采集，代码仅用经营现金流/EPS近似核对格档（经营CF/净利润>0.8）；净利润为负或零时该比值方法不适用（两个负数相除会反转符号），直接判数据缺失"
-    if operating_cf_per_share is None or eps is None or eps <= 0:
-        return ChecklistItem(
-            key="operating_cf_to_net_profit",
-            label="经营现金流质量（经营CF/净利润）",
-            raw_value=None,
-            unit="倍",
-            direction="higher_better",
-            excellent_threshold=None,
-            pass_threshold=0.8,
-            result="数据缺失",
-            data_status="缺失",
-            note=note,
-        )
-
-    ratio = operating_cf_per_share / eps
-    return ChecklistItem(
+    definition = ChecklistDefinition(
         key="operating_cf_to_net_profit",
         label="经营现金流质量（经营CF/净利润）",
-        raw_value=ratio,
         unit="倍",
-        direction="higher_better",
-        excellent_threshold=None,
-        pass_threshold=0.8,
-        result=_evaluate_result(ratio, "higher_better", None, 0.8),
-        data_status="简化判定（不判断趋势/连续性）",
-        note=note,
+        note="优档需要FCF（经营现金流-资本支出）连续多年数据，cache未采集，代码仅用经营现金流/EPS近似核对格档（经营CF/净利润>0.8）；净利润为负或零时该比值方法不适用（两个负数相除会反转符号），直接判数据缺失",
+        trend_unverified=True,
     )
+    ratio = framework_scoring.calculate_operating_cf_to_net_profit(
+        fundamentals.get("operating_cf_per_share"),
+        fundamentals.get("eps"),
+    )
+    return _build_item("F", definition, ratio)
 
 
 def _build_c_payout_ratio_item(fundamentals: dict) -> ChecklistItem:
-    dps = _to_float_or_none(fundamentals.get("dps"))
-    eps = _to_float_or_none(fundamentals.get("eps"))
-    note = "派息率<40%时C框架股息率主估值轴不适用（利润主要再投资而非分配）：须改用 frameworks/C.md「成长型资源股分支」——基本面前瞻股息率15分→5分并新增产量·储量成长兑现度10分，择时主估值轴改用PB历史分位；≥40%时沿用成熟资源股原权重。eps≤0时派息率无经济意义，按成熟分支处理。判据要求 dps 与 eps 同为最近完整财年口径"
-    # dps<0 只可能来自 cache.py set 手工写入的 JSON（系统边界）；fetcher 侧
-    # compute_dividend_yield 已过滤非正派息，恒产出正值。负派息率会算出负比率
-    # 并因 <40% 被误路由进成长型分支，故一并按数据缺失处理。
-    if dps is None or eps is None or eps <= 0 or dps < 0:
-        return ChecklistItem(
-            key="payout_ratio",
-            label="派息率（≥40%=成熟分支 / <40%=成长分支）",
-            raw_value=None,
-            unit="%",
-            direction="higher_better",
-            excellent_threshold=None,
-            pass_threshold=40,
-            result="数据缺失",
-            data_status="缺失",
-            note=note,
-        )
-
-    ratio = dps / eps * 100
-    return ChecklistItem(
+    definition = ChecklistDefinition(
         key="payout_ratio",
-        label="派息率（≥40%=成熟分支 / <40%=成长分支）",
-        raw_value=ratio,
+        label="派息率（>40%=成熟分支 / ≤40%=成长分支）",
         unit="%",
-        direction="higher_better",
-        excellent_threshold=None,
-        pass_threshold=40,
-        result=_evaluate_result(ratio, "higher_better", None, 40),
-        data_status="完整",
-        note=note,
+        note="派息率≤40%时C框架股息率主估值轴不适用（利润主要再投资而非分配）：须改用 frameworks/C.md「成长型资源股分支」——基本面前瞻股息率15分→5分并新增产量·储量成长兑现度10分，择时主估值轴改用PB历史分位；>40%时沿用成熟资源股原权重。eps≤0时派息率无经济意义，按成熟分支处理。判据要求 dps 与 eps 同为最近完整财年口径",
     )
+    payout_ratio = framework_scoring.calculate_payout_ratio(
+        fundamentals.get("dps"),
+        fundamentals.get("eps"),
+    )
+    return _build_item("C", definition, payout_ratio)
 
 
 def _register(metadata: FrameworkMetadata) -> FrameworkMetadata:
@@ -219,25 +137,16 @@ _FRAMEWORK_A = _register(
         subjective_items=["护城河", "行业地位"],
         skipped_items=[],
         checklist_definitions=[
-            ChecklistDefinition(
-                "roe_3y_avg", "ROE近3年均值", "%", "higher_better", 15, 10
-            ),
-            ChecklistDefinition(
-                "net_profit_growth", "净利润增速近3年", "%", "higher_better", 15, 8
-            ),
-            ChecklistDefinition(
-                "debt_ratio", "资产负债率", "%", "lower_better", 40, 60
-            ),
+            ChecklistDefinition("roe_3y_avg", "ROE近3年均值", "%"),
+            ChecklistDefinition("net_profit_growth", "净利润增速近3年", "%"),
+            ChecklistDefinition("debt_ratio", "资产负债率", "%"),
             ChecklistDefinition(
                 "gross_margin",
                 "毛利率",
                 "%",
-                "higher_better",
-                30,
-                None,
-                '达优档要求的"稳定"/格档"无明显下滑"代码不做验证，仅核对当期数值是否过线，趋势需人工结合历史数据复核；'
+                note='达优档要求的"稳定"/格档"无明显下滑"代码不做验证，仅核对当期数值是否过线，趋势需人工结合历史数据复核；'
                 '格档本身无数值线（"无明显下滑"是质性判断），"未达"只代表未过30%优档线，不代表完全不及格',
-                True,
+                trend_unverified=True,
             ),
         ],
         portfolio_label="A通用",
@@ -270,9 +179,7 @@ _FRAMEWORK_B = _register(
             ),
         ],
         checklist_definitions=[
-            ChecklistDefinition(
-                "roe_3y_avg", "ROE加权年化", "%", "higher_better", 13, 9
-            ),
+            ChecklistDefinition("roe_3y_avg", "ROE加权年化", "%"),
         ],
         portfolio_label="B银行",
         industry_keywords=("银行",),
@@ -293,21 +200,14 @@ _FRAMEWORK_C = _register(
             ),
         ],
         checklist_definitions=[
-            ChecklistDefinition(
-                "roe_3y_avg", "ROE近3年均值", "%", "higher_better", 12, 8
-            ),
+            ChecklistDefinition("roe_3y_avg", "ROE近3年均值", "%"),
             ChecklistDefinition(
                 "eps",
                 "净利润增长趋势",
                 "元",
-                "higher_better",
-                None,
-                0,
-                "格档判定用EPS是否非负（即是否亏损），不用净利润增速字段（增速为负不代表亏损）；优档需结合商品价格走势人工判断",
+                note="格档判定用EPS是否非负（即是否亏损），不用净利润增速字段（增速为负不代表亏损）；优档需结合商品价格走势人工判断",
             ),
-            ChecklistDefinition(
-                "debt_ratio", "资产负债率", "%", "lower_better", 45, 65
-            ),
+            ChecklistDefinition("debt_ratio", "资产负债率", "%"),
         ],
         custom_builder=_build_c_payout_ratio_item,
         portfolio_label="C资源",
@@ -339,9 +239,7 @@ _FRAMEWORK_D = _register(
             ),
         ],
         checklist_definitions=[
-            ChecklistDefinition(
-                "debt_ratio", "资产负债率", "%", "lower_better", 55, 70
-            ),
+            ChecklistDefinition("debt_ratio", "资产负债率", "%"),
         ],
         portfolio_label="D公用",
         industry_keywords=(
@@ -370,13 +268,9 @@ _FRAMEWORK_E = _register(
             ),
         ],
         checklist_definitions=[
-            ChecklistDefinition(
-                "roe_3y_avg", "ROE近3年均值", "%", "higher_better", 20, 12
-            ),
-            ChecklistDefinition(
-                "net_profit_growth", "净利润增速", "%", "higher_better", 15, 8
-            ),
-            ChecklistDefinition("gross_margin", "毛利率", "%", "higher_better", 50, 30),
+            ChecklistDefinition("roe_3y_avg", "ROE近3年均值", "%"),
+            ChecklistDefinition("net_profit_growth", "净利润增速", "%"),
+            ChecklistDefinition("gross_margin", "毛利率", "%"),
         ],
         portfolio_label="E消费",
         industry_keywords=("白酒", "消费", "食品", "零售", "饮料"),
@@ -396,18 +290,13 @@ _FRAMEWORK_F = _register(
             ),
         ],
         checklist_definitions=[
-            ChecklistDefinition(
-                "revenue_growth_3y", "收入增速近3年均值", "%", "higher_better", 30, 15
-            ),
+            ChecklistDefinition("revenue_growth_3y", "收入增速近3年均值", "%"),
             ChecklistDefinition(
                 "gross_margin",
                 "毛利率及趋势",
                 "%",
-                "higher_better",
-                50,
-                30,
-                '达优/达格档要求的"不下滑"/"趋势平稳"代码不做验证，仅核对当期数值是否过线，趋势需人工结合历史数据复核',
-                True,
+                note='达优/达格档要求的"不下滑"/"趋势平稳"代码不做验证，仅核对当期数值是否过线，趋势需人工结合历史数据复核',
+                trend_unverified=True,
             ),
         ],
         custom_builder=_build_f_operating_cf_quality_item,
@@ -439,7 +328,7 @@ def build_checklist(
         raise FundamentalsCacheMissingError(f"未找到 {code} 的有效基本面缓存")
 
     items = [
-        _build_item(definition, fundamentals.get(definition.key))
+        _build_item(normalized_framework, definition, fundamentals.get(definition.key))
         for definition in metadata.checklist_definitions
     ]
     if metadata.custom_builder is not None:
@@ -517,7 +406,7 @@ def _format_threshold(
 ) -> str:
     if threshold is None:
         return f"{label}未设"
-    op = "≥" if direction == "higher_better" else "≤"
+    op = ">" if direction == "higher_better" else "<"
     return f"{label}{op}{_format_number(threshold)}{unit}"
 
 
