@@ -420,8 +420,14 @@ def main(argv: list[str] | None = None) -> int:
     suite_temp = tempfile.TemporaryDirectory(prefix="a-stock-agent-wheel-")
     try:
         suite_wheel = _build_suite_wheel(source, Path(suite_temp.name))
+        command_targets = [
+            root / ".local" / "bin" / name
+            for name in CONSOLE_SCRIPTS
+            if (root / ".local" / "bin" / name).exists()
+            or (root / ".local" / "bin" / name).is_symlink()
+        ]
         rollback: list[dict[str, str]] = []
-        for destination in existing:
+        for destination in [*existing, *command_targets]:
             backup = _backup(destination, root)
             rollback.append({"target": str(destination), "backup": str(backup)})
         manifest_path = (
