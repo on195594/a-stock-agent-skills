@@ -12,13 +12,15 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The deployed `v0.1.11` runtime release (`0.1.11-996e552a3463`) still uses
-`a-stock-lib==0.6.3`. The current repository candidate pins the immutable
-`a-stock-lib==0.6.4` GitHub Release wheel and its SHA256 in `uv.lock`. It adds
-real TTM P1/P2 inputs and PE/PEG fields, scoped
-PB/BPS compatibility, read-only decision metadata, corrected A/F routing and
-strict QA snapshot integrity without changing the database schema or W1 write
-boundary. All nine client Skill entries resolve directly to `skills/`.
+The deployed `v0.1.11` runtime (`0.1.11-2c2d6018d411`) and the repository's
+frozen lock use the immutable `a-stock-lib==0.7.0` GitHub Release wheel. The
+wheel SHA-256 is
+`7c4a16d452f34574584531bab6fe9d150f3cb844e5c9b2fe072295f6bb2ee385`.
+Architecture convergence Phases 1-6 are complete: A-F scoring and cache-only
+industry lookup have one typed owner, runtime decisions use the versioned
+`decision_v1` JSON contract, the three Skills are thin routers, and the eight
+captured Hermes scenarios have deterministic offline behavior checks. All nine
+client Skill entries resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
@@ -36,7 +38,7 @@ and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
 ## Install or update
 
 Requirements: Python 3.13+ and `uv`. The installer resolves the hash-pinned
-`a-stock-lib==0.6.4` Release wheel from project metadata:
+`a-stock-lib==0.7.0` Release wheel from project metadata:
 
 ```bash
 python3 scripts/install.py \
