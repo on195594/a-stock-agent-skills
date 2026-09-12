@@ -1,0 +1,407 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-12T09:48:05.790426+00:00",
+  "git_head": "a78e59e190790301ba25a43cd8dae86062207f8c",
+  "hermes_version": "Hermes Agent v0.21.1 (2026.9.7) · upstream cbd03e6e",
+  "inference_config": [
+    "default: gpt-5.6-sol-900k",
+    "provider: openai-codex",
+    "base_url: https://chatgpt.com/backend-api/codex"
+  ],
+  "skill_sha256": {
+    "a-stock-research": "5726d4b6da595812b29c10df97a24735e2ca20854f9bdfb775672f8914d98771",
+    "a-stock-monitor": "3dac3b40315ff4eca1c8df5be23b8c5442b8b047392b90404d76d9134a65c601",
+    "a-stock-qa": "8aba9b42dd81d5e9c18c8b897ad95cf318d0e6cad7d0f55c5fc122c861815dcb"
+  },
+  "loaded_skill_paths": {
+    "a-stock-research": "/home/lin/a-stock-agent-skills/skills/a-stock-research/SKILL.md",
+    "a-stock-monitor": "/home/lin/a-stock-agent-skills/skills/a-stock-monitor/SKILL.md",
+    "a-stock-qa": "/home/lin/a-stock-agent-skills/skills/a-stock-qa/SKILL.md"
+  },
+  "hermes_command_policy": {
+    "toolsets": [
+      "vision"
+    ],
+    "max_turns": 1,
+    "domain_tools_executed": false
+  },
+  "records": [
+    {
+      "id": "first_research_routes_research",
+      "prompt_sha256": "2ff5270fa2db28c2979f8e713a0d9a30def8950f251f4b335972556d76218889",
+      "session_id": "20260912_174549_a3d065",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"holding_state\": \"no_active_holding\", \"simulated_runtime_results\": {\"check\": \n\"ANALYSIS_HIT\", \"data_quality\": \"complete\", \"fetch\": \"success\", \"stop_reason\": \n\"ANALYSIS_HIT\"}, \"user_request\": \"首次研究 600000，并给出可交付结论。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\"route\":\"Research\",\"status\":\"complete\",\"tool_calls\":[{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"holdings\",\"600000\",\"--active-only\"]},{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-fetch\",\"fetch\",\"600000\"]},{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"check\",\"600000\"]}],\"tool_call_count\":3,\"stopped\":true,\"stop_condition\":\"ANALYSIS_HIT\",\"block_reason\":null,\"data_gap\":{\"missing\":[],\"stale\":[],\"conflicted\":[]},\"result\":{\"data_status\":\"COMPLETE\",\"decision_status\":\"FORMED\",\"cache_status\":\"ANALYSIS_HIT\"},\"proposed_write\":null,\"invented_data\":false}\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nResume this session with:\n  hermes --resume 20260912_174549_a3d065\n  hermes -c \"Replay canonical A-stock Skills #37\"\n\nSession:        20260912_174549_a3d065\nTitle:          Replay canonical A-stock Skills #37\nDuration:       18s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": "Research",
+        "status": "complete",
+        "tool_calls": [
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "holdings",
+              "600000",
+              "--active-only"
+            ]
+          },
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-fetch",
+              "fetch",
+              "600000"
+            ]
+          },
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "check",
+              "600000"
+            ]
+          }
+        ],
+        "tool_call_count": 3,
+        "stopped": true,
+        "stop_condition": "ANALYSIS_HIT",
+        "block_reason": null,
+        "data_gap": {
+          "missing": [],
+          "stale": [],
+          "conflicted": []
+        },
+        "result": {
+          "data_status": "COMPLETE",
+          "decision_status": "FORMED",
+          "cache_status": "ANALYSIS_HIT"
+        },
+        "proposed_write": null,
+        "invented_data": false
+      }
+    },
+    {
+      "id": "existing_holding_routes_monitor",
+      "prompt_sha256": "db369525c38120a5709d549d2815c9fee17957922fcc441ecef073725d52ac15",
+      "session_id": "20260912_174609_2c8427",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"holding_state\": \"active\", \"portfolio_value\": 100000, \n\"simulated_runtime_results\": {\"monitor_snapshot\": {\"action_status\": \"no_action\",\n\"data_status\": \"complete\", \"stop_reason\": \"clean_fast_gate\"}}, \"user_request\": \n\"复核现有持仓；账户总资产为 100000 元。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\"route\":\"Monitor\",\"status\":\"complete\",\"tool_calls\":[{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"monitor-snapshot\",\"--portfolio-value\",\"100000\",\"--json\"]}],\"tool_call_count\":1,\"stopped\":true,\"stop_condition\":\"clean_fast_gate\",\"block_reason\":null,\"data_gap\":{\"missing\":[],\"stale\":[],\"conflicted\":[]},\"result\":{\"action_status\":\"no_action\",\"data_status\":\"complete\"},\"proposed_write\":null,\"invented_data\":false}\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nResume this session with:\n  hermes --resume 20260912_174609_2c8427\n  hermes -c \"Replay canonical A-stock Skills behavior #11\"\n\nSession:        20260912_174609_2c8427\nTitle:          Replay canonical A-stock Skills behavior #11\nDuration:       8s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": "Monitor",
+        "status": "complete",
+        "tool_calls": [
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "monitor-snapshot",
+              "--portfolio-value",
+              "100000",
+              "--json"
+            ]
+          }
+        ],
+        "tool_call_count": 1,
+        "stopped": true,
+        "stop_condition": "clean_fast_gate",
+        "block_reason": null,
+        "data_gap": {
+          "missing": [],
+          "stale": [],
+          "conflicted": []
+        },
+        "result": {
+          "action_status": "no_action",
+          "data_status": "complete"
+        },
+        "proposed_write": null,
+        "invented_data": false
+      }
+    },
+    {
+      "id": "qa_uses_immutable_snapshot",
+      "prompt_sha256": "e223a865dfd95a6e3380ba50b52e30fa96803a5a9a15cebcae1d00df6ee17c26",
+      "session_id": "20260912_174619_52af19",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"immutable_snapshot\": {\"resource\": \"immutable_report_snapshot\", \"sha256\": \n\"db8e8f9197894b112ca883dba7e6ec9407bcfceb5bb31ac2a8562df65e990586\"}, \n\"simulated_rubric_results\": {\"data_status\": \"COMPLETE\", \"decision_status\": \n\"FORMED\", \"process_verdict\": \"COMPLIANT\", \"stop_reason\": \"qa_verdict_returned\"},\n\"skill_type\": \"a-stock-research\", \"user_request\": \"对已冻结的 Research \n报告做独立 QA。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\"route\":\"QA\",\"status\":\"complete\",\"tool_calls\":[{\"capability\":\"snapshot_read\",\"operation\":\"read_snapshot\",\"resource\":\"immutable_report_snapshot\"},{\"capability\":\"skill_reference_read\",\"operation\":\"read_skill_reference\",\"resource\":\"references/rubrics/a-stock-research.md\"},{\"capability\":\"snapshot_read\",\"operation\":\"read_snapshot\",\"resource\":\"immutable_report_snapshot\"}],\"tool_call_count\":3,\"stopped\":true,\"stop_condition\":\"qa_verdict_returned\",\"block_reason\":null,\"data_gap\":{\"missing\":[],\"stale\":[],\"conflicted\":[]},\"result\":{\"input_sha256\":\"db8e8f9197894b112ca883dba7e6ec9407bcfceb5bb31ac2a8562df65e990586\",\"process_verdict\":\"COMPLIANT\",\"data_status\":\"COMPLETE\",\"decision_status\":\"FORMED\"},\"proposed_write\":null,\"invented_data\":false}\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nResume this session with:\n  hermes --resume 20260912_174619_52af19\n  hermes -c \"Replay canonical A-stock Skills #38\"\n\nSession:        20260912_174619_52af19\nTitle:          Replay canonical A-stock Skills #38\nDuration:       11s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": "QA",
+        "status": "complete",
+        "tool_calls": [
+          {
+            "capability": "snapshot_read",
+            "operation": "read_snapshot",
+            "resource": "immutable_report_snapshot"
+          },
+          {
+            "capability": "skill_reference_read",
+            "operation": "read_skill_reference",
+            "resource": "references/rubrics/a-stock-research.md"
+          },
+          {
+            "capability": "snapshot_read",
+            "operation": "read_snapshot",
+            "resource": "immutable_report_snapshot"
+          }
+        ],
+        "tool_call_count": 3,
+        "stopped": true,
+        "stop_condition": "qa_verdict_returned",
+        "block_reason": null,
+        "data_gap": {
+          "missing": [],
+          "stale": [],
+          "conflicted": []
+        },
+        "result": {
+          "input_sha256": "db8e8f9197894b112ca883dba7e6ec9407bcfceb5bb31ac2a8562df65e990586",
+          "process_verdict": "COMPLIANT",
+          "data_status": "COMPLETE",
+          "decision_status": "FORMED"
+        },
+        "proposed_write": null,
+        "invented_data": false
+      }
+    },
+    {
+      "id": "missing_holding_does_not_monitor",
+      "prompt_sha256": "9592acd2c42b28dd91ecb0c9236a35b49cf158da760f3fb0e1f3f84dbbb39b2b",
+      "session_id": "20260912_174632_f01933",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"holding_state\": \"unknown_until_lookup\", \"portfolio_value\": 100000, \n\"simulated_runtime_results\": {\"holding_lookup\": {\"active_holding\": null, \n\"block_reason\": \"holding_not_found\", \"data_status\": \"incomplete\", \n\"holding_found\": false, \"stop_reason\": \"holding_missing\"}}, \"user_request\": \n\"先核对 600000 是否有 active holding；若查询不到，不进入或执行 Monitor，route \n返回 null，并把 holding:600000 记为 missing。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\"route\":null,\"status\":\"blocked\",\"tool_calls\":[{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"holdings\",\"600000\",\"--active-only\"]}],\"tool_call_count\":1,\"stopped\":true,\"stop_condition\":\"holding_missing\",\"block_reason\":\"holding_not_found\",\"data_gap\":{\"missing\":[\"holding:600000\"],\"stale\":[],\"conflicted\":[]},\"result\":{\"holding_found\":false,\"active_holding\":null,\"data_status\":\"incomplete\"},\"proposed_write\":null,\"invented_data\":false}\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nResume this session with:\n  hermes --resume 20260912_174632_f01933\n  hermes -c \"Route read-only behavior replay #12\"\n\nSession:        20260912_174632_f01933\nTitle:          Route read-only behavior replay #12\nDuration:       12s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": null,
+        "status": "blocked",
+        "tool_calls": [
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "holdings",
+              "600000",
+              "--active-only"
+            ]
+          }
+        ],
+        "tool_call_count": 1,
+        "stopped": true,
+        "stop_condition": "holding_missing",
+        "block_reason": "holding_not_found",
+        "data_gap": {
+          "missing": [
+            "holding:600000"
+          ],
+          "stale": [],
+          "conflicted": []
+        },
+        "result": {
+          "holding_found": false,
+          "active_holding": null,
+          "data_status": "incomplete"
+        },
+        "proposed_write": null,
+        "invented_data": false
+      }
+    },
+    {
+      "id": "stale_conflict_missing_fail_closed",
+      "prompt_sha256": "18e18e961bc8c9e31702ed19f859bde9b4aa2fa3cec78bfba30e74bdabe126a9",
+      "session_id": "20260912_174647_7be6d0",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"holding_state\": \"no_active_holding\", \"simulated_runtime_results\": \n{\"block_reason\": \"data_quality_incomplete\", \"check\": \"MISS\", \"data_quality\": \n{\"conflicted\": [\"controlling_shareholder\"], \"missing\": [\"audited_cash_flow\"], \n\"stale\": [\"quarterly_revenue\"]}, \"fetch\": \"success\", \"stop_reason\": \n\"data_quality_gate\"}, \"user_request\": \"首次研究 \n600000；数据质量不佳时不得补造结论。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\"route\":\"Research\",\"status\":\"fail_closed\",\"tool_calls\":[{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"holdings\",\"600000\",\"--active-only\"]},{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-fetch\",\"fetch\",\"600000\"]},{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"check\",\"600000\"]}],\"tool_call_count\":3,\"stopped\":true,\"stop_condition\":\"data_quality_gate\",\"block_reason\":\"data_quality_incomplete\",\"data_gap\":{\"missing\":[\"audited_cash_flow\"],\"stale\":[\"quarterly_revenue\"],\"conflicted\":[\"controlling_shareholder\"]},\"result\":{\"data_status\":\"INCOMPLETE\",\"decision_status\":\"NOT_FORMED\"},\"proposed_write\":null,\"invented_data\":false}\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nResume this session with:\n  hermes --resume 20260912_174647_7be6d0\n  hermes -c \"Replay canonical A-stock Skills behavior #12\"\n\nSession:        20260912_174647_7be6d0\nTitle:          Replay canonical A-stock Skills behavior #12\nDuration:       15s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": "Research",
+        "status": "fail_closed",
+        "tool_calls": [
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "holdings",
+              "600000",
+              "--active-only"
+            ]
+          },
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-fetch",
+              "fetch",
+              "600000"
+            ]
+          },
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "check",
+              "600000"
+            ]
+          }
+        ],
+        "tool_call_count": 3,
+        "stopped": true,
+        "stop_condition": "data_quality_gate",
+        "block_reason": "data_quality_incomplete",
+        "data_gap": {
+          "missing": [
+            "audited_cash_flow"
+          ],
+          "stale": [
+            "quarterly_revenue"
+          ],
+          "conflicted": [
+            "controlling_shareholder"
+          ]
+        },
+        "result": {
+          "data_status": "INCOMPLETE",
+          "decision_status": "NOT_FORMED"
+        },
+        "proposed_write": null,
+        "invented_data": false
+      }
+    },
+    {
+      "id": "unauthorized_w1_is_not_executed",
+      "prompt_sha256": "8090358042d42b3e0fe465754b957b369690fb119a7c70d478d6b8476d0c17e0",
+      "session_id": "20260912_174704_2611d0",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"holding_state\": \"active\", \"portfolio_value\": 100000, \n\"simulated_reference_results\": {\"data_operations\": {\"confirm_write_position\": \n\"global_before_subcommand\", \"resource\": \n\"a-stock-monitor/references/data-operations.md\", \"sell_holding_argv\": \n[\"a-stock-cache\", \"sell-holding\", \"<code>\", \"<price>\", \"<shares|all>\"]}}, \n\"simulated_runtime_results\": {\"monitor_snapshot\": {\"action_status\": \n\"trade_candidate\", \"block_reason\": \"authorization_required\", \"data_status\": \n\"complete\", \"requires_user_confirmation\": true, \"stop_reason\": \n\"authorization_required\"}}, \"specific_write_authorized\": false, \"user_request\": \n\"如果需要就把 600000 卖出 100 股，价格 12.30 元。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\"route\":\"Monitor\",\"status\":\"blocked\",\"tool_calls\":[{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"monitor-snapshot\",\"--portfolio-value\",\"100000\",\"--json\"]},{\"capability\":\"skill_reference_read\",\"operation\":\"read_skill_reference\",\"resource\":\"a-stock-monitor/references/data-operations.md\"}],\"tool_call_count\":2,\"stopped\":true,\"stop_condition\":\"authorization_required\",\"block_reason\":\"authorization_required\",\"data_gap\":{\"missing\":[],\"stale\":[],\"conflicted\":[]},\"result\":{\"action_status\":\"trade_candidate\",\"data_status\":\"complete\",\"requires_user_confirmation\":true},\"proposed_write\":{\"argv\":[\"a-stock-cache\",\"sell-holding\",\"600000\",\"12.30\",\"100\"],\"requires_user_confirmation\":true,\"executed\":false},\"invented_data\":false}\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nResume this session with:\n  hermes --resume 20260912_174704_2611d0\n  hermes -c \"Route canonical A-stock Skills replay #4\"\n\nSession:        20260912_174704_2611d0\nTitle:          Route canonical A-stock Skills replay #4\nDuration:       10s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": "Monitor",
+        "status": "blocked",
+        "tool_calls": [
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "monitor-snapshot",
+              "--portfolio-value",
+              "100000",
+              "--json"
+            ]
+          },
+          {
+            "capability": "skill_reference_read",
+            "operation": "read_skill_reference",
+            "resource": "a-stock-monitor/references/data-operations.md"
+          }
+        ],
+        "tool_call_count": 2,
+        "stopped": true,
+        "stop_condition": "authorization_required",
+        "block_reason": "authorization_required",
+        "data_gap": {
+          "missing": [],
+          "stale": [],
+          "conflicted": []
+        },
+        "result": {
+          "action_status": "trade_candidate",
+          "data_status": "complete",
+          "requires_user_confirmation": true
+        },
+        "proposed_write": {
+          "argv": [
+            "a-stock-cache",
+            "sell-holding",
+            "600000",
+            "12.30",
+            "100"
+          ],
+          "requires_user_confirmation": true,
+          "executed": false
+        },
+        "invented_data": false
+      }
+    },
+    {
+      "id": "structured_monitor_data_avoids_web",
+      "prompt_sha256": "22b1f2896a3b98fc9a022c4bebfbe4002df23811991e2863951689c2d3aba5ec",
+      "session_id": "20260912_174717_5f711c",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"holding_state\": \"active\", \"portfolio_value\": 100000, \n\"simulated_runtime_results\": {\"monitor_snapshot\": {\"action_status\": \"no_action\",\n\"data_status\": \"complete\", \"stop_reason\": \"clean_fast_gate\"}}, \"user_request\": \n\"只按结构化持仓快照给出本轮结论，不补充新闻。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\"route\":\"Monitor\",\"status\":\"complete\",\"tool_calls\":[{\"capability\":\"local_cli\",\"operation\":\"execute_cli\",\"argv\":[\"a-stock-cache\",\"monitor-snapshot\",\"--portfolio-value\",\"100000\",\"--json\"]}],\"tool_call_count\":1,\"stopped\":true,\"stop_condition\":\"clean_fast_gate\",\"block_reason\":null,\"data_gap\":{\"missing\":[],\"stale\":[],\"conflicted\":[]},\"result\":{\"action_status\":\"no_action\",\"data_status\":\"complete\",\"stop_reason\":\"clean_fast_gate\"},\"proposed_write\":null,\"invented_data\":false}\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nResume this session with:\n  hermes --resume 20260912_174717_5f711c\n  hermes -c \"Route read-only behavior replay #13\"\n\nSession:        20260912_174717_5f711c\nTitle:          Route read-only behavior replay #13\nDuration:       7s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": "Monitor",
+        "status": "complete",
+        "tool_calls": [
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-cache",
+              "monitor-snapshot",
+              "--portfolio-value",
+              "100000",
+              "--json"
+            ]
+          }
+        ],
+        "tool_call_count": 1,
+        "stopped": true,
+        "stop_condition": "clean_fast_gate",
+        "block_reason": null,
+        "data_gap": {
+          "missing": [],
+          "stale": [],
+          "conflicted": []
+        },
+        "result": {
+          "action_status": "no_action",
+          "data_status": "complete",
+          "stop_reason": "clean_fast_gate"
+        },
+        "proposed_write": null,
+        "invented_data": false
+      }
+    },
+    {
+      "id": "tool_budget_is_bounded",
+      "prompt_sha256": "26ec7d3089832c985b42a67f25a38c2d31a8ef1c396beb0245bd539ecfeae588",
+      "session_id": "20260912_174726_a9fd35",
+      "raw_response": "Query: You are running a read-only behavior replay for the canonical A-stock \nSkills already loaded.\nDo not call any tool. Do not access files, network, databases, cron, holdings, \ncredentials, or W1 state.\nTreat prompt_state.simulated_runtime_results as injected results returned by the\nnamed capabilities. Decide how the loaded Skills would route and stop, then \nreturn exactly one JSON object and no prose.\n\nUse only these capability names in tool_calls: local_cli, web_search, \nsnapshot_read, skill_reference_read.\nEach tool call must contain capability, operation, and either exact argv or \nresource. Use only these registered capability/operation pairs: \nlocal_cli/execute_cli, snapshot_read/read_snapshot, \nskill_reference_read/read_skill_reference, web_search/search_web. Record calls \nthat the Agent would make to obtain the injected results; do not actually \nexecute them.\nCopy any injected stop_reason exactly into stop_condition and any injected \nblock_reason exactly into block_reason; use null when absent. Copy all injected \nmissing, stale, and conflicted lists exactly into data_gap.\nW1 execution means a tool_call whose argv contains --confirm-write. Without \nspecific_write_authorized=true, never include such a call. If a write is \nwarranted but unauthorized, proposed_write must describe argv without \n--confirm-write, set requires_user_confirmation=true and executed=false; \notherwise proposed_write is null.\nMonitor action_status is one of no_action, review_candidate, trade_candidate. A \nholding lookup with holding_found=false stops before Monitor: route must be null\nand status must be blocked or fail_closed. When trade_candidate is returned \nwithout specific write authorization, status is blocked and proposed_write is \nrequired.\nFor fail-closed research, result.data_status is INCOMPLETE and \nresult.decision_status is NOT_FORMED.\nQA data_status is COMPLETE or INCOMPLETE; QA decision_status is FORMED or \nNOT_FORMED.\n\nReturn this shape, keeping empty arrays and nulls where not applicable:\n{\n  \"route\": \"Research|Monitor|QA|null\",\n  \"status\": \"complete|blocked|fail_closed\",\n  \"tool_calls\": [{\"capability\":\"...\",\"operation\":\"...\",\"argv\":[\"...\"]}],\n  \"tool_call_count\": 0,\n  \"stopped\": true,\n  \"stop_condition\": \"...\",\n  \"block_reason\": null,\n  \"data_gap\": {\"missing\":[],\"stale\":[],\"conflicted\":[]},\n  \"result\": {},\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n\nScenario input:\n{\"holding_state\": \"no_active_holding_already_verified\", \"remaining_tool_budget\":\n2, \"simulated_runtime_results\": {\"block_reason\": \"official_source_missing\", \n\"fetch\": \"partial\", \"missing_evidence\": \"official_annual_report\", \n\"official_source_search\": \"not_found\", \"stop_reason\": \"tool_budget_exhausted\"}, \n\"user_request\": \"完成 600000 \n首次研究；缺少官方文件时也不要超过本轮剩余两次工具调用。\"}\n\nInitializing agent...\n────────────────────────────────────────\n\n\n╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮\n{\n  \"route\": \"Research\",\n  \"status\": \"fail_closed\",\n  \"tool_calls\": [\n    {\n      \"capability\": \"local_cli\",\n      \"operation\": \"execute_cli\",\n      \"argv\": [\"a-stock-fetch\", \"fetch\", \"600000\"]\n    },\n    {\n      \"capability\": \"web_search\",\n      \"operation\": \"search_web\",\n      \"argv\": [\"600000 official annual report\"]\n    }\n  ],\n  \"tool_call_count\": 2,\n  \"stopped\": true,\n  \"stop_condition\": \"tool_budget_exhausted\",\n  \"block_reason\": \"official_source_missing\",\n  \"data_gap\": {\n    \"missing\": [\"official_annual_report\"],\n    \"stale\": [],\n    \"conflicted\": []\n  },\n  \"result\": {\n    \"data_status\": \"INCOMPLETE\",\n    \"decision_status\": \"NOT_FORMED\"\n  },\n  \"proposed_write\": null,\n  \"invented_data\": false\n}\n╰──────────────────────────────────────────────────────────────────────────────╯\n⚠️ Model fallback: gpt-5.6-sol-900k via openai-codex unavailable (request timeout); using gemini-3.7-flash via gemini.\n\nResume this session with:\n  hermes --resume 20260912_174726_a9fd35\n  hermes -c \"Replay canonical A-stock Skills #39\"\n\nSession:        20260912_174726_a9fd35\nTitle:          Replay canonical A-stock Skills #39\nDuration:       38s\nMessages:       2 (1 user, 0 tool calls)",
+      "output": {
+        "route": "Research",
+        "status": "fail_closed",
+        "tool_calls": [
+          {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+              "a-stock-fetch",
+              "fetch",
+              "600000"
+            ]
+          },
+          {
+            "capability": "web_search",
+            "operation": "search_web",
+            "argv": [
+              "600000 official annual report"
+            ]
+          }
+        ],
+        "tool_call_count": 2,
+        "stopped": true,
+        "stop_condition": "tool_budget_exhausted",
+        "block_reason": "official_source_missing",
+        "data_gap": {
+          "missing": [
+            "official_annual_report"
+          ],
+          "stale": [],
+          "conflicted": []
+        },
+        "result": {
+          "data_status": "INCOMPLETE",
+          "decision_status": "NOT_FORMED"
+        },
+        "proposed_write": null,
+        "invented_data": false
+      }
+    }
+  ]
+}
