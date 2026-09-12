@@ -490,9 +490,6 @@ def _cmd_set_analysis_decision() -> None:
     try:
         decision = decision_contract.loads_decision(sys.stdin.read())
     except decision_contract.DecisionContractError as exc:
-        # Keep the command's local database queryable while rejecting the row.
-        with db.db_session():
-            pass
         print(f"错误：decision JSON 校验失败: {exc}", file=sys.stderr)
         sys.exit(1)
 

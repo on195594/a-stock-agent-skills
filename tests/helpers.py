@@ -106,6 +106,12 @@ def valid_decision_payload(
         "freshness": {"as_of": f"{cache.cst_today()}T10:00:00+08:00"},
         "narrative": narrative,
     }
+    if conflict:
+        payload["source_provenance"]["valuation_conflict"] = {
+            "pb_conclusion": "低估",
+            "cross_valuation_conclusion": "偏贵",
+            "evidence": ["fixture valuation evidence"],
+        }
     if cycle is True:
         payload["cycle_stage"] = {"stage": "上行期", "rationale": "fixture cycle"}
     elif isinstance(cycle, dict):

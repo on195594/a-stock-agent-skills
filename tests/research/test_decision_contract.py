@@ -163,5 +163,33 @@ def test_invalid_decision_fails_before_write(
     with pytest.raises(SystemExit):
         cache.cmd_set_analysis([])
 
-    with sqlite3.connect(isolated_cache_database) as conn:
-        assert conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone() == (0,)
+    assert not isolated_cache_database.exists()
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda payload: payload["source_provenance"].clear(),
+            "valuation_conflict evidence and block_reason must coincide",
+        ),
+        (
+            lambda payload: payload["source_provenance"]["valuation_conflict"].pop(
+                "evidence"
+            ),
+            "source_provenance.valuation_conflict.evidence",
+        ),
+        (
+            lambda payload: payload["block_reason"].remove("valuation_conflict"),
+            "valuation_conflict evidence and block_reason must coincide",
+        ),
+    ],
+)
+def test_valuation_conflict_evidence_and_block_reason_are_bidirectional(
+    mutate, message
+) -> None:
+    payload = fixture("decision_v1_blocked.json")
+    mutate(payload)
+
+    with pytest.raises(decision_contract.DecisionContractError, match=message):
+        decision_contract.validate_decision(payload)

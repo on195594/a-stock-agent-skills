@@ -164,8 +164,32 @@ def validate_decision(decision: Any) -> dict[str, Any]:
             f"block_reason is unsupported: {unsupported_reasons[0]}"
         )
 
-    if not isinstance(decision["source_provenance"], dict):
+    source_provenance = decision["source_provenance"]
+    if not isinstance(source_provenance, dict):
         raise DecisionContractError("source_provenance must be an object")
+    valuation_conflict = source_provenance.get("valuation_conflict")
+    if valuation_conflict is not None:
+        if not isinstance(valuation_conflict, dict):
+            raise DecisionContractError(
+                "source_provenance.valuation_conflict must be an object"
+            )
+        _nonempty_string(
+            valuation_conflict.get("pb_conclusion"),
+            "source_provenance.valuation_conflict.pb_conclusion",
+        )
+        _nonempty_string(
+            valuation_conflict.get("cross_valuation_conclusion"),
+            "source_provenance.valuation_conflict.cross_valuation_conclusion",
+        )
+        evidence = _string_list(
+            valuation_conflict.get("evidence"),
+            "source_provenance.valuation_conflict.evidence",
+        )
+        if not evidence or any(not item.strip() for item in evidence):
+            raise DecisionContractError(
+                "source_provenance.valuation_conflict.evidence must contain "
+                "non-empty strings"
+            )
     freshness = decision["freshness"]
     if not isinstance(freshness, dict):
         raise DecisionContractError("freshness must be an object")
@@ -188,6 +212,11 @@ def validate_decision(decision: Any) -> dict[str, Any]:
             )
     elif block_reasons:
         raise DecisionContractError("unblocked decisions cannot have block_reason")
+    has_valuation_reason = "valuation_conflict" in block_reasons
+    if (valuation_conflict is not None) != has_valuation_reason:
+        raise DecisionContractError(
+            "valuation_conflict evidence and block_reason must coincide"
+        )
     if (score is None) != (classification == "not_formed"):
         raise DecisionContractError(
             "framework_score null and framework_classification not_formed must coincide"
