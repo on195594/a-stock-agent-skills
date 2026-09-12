@@ -233,7 +233,9 @@ def test_research_routes_product_cycle_analysis_to_grounded_reference() -> None:
     )
 
     assert "references/catalyst-cycle-analysis.md" in skill
-    assert "不能把客户或平台发布直接视为公司订单" in skill
+    assert "公司被正式点名或另有公司公告时，才能映射为公司订单" in reference
+    assert "客户保密时不要从行业生态名单反推公司订单" in reference
+    assert "映射为公司订单" not in skill
     for contract in (
         "延续研究也不能沿用早先盘中价格",
         "强制反证",

@@ -37,54 +37,58 @@ def test_research_skill_routes_each_progressive_disclosure_reference_once() -> N
 
 def test_analysis_hit_stops_before_full_research_flow() -> None:
     main = MAIN.read_text(encoding="utf-8")
-    analysis_hit = main.split("`ANALYSIS_HIT`", 1)[1].split("`FUNDAMENTALS_HIT`", 1)[0]
+    analysis_hit = main.split("`ANALYSIS_HIT`", 1)[1].split("##", 1)[0]
 
-    assert "终止流程" in analysis_hit
+    assert "直接展示当日缓存并停止" in analysis_hit
     assert "research-execution-flow.md" not in analysis_hit
-    assert "FULL_MISS" in main
-    assert "research-execution-flow.md" in main.split("FULL_MISS", 1)[1]
+    assert "`FUNDAMENTALS_HIT` 或 `FULL_MISS`" in main
+    assert "research-execution-flow.md" in main
 
 
-def test_research_skill_keeps_hard_boundaries_in_main_entrypoint() -> None:
+def test_research_skill_keeps_boundaries_but_not_deterministic_policy_in_main() -> None:
     main = MAIN.read_text(encoding="utf-8")
+    execution = REFERENCES["execution"].read_text(encoding="utf-8")
+    data_cache = REFERENCES["data_cache"].read_text(encoding="utf-8")
 
     for marker in (
         "--confirm-write",
         "a-stock-fetch fetch <股票代码>",
-        "禁止并行",
-        "最新中报/季报冲突门",
-        "industry_status=stale_cache",
-        "估值项进入 `incomplete`",
-        "raw = 估值分 + 市场情绪分 + 周期调整 + 预期差调整 + 除权/除息调整 + 市场风格调整 + 异动股调整",
-        "唯一操作出口",
+        "`fetch` 失败即停止",
+        "fail-closed",
+        "incomplete/not_formed",
         "a-stock-qa",
+        "不得从自然语言标签重建",
     ):
         assert marker in main
 
-    assert "## 第1.5步：周期位置判断" in main
-    assert "## 第三步：择时评分" in main
-    assert "## 输出格式" in main
+    # Detailed gates, formulae, and schema live below the entrypoint.
+    for detail in (
+        "最新中报/季报冲突门",
+        "industry_status=stale_cache",
+        "raw = 估值分",
+        "## 第三步：择时评分",
+        "FUNDAMENTALS_HIT 最小数据卡",
+        "legacy_field_absent",
+    ):
+        assert detail not in main
+    assert "最新中报/季报冲突门" in data_cache
+    assert "industry_status=stale_cache" in data_cache
+    assert "raw = 估值分" in execution
+    assert "唯一操作出口" in execution
 
 
 def test_research_skill_bounds_first_pass_source_work_and_qa_handoff() -> None:
     main = MAIN.read_text(encoding="utf-8")
 
     for marker in (
-        "有界首版",
-        "每批最多 4 个独立查询",
-        "不得再探测其他实时行情 Provider",
-        "停止新增非阻塞补充检索",
-        "已触发的 `incomplete`",
-        "price_change_5d",
+        "默认最多一批、最多四个独立查询",
+        "不得探测重复 Provider",
+        "达到已校验结论或 fail-closed 结论后停止",
         "不可变快照",
-        "内容哈希",
-        "交付副本",
-        "本轮唯一临时目录",
-        "QA verdict 返回前不得向用户交付完整报告正文",
-        "不得轮询",
-        "不得用 `sleep` 等待",
+        "正文改变必须重新 QA",
     ):
         assert marker in main
+    assert "只对失败、缺失、过期或冲突项做一次有理由的 fallback" in main
 
 
 def test_research_routes_scale_electronics_manufacturing_to_a() -> None:
@@ -92,21 +96,27 @@ def test_research_routes_scale_electronics_manufacturing_to_a() -> None:
     execution = REFERENCES["execution"].read_text(encoding="utf-8")
     framework_f = (ROOT / "references/frameworks/F.md").read_text(encoding="utf-8")
 
-    for text in (main, execution, framework_f):
-        assert "EMS" in text and "ODM" in text
-        assert "连接器" in text and "A" in text
+    assert "research-execution-flow.md" in main
+    assert "EMS/ODM/电子组装/连接器/线束/声学器件/元器件/精密电子制造" in execution
+    assert "| A | `Read references/frameworks/A.md`" in execution
     assert "盈利公司使用真实TTM PEG" in execution
     assert "现金跑道/稀释" in framework_f
+    assert "EMS/ODM" not in main
 
 
 def test_a_framework_inputs_and_external_risk_contract_match_qa() -> None:
     main = MAIN.read_text(encoding="utf-8")
+    execution = REFERENCES["execution"].read_text(encoding="utf-8")
     framework_a = (ROOT / "references/frameworks/A.md").read_text(encoding="utf-8")
+    rubric = (
+        ROOT.parent / "a-stock-qa/references/rubrics/a-stock-research.md"
+    ).read_text(encoding="utf-8")
 
-    assert "A框架还必须核验外部集中风险" in main
-    assert "Markdown 标签" in main
-    assert "异动、治理/政策" in main and "外部集中风险" in main
+    assert "research-execution-flow.md" in main
+    assert "异动、治理/政策与外部集中风险" in execution
     assert "gross_margin_stable" in framework_a
     assert "补充指标 JSON" in framework_a
     assert "source_provenance" in framework_a
+    assert "外部集中风险覆盖" in rubric
     assert "外部集中风险[" not in framework_a
+    assert "gross_margin_stable" not in main

@@ -79,18 +79,8 @@ def test_holdings_active_only_excludes_closed_history(
     tmp_path, monkeypatch, capsys
 ) -> None:
     _add_holding(tmp_path, monkeypatch, capsys)
-    assert (
-        cache.main(
-            ["--confirm-write", "add-holding", "601088", "20", "200"]
-        )
-        == 0
-    )
-    assert (
-        cache.main(
-            ["--confirm-write", "sell-holding", "601088", "21", "all"]
-        )
-        == 0
-    )
+    assert cache.main(["--confirm-write", "add-holding", "601088", "20", "200"]) == 0
+    assert cache.main(["--confirm-write", "sell-holding", "601088", "21", "all"]) == 0
     capsys.readouterr()
 
     assert cache.main(["holdings", "--compact", "--json", "--active-only"]) == 0
@@ -105,25 +95,12 @@ def test_holdings_active_only_returns_reopened_lifecycle(
     tmp_path, monkeypatch, capsys
 ) -> None:
     _add_holding(tmp_path, monkeypatch, capsys)
-    assert (
-        cache.main(
-            ["--confirm-write", "sell-holding", "600036", "51", "all"]
-        )
-        == 0
-    )
-    assert (
-        cache.main(
-            ["--confirm-write", "add-holding", "600036", "52", "100"]
-        )
-        == 0
-    )
+    assert cache.main(["--confirm-write", "sell-holding", "600036", "51", "all"]) == 0
+    assert cache.main(["--confirm-write", "add-holding", "600036", "52", "100"]) == 0
     capsys.readouterr()
 
     assert (
-        cache.main(
-            ["holdings", "600036", "--compact", "--json", "--active-only"]
-        )
-        == 0
+        cache.main(["holdings", "600036", "--compact", "--json", "--active-only"]) == 0
     )
 
     payload = json.loads(capsys.readouterr().out)
@@ -251,12 +228,15 @@ def test_monitor_skill_uses_compact_views_and_preserves_uncertainty() -> None:
     skill = (PROJECT_ROOT / "skills/a-stock-monitor/SKILL.md").read_text(
         encoding="utf-8"
     )
-    for contract in (
-        "holdings --compact --json",
-        "alerts <代码> --active --json",
-        "l3-list <代码> --active --json",
-        "monitor 任务不得加载或调用该 Skill",
-        "未发现已确认且可执行的交易触发",
-        "不得写成“全部L3未触发/均已排除”",
-    ):
-        assert contract in skill
+    daily = (
+        PROJECT_ROOT / "skills/a-stock-monitor/references/daily-monitoring-and-l3.md"
+    ).read_text(encoding="utf-8")
+
+    assert "monitor-snapshot --portfolio-value <账户总资产> --json" in skill
+    assert "解析前不得额外调用 `holdings`" in skill
+    assert "缺少 required 数据时不得输出确定性无动作" in skill
+    assert "不得补造触发、股数或成交" in skill
+    assert "L3 全量核查强制要求" in daily
+    assert '其余条件若本次无数据可判断，须明确标注"待观察' in daily
+    assert "holdings --compact --json" not in skill
+    assert "l3-list <代码> --active --json" not in skill
