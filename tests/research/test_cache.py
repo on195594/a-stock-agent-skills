@@ -224,9 +224,67 @@ def test_newer_bps_only_blocks_pb_percentile_frameworks() -> None:
     conflict = commands_analysis._decision_meta(data, "元器件")
     assert conflict["timing_status"] == "incomplete"
     assert (
-        "valuation_compatibility:same_period_value_mismatch"
-        in conflict["reason_codes"]
+        "valuation_compatibility:same_period_value_mismatch" in conflict["reason_codes"]
     )
+
+
+@pytest.mark.parametrize(
+    ("dps", "eps", "expects_pb_requirement"),
+    [
+        (0.39, 1.0, True),
+        (0.40, 1.0, True),
+        (0.41, 1.0, False),
+        (-0.1, 1.0, False),
+        (None, 1.0, False),
+        (float("nan"), 1.0, False),
+        (float("inf"), 1.0, False),
+    ],
+)
+def test_resource_pb_requirement_uses_owner_strict_payout_contract(
+    monkeypatch, dps, eps, expects_pb_requirement
+) -> None:
+    clear = {"status": "clear", "action_eligible": True, "reason_code": "clear"}
+    data = {
+        "dps": dps,
+        "eps": eps,
+        "regulatory_gate": clear,
+        "roe_structural_gate": clear,
+        "cash_flow_gate": clear,
+        "valuation_compatibility": {
+            "timing_eligible": True,
+            "pb_percentile_eligible": False,
+        },
+    }
+    calls = []
+    real_ratio = commands_analysis.framework_scoring.calculate_payout_ratio
+    real_classify = commands_analysis.framework_scoring.classify_framework_rule
+
+    def ratio(raw_dps, raw_eps):
+        calls.append(("ratio", raw_dps, raw_eps))
+        return real_ratio(raw_dps, raw_eps)
+
+    def classify(framework, rule_id, value):
+        calls.append(("classify", framework, rule_id, value))
+        return real_classify(framework, rule_id, value)
+
+    monkeypatch.setattr(
+        commands_analysis.framework_scoring, "calculate_payout_ratio", ratio
+    )
+    monkeypatch.setattr(
+        commands_analysis.framework_scoring, "classify_framework_rule", classify
+    )
+
+    meta = commands_analysis._decision_meta(data, "煤炭")
+
+    assert calls[0] == ("ratio", dps, eps)
+    owner_ratio = real_ratio(dps, eps)
+    if owner_ratio is not None:
+        assert calls[1] == ("classify", "C", "payout_ratio", owner_ratio)
+    else:
+        assert len(calls) == 1
+    assert (
+        "valuation_compatibility:pb_percentile_ineligible" in meta["reason_codes"]
+    ) is expects_pb_requirement
 
 
 def test_bank_decision_meta_normalizes_cash_flow_gate_to_not_applicable() -> None:
@@ -2068,9 +2126,8 @@ def test_watchlist_no_breakdown_unchanged(capsys):
     assert "  分项:" not in out
 
 
-def test_cmd_checklist_b_framework_output_unchanged(capsys):
-    """B框架最简单（1个客观指标+2个主观项+3个跳过项），用真实文本逐字核对
-    cmd_checklist()重构前后输出不变。"""
+def test_cmd_checklist_b_framework_output_uses_owner_strict_thresholds(capsys):
+    """B框架输出准确展示 owner contract 的严格阈值。"""
     set_valid_fundamentals("601988", "中国银行", "银行", {"roe_3y_avg": 14.0}, ttl=24)
 
     cache.cmd_checklist(["601988", "B"])
@@ -2079,7 +2136,7 @@ def test_cmd_checklist_b_framework_output_unchanged(capsys):
     assert out == (
         "框架客观指标核对清单：银行框架 601988\n"
         "────────────────────────────────\n"
-        "ROE加权年化: 14.0% | 优线≥13% 格线≥9% | 结果:达优 | 数据:完整\n"
+        "ROE加权年化: 14.0% | 优线>13% 格线>9% | 结果:达优 | 数据:完整\n"
         "\n"
         "需人工主观判断（不参与代码核对）：护城河、行业地位\n"
         "\n"

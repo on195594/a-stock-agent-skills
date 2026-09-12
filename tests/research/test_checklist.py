@@ -131,7 +131,7 @@ def test_a_framework_gross_margin_has_only_excellent_or_fail():
     _set_a_fundamentals(gross_margin=30.0)
     items = checklist.build_checklist("600036", "A")
     item = _item_by_key(items, "gross_margin")
-    assert item.result == "达优"
+    assert item.result == "未达"
     assert item.data_status == "简化判定（不判断趋势/连续性）"
 
 
@@ -200,9 +200,9 @@ def test_format_checklist_outputs_item_note():
 @pytest.mark.parametrize(
     ("roe_3y_avg", "expected"),
     [
-        (12.0, "达优"),
+        (12.0, "达格"),
         (11.9, "达格"),
-        (8.0, "达格"),
+        (8.0, "未达"),
         (8.1, "达格"),
         (7.9, "未达"),
     ],
@@ -219,10 +219,10 @@ def test_c_framework_roe_thresholds(roe_3y_avg, expected):
 @pytest.mark.parametrize(
     ("debt_ratio", "expected"),
     [
-        (45.0, "达优"),
+        (45.0, "达格"),
         (45.1, "达格"),
         (64.9, "达格"),
-        (65.0, "达格"),
+        (65.0, "未达"),
         (65.1, "未达"),
     ],
 )
@@ -239,7 +239,7 @@ def test_c_framework_debt_ratio_lower_better_thresholds(debt_ratio, expected):
     ("eps", "expected"),
     [
         (1.0, "达格"),
-        (0.0, "达格"),
+        (0.0, "未达"),
         (-0.1, "未达"),
     ],
 )
@@ -280,7 +280,7 @@ def test_c_framework_payout_ratio_growth_branch_and_rendered_note():
 
     items = checklist.build_checklist("600900", "C")
     item = _item_by_key(items, "payout_ratio")
-    note = "派息率<40%时C框架股息率主估值轴不适用（利润主要再投资而非分配）：须改用 frameworks/C.md「成长型资源股分支」——基本面前瞻股息率15分→5分并新增产量·储量成长兑现度10分，择时主估值轴改用PB历史分位；≥40%时沿用成熟资源股原权重。eps≤0时派息率无经济意义，按成熟分支处理。判据要求 dps 与 eps 同为最近完整财年口径"
+    note = "派息率≤40%时C框架股息率主估值轴不适用（利润主要再投资而非分配）：须改用 frameworks/C.md「成长型资源股分支」——基本面前瞻股息率15分→5分并新增产量·储量成长兑现度10分，择时主估值轴改用PB历史分位；>40%时沿用成熟资源股原权重。eps≤0时派息率无经济意义，按成熟分支处理。判据要求 dps 与 eps 同为最近完整财年口径"
     assert item.raw_value == pytest.approx(30.7692307692)
     assert item.result == "未达"
     assert item.data_status == "完整"
@@ -306,7 +306,7 @@ def test_c_framework_payout_ratio_growth_branch_and_rendered_note():
         (0.6, float("inf"), None, "数据缺失", "缺失"),
         # 40% 分支阈值的上下边界：双向钉住这个数字本身，否则改成 50% 或 30%
         # 都不会有任何测试变红。取值经挑选保证浮点精确（0.8/2.0=40.0、0.78/2.0=39.0）
-        (0.8, 2.0, 40.0, "达格", "完整"),  # 阈值上调到50则变未达
+        (0.8, 2.0, 40.0, "未达", "完整"),  # owner 使用严格 > 边界
         (0.78, 2.0, 39.0, "未达", "完整"),  # 阈值下调到30则变达格
     ],
 )
@@ -367,8 +367,8 @@ def test_build_checklist_c_framework_is_case_insensitive():
 @pytest.mark.parametrize(
     ("revenue_growth_3y", "expected"),
     [
-        (30.0, "达优"),
-        (15.0, "达格"),
+        (30.0, "达格"),
+        (15.0, "未达"),
         (14.9, "未达"),
     ],
 )
@@ -385,8 +385,8 @@ def test_f_framework_revenue_growth_thresholds(revenue_growth_3y, expected):
 @pytest.mark.parametrize(
     ("gross_margin", "expected"),
     [
-        (50.0, "达优"),
-        (30.0, "达格"),
+        (50.0, "达格"),
+        (30.0, "未达"),
         (29.9, "未达"),
     ],
 )
@@ -426,7 +426,7 @@ def test_f_framework_gross_margin_missing_is_not_simplified():
     [
         (1.8, 2.0, 0.9, "达格", "简化判定（不判断趋势/连续性）"),
         (1.5, 2.0, 0.75, "未达", "简化判定（不判断趋势/连续性）"),
-        (1.6, 2.0, 0.8, "达格", "简化判定（不判断趋势/连续性）"),
+        (1.6, 2.0, 0.8, "未达", "简化判定（不判断趋势/连续性）"),
         (1.8, 0.0, None, "数据缺失", "缺失"),
         (1.8, None, None, "数据缺失", "缺失"),
         # eps<0（净利润为负）：两个负数相除会反转符号，比值方法不适用，必须判数据缺失而不是误判达标
@@ -486,10 +486,10 @@ def test_build_checklist_f_framework_is_case_insensitive():
 @pytest.mark.parametrize(
     ("debt_ratio", "expected"),
     [
-        (55.0, "达优"),
+        (55.0, "达格"),
         (55.1, "达格"),
         (69.9, "达格"),
-        (70.0, "达格"),
+        (70.0, "未达"),
         (70.1, "未达"),
     ],
 )
@@ -546,9 +546,9 @@ def test_build_checklist_d_framework_is_case_insensitive():
 @pytest.mark.parametrize(
     ("roe_3y_avg", "expected"),
     [
-        (20.0, "达优"),
+        (20.0, "达格"),
         (19.9, "达格"),
-        (12.0, "达格"),
+        (12.0, "未达"),
         (11.9, "未达"),
     ],
 )
@@ -565,9 +565,9 @@ def test_e_framework_roe_thresholds(roe_3y_avg, expected):
 @pytest.mark.parametrize(
     ("net_profit_growth", "expected"),
     [
-        (15.0, "达优"),
+        (15.0, "达格"),
         (14.9, "达格"),
-        (8.0, "达格"),
+        (8.0, "未达"),
         (7.9, "未达"),
     ],
 )
@@ -583,9 +583,9 @@ def test_e_framework_net_profit_growth_thresholds(net_profit_growth, expected):
 @pytest.mark.parametrize(
     ("gross_margin", "expected"),
     [
-        (50.0, "达优"),
+        (50.0, "达格"),
         (49.9, "达格"),
-        (30.0, "达格"),
+        (30.0, "未达"),
         (29.9, "未达"),
     ],
 )
@@ -645,9 +645,9 @@ def test_framework_names_include_d_and_e():
 @pytest.mark.parametrize(
     ("roe_3y_avg", "expected"),
     [
-        (13.0, "达优"),
+        (13.0, "达格"),
         (12.9, "达格"),
-        (9.0, "达格"),
+        (9.0, "未达"),
         (8.9, "未达"),
     ],
 )
@@ -727,9 +727,7 @@ def test_build_checklist_and_registry_share_same_data_source(monkeypatch):
     sentinel_metadata = dataclasses.replace(
         framework_metadata.FRAMEWORK_REGISTRY["B"],
         checklist_definitions=[
-            checklist.ChecklistDefinition(
-                "roe_3y_avg", "SENTINEL指标", "%", "higher_better", 1, 0
-            ),
+            checklist.ChecklistDefinition("roe_3y_avg", "SENTINEL指标", "%"),
         ],
     )
     monkeypatch.setitem(framework_metadata.FRAMEWORK_REGISTRY, "B", sentinel_metadata)
@@ -737,6 +735,47 @@ def test_build_checklist_and_registry_share_same_data_source(monkeypatch):
     items = checklist.build_checklist("601988", "B")
 
     assert items[0].label == "SENTINEL指标"
+
+
+def test_checklist_routes_classification_and_ratios_through_public_owner_api(
+    monkeypatch,
+):
+    real_classify = checklist.framework_scoring.classify_framework_rule
+    real_payout = checklist.framework_scoring.calculate_payout_ratio
+    real_cash_ratio = checklist.framework_scoring.calculate_operating_cf_to_net_profit
+    calls = []
+
+    def classify(framework, rule_id, value):
+        calls.append(("classify", framework, rule_id, value))
+        return real_classify(framework, rule_id, value)
+
+    def payout(dps, eps):
+        calls.append(("payout", dps, eps))
+        return real_payout(dps, eps)
+
+    def cash_ratio(operating_cf_per_share, eps):
+        calls.append(("cash_ratio", operating_cf_per_share, eps))
+        return real_cash_ratio(operating_cf_per_share, eps)
+
+    monkeypatch.setattr(
+        checklist.framework_scoring, "classify_framework_rule", classify
+    )
+    monkeypatch.setattr(checklist.framework_scoring, "calculate_payout_ratio", payout)
+    monkeypatch.setattr(
+        checklist.framework_scoring,
+        "calculate_operating_cf_to_net_profit",
+        cash_ratio,
+    )
+    _set_c_fundamentals(dps=0.8, eps=2.0)
+    _set_f_fundamentals(operating_cf_per_share=1.6, eps=2.0)
+
+    checklist.build_checklist("600900", "C")
+    checklist.build_checklist("688111", "F")
+
+    assert ("payout", 0.8, 2.0) in calls
+    assert ("cash_ratio", 1.6, 2.0) in calls
+    assert ("classify", "C", "payout_ratio", 40.0) in calls
+    assert ("classify", "F", "operating_cf_to_net_profit", 0.8) in calls
 
 
 def test_unsupported_framework_error_message_unchanged():

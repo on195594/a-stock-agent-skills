@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-import time
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -583,19 +583,18 @@ def test_frozen_five_holding_replay_freezes_new_risk_without_trade_candidate(
 
 
 def test_production_adapter_derives_industry_change_in_the_same_batch(
-    isolated_cache_database, monkeypatch, tmp_path, capsys
+    isolated_cache_database, monkeypatch, capsys
 ) -> None:
     _seed_holding(isolated_cache_database, "600036")
-    industry_cache = tmp_path / "industry.json"
-    industry_cache.write_text(
-        json.dumps(
-            {
-                "fetched_at_epoch": time.time(),
-                "industry_map": {"600036": "fixture", "600000": "fixture"},
-            }
-        )
-    )
-    monkeypatch.setattr(commands_holdings, "_INDUSTRY_MAP_CACHE_PATH", industry_cache)
+
+    class FakeProvider:
+        def read_cached_industry_map(self):
+            return SimpleNamespace(
+                status="ok",
+                value={"600036": "fixture", "600000": "fixture"},
+            )
+
+    monkeypatch.setattr(commands_holdings, "TushareFundamentalsProvider", FakeProvider)
     calls: list[list[str]] = []
 
     def raw_batch(codes: list[str]) -> dict:
@@ -683,22 +682,24 @@ def test_missing_stop_loss_makes_account_risk_budget_unknown(
     ],
 )
 def test_monitor_industry_unavailable_stays_within_one_bounded_request(
-    case, tmp_path, monkeypatch
+    case, monkeypatch
 ) -> None:
-    industry_cache = tmp_path / "industry.json"
-    payload = {
-        "fetched_at_epoch": time.time(),
-        "industry_map": {"600036": "bank", "600000": "bank"},
+    failed_cache = case in {
+        "absent",
+        "stale",
+        "malformed",
+        "invalid_member",
+        "nan_epoch",
     }
-    if case == "stale":
-        payload["fetched_at_epoch"] = 0
-    elif case == "nan_epoch":
-        payload["fetched_at_epoch"] = float("nan")
-    elif case == "invalid_member":
-        payload["industry_map"]["600000"] = None
-    if case != "absent":
-        industry_cache.write_text("[]" if case == "malformed" else json.dumps(payload))
-    monkeypatch.setattr(commands_holdings, "_INDUSTRY_MAP_CACHE_PATH", industry_cache)
+
+    class FakeProvider:
+        def read_cached_industry_map(self):
+            return SimpleNamespace(
+                status="failed" if failed_cache else "ok",
+                value=None if failed_cache else {"600036": "bank", "600000": "bank"},
+            )
+
+    monkeypatch.setattr(commands_holdings, "TushareFundamentalsProvider", FakeProvider)
     if case in {"cap", "holdings_cap"}:
         monkeypatch.setattr(commands_holdings, "_MONITOR_BATCH_LIMIT", 1)
     calls = []
@@ -734,6 +735,37 @@ def test_monitor_industry_unavailable_stays_within_one_bounded_request(
         assert quote.industry_change_pct is None
         assert quote.industry_source is None
         assert quote.industry_as_of is None
+
+
+@pytest.mark.parametrize(
+    "error_code",
+    [
+        "CACHE_MISSING",
+        "CACHE_STALE",
+        "CACHE_CORRUPT",
+        "CACHE_MALFORMED",
+        "CACHE_FUTURE_TIMESTAMP",
+        "CACHE_READ_FAILED",
+    ],
+)
+def test_failed_cached_industry_states_never_network_or_write(
+    error_code, tmp_path, monkeypatch
+) -> None:
+    calls = []
+
+    class FakeProvider:
+        def read_cached_industry_map(self):
+            calls.append("read_cached_industry_map")
+            return SimpleNamespace(status="failed", value=None, error_code=error_code)
+
+        def fetch_industry_map(self):
+            raise AssertionError("cache-only consumer must not use network API")
+
+    monkeypatch.setattr(commands_holdings, "TushareFundamentalsProvider", FakeProvider)
+
+    assert commands_holdings._fresh_industry_map() == {}
+    assert calls == ["read_cached_industry_map"]
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize(
@@ -803,8 +835,14 @@ def test_partial_account_stop_risk_is_never_reported_as_within_budget(
     ],
 )
 def test_tier_review_price_entrances(
-    framework, path, target, price, reached,
-    isolated_cache_database, monkeypatch, capsys,
+    framework,
+    path,
+    target,
+    price,
+    reached,
+    isolated_cache_database,
+    monkeypatch,
+    capsys,
 ) -> None:
     _seed_holding(isolated_cache_database)
     with sqlite3.connect(isolated_cache_database) as conn:
@@ -815,7 +853,8 @@ def test_tier_review_price_entrances(
         )
         before = conn.execute("SELECT * FROM holding_tier_state").fetchall()
     monkeypatch.setattr(
-        commands_holdings, "fetch_current_price_quotes",
+        commands_holdings,
+        "fetch_current_price_quotes",
         lambda codes: _quotes(codes, price=price),
     )
 
@@ -825,7 +864,9 @@ def test_tier_review_price_entrances(
     assert payload["action_status"] == ("review_candidate" if reached else "no_action")
     assert payload["stop_reason"] == (None if reached else "clean_fast_gate")
     assert bool(payload["escalations"]) is reached
-    assert all(item["reason_code"] == "tier_review_due" for item in payload["escalations"])
+    assert all(
+        item["reason_code"] == "tier_review_due" for item in payload["escalations"]
+    )
     assert all(item["candidate"] == "review" for item in payload["escalations"])
     assert payload["requires_user_confirmation"] is False
     with sqlite3.connect(isolated_cache_database) as conn:
@@ -834,11 +875,20 @@ def test_tier_review_price_entrances(
 
 @pytest.mark.parametrize(
     "case",
-    ["missing_config", "missing_cost", "zero_cost", "missing_target", "zero_target",
-     "path_a"],
+    [
+        "missing_config",
+        "missing_cost",
+        "zero_cost",
+        "missing_target",
+        "zero_target",
+        "path_a",
+    ],
 )
 def test_tier_missing_configuration_or_evidence_fails_closed(
-    case, isolated_cache_database, monkeypatch, capsys,
+    case,
+    isolated_cache_database,
+    monkeypatch,
+    capsys,
 ) -> None:
     _seed_holding(isolated_cache_database)
     with sqlite3.connect(isolated_cache_database) as conn:
@@ -865,24 +915,33 @@ def test_tier_missing_configuration_or_evidence_fails_closed(
     assert payload["action_status"] == "review_candidate"
     assert payload["stop_reason"] is None
     assert any(item["field"] == "tier" for item in payload["data_gaps"])
-    assert any(item["reason_code"] == "tier_review_due" for item in payload["escalations"])
+    assert any(
+        item["reason_code"] == "tier_review_due" for item in payload["escalations"]
+    )
 
 
 @pytest.mark.parametrize("status", ["completed", "exempted"])
 @pytest.mark.parametrize("tier2", ["pending", "completed"])
 @pytest.mark.parametrize("tier3", ["pending", "completed"])
 def test_later_tier_pending_does_not_block_clean_gate_or_repeat_tier1(
-    status, tier2, tier3, isolated_cache_database, monkeypatch, capsys,
+    status,
+    tier2,
+    tier3,
+    isolated_cache_database,
+    monkeypatch,
+    capsys,
 ) -> None:
     _seed_holding(isolated_cache_database)
     with sqlite3.connect(isolated_cache_database) as conn:
         conn.execute(
             """UPDATE holding_tier_state SET tier1_status=?,
-               tier2_status=?, tier3_status=?""", (status, tier2, tier3),
+               tier2_status=?, tier3_status=?""",
+            (status, tier2, tier3),
         )
         before = conn.execute("SELECT * FROM holding_tier_state").fetchall()
     monkeypatch.setattr(
-        commands_holdings, "fetch_current_price_quotes",
+        commands_holdings,
+        "fetch_current_price_quotes",
         lambda codes: _quotes(codes, price=125),
     )
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
@@ -901,17 +960,30 @@ def test_later_tier_pending_does_not_block_clean_gate_or_repeat_tier1(
 
 @pytest.mark.parametrize(
     "first,second,price,reason",
-    [(None, 80, 100, None), (None, 80, 79, "price_stop_2"),
-     (85, None, 84, "price_stop_1"), (0, 80, 100, None)],
+    [
+        (None, 80, 100, None),
+        (None, 80, 79, "price_stop_2"),
+        (85, None, 84, "price_stop_1"),
+        (0, 80, 100, None),
+    ],
 )
 def test_stop_tiers_use_their_own_validated_fields(
-    first, second, price, reason, isolated_cache_database, monkeypatch, capsys,
+    first,
+    second,
+    price,
+    reason,
+    isolated_cache_database,
+    monkeypatch,
+    capsys,
 ) -> None:
     _seed_holding(isolated_cache_database)
     with sqlite3.connect(isolated_cache_database) as conn:
-        conn.execute("UPDATE holdings SET stop_loss_15=?, stop_loss_20=?", (first, second))
+        conn.execute(
+            "UPDATE holdings SET stop_loss_15=?, stop_loss_20=?", (first, second)
+        )
     monkeypatch.setattr(
-        commands_holdings, "fetch_current_price_quotes",
+        commands_holdings,
+        "fetch_current_price_quotes",
         lambda codes: _quotes(codes, price=price),
     )
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
@@ -925,20 +997,25 @@ def test_stop_tiers_use_their_own_validated_fields(
 
 @pytest.mark.parametrize("bad_field", ["quote_time", "quote_date"])
 def test_invalid_holding_timestamp_blocks_monitor_with_sufficient_industry_coverage(
-    bad_field, isolated_cache_database, monkeypatch, tmp_path, capsys,
+    bad_field,
+    isolated_cache_database,
+    monkeypatch,
+    capsys,
 ) -> None:
     _seed_holding(isolated_cache_database)
     codes = ["600036", "600000", "600001", "600002", "600003"]
-    industry_cache = tmp_path / "industry.json"
-    industry_cache.write_text(json.dumps({
-        "fetched_at_epoch": time.time(),
-        "industry_map": dict.fromkeys(codes, "bank"),
-    }))
-    monkeypatch.setattr(commands_holdings, "_INDUSTRY_MAP_CACHE_PATH", industry_cache)
+
+    class FakeProvider:
+        def read_cached_industry_map(self):
+            return SimpleNamespace(status="ok", value=dict.fromkeys(codes, "bank"))
+
+    monkeypatch.setattr(commands_holdings, "TushareFundamentalsProvider", FakeProvider)
     raw = {code: (100.0, domain.cst_today(), "10:00:00", 100.0) for code in codes}
     raw["600036"] = (
-        100.0, "invalid" if bad_field == "quote_date" else domain.cst_today(),
-        "25:00:00" if bad_field == "quote_time" else "10:00:00", 100.0,
+        100.0,
+        "invalid" if bad_field == "quote_date" else domain.cst_today(),
+        "25:00:00" if bad_field == "quote_time" else "10:00:00",
+        100.0,
     )
     calls = []
 

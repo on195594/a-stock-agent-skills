@@ -24,7 +24,7 @@ UV_CACHE_DIR = os.environ.get("UV_CACHE_DIR") or str(
 # Explicit checkout/wheel inputs are release-candidate test paths. Normal installs
 # resolve the immutable release dependency declared by this project's metadata.
 LIB_ROOT = Path(os.environ.get("A_STOCK_LIB_SOURCE") or Path.home() / "a-stock-lib")
-LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.6.4-py3-none-any.whl"
+LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.7.0-py3-none-any.whl"
 
 _MISSING = f"a-stock-lib not provisioned at {LIB_ROOT}; set A_STOCK_LIB_SOURCE"
 requires_lib_wheel = pytest.mark.skipif(not LIB_WHEEL.is_file(), reason=_MISSING)
@@ -106,9 +106,9 @@ def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
     metadata = json.loads(
         (runtime / "a-stock-lib-install.json").read_text(encoding="utf-8")
     )
-    assert metadata["version"] == "0.6.4"
+    assert metadata["version"] == "0.7.0"
     assert metadata["wheel_sha256"] == (
-        "14235b314b8af7304d72ee1d6a9754ee4034d64e637741fc7a5e2c8690228396"
+        "7c4a16d452f34574584531bab6fe9d150f3cb844e5c9b2fe072295f6bb2ee385"
     )
     installed = json.loads(
         subprocess.check_output(
@@ -161,7 +161,7 @@ def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
     )
     payload = json.loads(metadata.read_text(encoding="utf-8"))
     assert payload["name"] == "a-stock-lib"
-    assert payload["version"] == "0.6.4"
+    assert payload["version"] == "0.7.0"
     assert len(payload["wheel_sha256"]) == 64
     wheel = Path(payload["wheel"])
     assert wheel.is_file()

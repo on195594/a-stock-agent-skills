@@ -66,6 +66,61 @@ def test_score_fundamentals_missing_manual_input_fails_closed(
     assert "gross_margin_stability" in payload["missing_inputs"]
 
 
+@pytest.mark.parametrize(
+    ("operating_cf", "eps"),
+    [
+        (1.6, 2.0),
+        ("invalid", 2.0),
+        (float("nan"), 2.0),
+        (float("inf"), 2.0),
+        (1.6, 0.0),
+        (1e308, 1e-308),
+    ],
+)
+def test_score_fundamentals_routes_cash_ratio_through_owner(
+    capsys, monkeypatch, operating_cf, eps
+) -> None:
+    metrics = {
+        "operating_cf_per_share": operating_cf,
+        "eps": eps,
+        "_cache_meta": {"industry": "软件"},
+    }
+    calls = []
+    real_ratio = (
+        commands_analysis.framework_scoring.calculate_operating_cf_to_net_profit
+    )
+
+    def ratio(raw_operating_cf, raw_eps):
+        calls.append((raw_operating_cf, raw_eps))
+        return real_ratio(raw_operating_cf, raw_eps)
+
+    monkeypatch.setattr(
+        commands_analysis.store, "get_fundamentals", lambda _code: metrics
+    )
+    monkeypatch.setattr(
+        commands_analysis.framework_scoring,
+        "calculate_operating_cf_to_net_profit",
+        ratio,
+    )
+    monkeypatch.setattr(
+        commands_analysis,
+        "_risk_gate_state",
+        lambda _metrics: (
+            "blocked",
+            ["regulatory_gate:missing"],
+            {
+                "regulatory_gate": {"status": "missing"},
+                "cash_flow_gate": {"status": "clear"},
+            },
+        ),
+    )
+
+    commands_analysis.cmd_score_fundamentals(["688111", "F", "{}"])
+
+    assert calls == [(operating_cf, eps)]
+    assert json.loads(capsys.readouterr().out)["blocked"] is True
+
+
 def test_p1_only_blocks_timing_not_fundamental_subtotal(capsys, monkeypatch) -> None:
     clear_check = {
         "status": "clear",
@@ -161,9 +216,7 @@ def test_score_fundamentals_rejects_unofficial_p0_override(capsys) -> None:
     }
 
     with pytest.raises(SystemExit):
-        commands_analysis.cmd_score_fundamentals(
-            ["600036", "A", json.dumps(override)]
-        )
+        commands_analysis.cmd_score_fundamentals(["600036", "A", json.dumps(override)])
 
     assert "regulatory_gate.sources 非官方" in capsys.readouterr().err
 
