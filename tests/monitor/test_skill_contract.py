@@ -5,8 +5,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2] / "skills" / "a-stock-monitor"
 SKILL = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-DAILY_MONITORING = ROOT / "references" / "daily-monitoring-and-l3.md"
-VALUATION_REVIEW = ROOT / "references" / "valuation-and-annual-review.md"
+DAILY_MONITORING = (ROOT / "references" / "daily-monitoring-and-l3.md").read_text(
+    encoding="utf-8"
+)
+VALUATION_REVIEW = (ROOT / "references" / "valuation-and-annual-review.md").read_text(
+    encoding="utf-8"
+)
+DATA_OPERATIONS = (ROOT / "references" / "data-operations.md").read_text(
+    encoding="utf-8"
+)
 CD_ACCUMULATION = (ROOT / "references" / "step3.5-cd-accumulation.md").read_text(
     encoding="utf-8"
 )
@@ -17,53 +24,54 @@ DECISIONS = json.loads(
 )
 
 
-def test_daily_checklist_is_complete_and_unique():
-    ids = re.findall(r"^\| (C\d{2}) \|", SKILL, flags=re.MULTILINE)
-    assert ids == [f"C{number:02d}" for number in range(1, 11)]
-    assert len(ids) == len(set(ids))
-    assert SKILL.count("## Level 2 日常深度复核唯一检查表") == 1
+def test_level2_checklist_semantics_remain_owned_after_main_is_thinned():
+    # Deterministic checklist rows must not be duplicated in the entrypoint.
+    assert not re.search(r"^\| C\d{2} \|", SKILL, flags=re.MULTILINE)
+
+    # Preserve the substantive C01-C10 coverage at its authoritative owners.
+    for contract, owner in (
+        ("单股当前净值回撤贡献", PORTFOLIO_RISK),
+        ("framework/framework_confident", PORTFOLIO_RISK),
+        ("alerts <代码>", DAILY_MONITORING),
+        ("明显弱于所属行业指数 ≥2pts", DAILY_MONITORING),
+        ("实际止损线由 `cache.py`", DAILY_MONITORING),
+        ("L3 全量核查强制要求", DAILY_MONITORING),
+        ("不得直接清仓", DAILY_MONITORING),
+        ("各框架触发线", VALUATION_REVIEW),
+        ("技术卖出候选", VALUATION_REVIEW),
+        ("校验交易所整手/零股申报约束", DATA_OPERATIONS),
+    ):
+        assert contract in owner
 
 
 def test_generic_single_holding_request_has_bounded_delivery_contract():
-    assert "## 日常监控两级路由与停止合同" in SKILL
+    assert "### Level 1：默认快照" in SKILL
     assert "monitor-snapshot --portfolio-value <账户总资产> --json" in SKILL
-    assert "stop_reason=clean_fast_gate" in SKILL
-    assert "研究子代理数必须为 0" in SKILL
-    assert "## 单股泛化请求的快速交付合同" in SKILL
-    assert "只有命中 Level 2 路由时 C01—C10 才须全部完成" in SKILL
-    assert "聚合检索最多一个批次" in SKILL
-    assert "正式报告提取最多使用两种方法" in SKILL
-    assert "优先复用 `a-stock-fetch`" in SKILL
-    assert "对明确的单个文件执行一次有界提取" in SKILL
-    assert "monitor 任务不得加载或调用该 Skill" in SKILL
-    assert "合规项直接标记 `SKIP`" in SKILL
+    assert "干净快速路径" in SKILL and "立即停止" in SKILL
+    assert "只加载与 runtime 升级原因相符的资料" in SKILL
+    assert "默认不启动研究子代理" in SKILL
+    assert "a-stock-qa` 尚无 monitor rubric" in SKILL
+    assert "监控任务不得调用它" in SKILL
 
 
 def test_level1_failure_snapshot_and_context_contract_is_bounded():
     for marker in (
-        "data_status != complete",
-        "有效 JSON",
-        "退出 1",
-        "review_status=blocked",
-        "action_status=review_candidate",
-        "data_gaps",
-        "冻结交易",
-        "最新快照",
-        "最少官方锚点",
-        "严格停止条件",
+        "有效 JSON 后退出非零",
+        "阻断、复核候选、触发、到期、异常或冲突",
+        "`escalations` 指定的持仓和证据",
+        "缺少 required 数据",
+        "冻结相关交易与风险变更",
     ):
         assert marker in SKILL
 
 
 def test_daily_monitoring_has_a_hard_tool_call_budget():
     for marker in (
-        "工具调用硬预算",
-        "解析 `monitor-snapshot` 前",
-        "不得为本任务额外调用 `holdings`、Wiki、Web 或子代理",
-        "父级一次并行批量",
-        "每个外部主题只取 1 个主来源",
-        "仅失败、不完整、过期或冲突的主题允许 1 次 fallback",
-        "默认不得启动研究子代理",
+        "Level 1 固定为一次 `monitor-snapshot`",
+        "不得额外调用 `holdings`、Wiki、Web 或子代理",
+        "每个相关主题只取一个主来源",
+        "仅失败、不完整、过期或冲突时允许一次 fallback",
+        "默认不启动研究子代理",
     ):
         assert marker in SKILL
 
@@ -126,9 +134,10 @@ def test_unvalidated_mechanical_thresholds_are_marked_heuristic():
         assert by_id[rule_id]["heuristic"] is True
 
 
-def test_skill_has_no_known_invalid_500_share_split_or_legacy_sale_path():
-    assert "167股（剩333）" not in SKILL
-    assert "update-return <代码> <实际回报%>" not in SKILL
+def test_skill_has_no_known_invalid_split_or_legacy_sale_path():
+    corpus = SKILL + TIER_RULES + VALUATION_REVIEW
+    assert "167股（剩333）" not in corpus
+    assert "update-return <代码> <实际回报%>" not in corpus
     assert "references/decision-table.json" in SKILL
 
 
@@ -138,21 +147,30 @@ def test_all_routed_reference_files_exist():
         assert (ROOT / relative).exists(), relative
 
 
-def test_phase2_routes_are_unique_and_keep_fail_closed_boundaries_in_main():
-    for path in (DAILY_MONITORING, VALUATION_REVIEW):
-        assert path.is_file()
-        assert SKILL.count(f"`references/{path.name}`") == 1
+def test_phase5_routes_are_unique_and_keep_fail_closed_boundaries_in_main():
+    for name in (
+        "daily-monitoring-and-l3.md",
+        "valuation-and-annual-review.md",
+        "step3.5-cd-accumulation.md",
+        "step4-tier-system.md",
+        "data-operations.md",
+        "portfolio-risk.md",
+        "decision-table.json",
+    ):
+        assert SKILL.count(f"references/{name}") == 1
 
     for marker in (
         "--confirm-write",
-        "C01—C10",
-        "动作优先级",
-        "缺失数据不等于已排除/未触发",
-        "操作价格依据要求",
-        "建议/授权/成交",
-        "行情或状态无法验证时必须 fail-closed",
+        "动作冲突只服从",
+        "数据缺失、过期、冲突、不可交易或 runtime 失败时 fail-closed",
+        "不得补造触发、股数或成交",
+        "建议、授权、申报与成交必须分开",
     ):
         assert marker in SKILL
+
+    # Thresholds and state machines belong to runtime/library/references, not main.
+    for detail in ("≥3%", "成本 × 1.25", "候选信号 → 待确认 → 已确认触发"):
+        assert detail not in SKILL
 
 
 def test_cd_accumulation_keeps_cumulative_cap_while_allowing_one_lot():
@@ -176,5 +194,6 @@ def test_tier1_rebuild_explicitly_resets_only_tier1():
 def test_monitor_has_no_ambiguous_direct_sell_shortcuts():
     assert "净利增速转负｜监管重大转向" not in SKILL
     assert "重大利空公告时立即清仓" not in TIER_RULES
-    assert "3pts=黄色预警入口" in SKILL
-    assert "5pts=红色框架复核入口" in SKILL
+    assert "3pts=黄色预警入口" in VALUATION_REVIEW
+    assert "5pts=红色框架复核入口" in VALUATION_REVIEW
+    assert "两级条件都不是独立卖出授权" in VALUATION_REVIEW
