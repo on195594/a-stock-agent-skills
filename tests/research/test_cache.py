@@ -22,15 +22,16 @@ from a_stock_agent_runtime import (
     schema,
     store,
 )
-from tests.helpers import record_valid_quote, set_valid_fundamentals
+from tests.helpers import (
+    record_valid_quote,
+    set_valid_analysis,
+    set_valid_fundamentals,
+    valid_decision_payload,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_PY = PROJECT_ROOT / "src" / "a_stock_agent_runtime" / "cache.py"
-VALID_INDUSTRY_TAG = '行业地位[评级=优；证据="市占率连续5年第一";置信度=高]'
-VALID_MOAT_TAG = '护城河[评级=优；证据="客户留存率稳定";置信度=高]'
-VALID_D_TAG = '特许经营稀缺性[评级=优；证据="特许权期限明确";置信度=高]'
-VALID_SUBJECTIVE_TAG = f"{VALID_MOAT_TAG}\n{VALID_INDUSTRY_TAG}"
-VALID_CYCLE_STAGE_TAG = '周期位置[阶段=上行期；依据="煤价中枢回升且供给侧收缩"]'
+LEGACY_CYCLE_STAGE_TAG = '周期位置[阶段=上行期；依据="煤价中枢回升且供给侧收缩"]'
 
 
 @pytest.fixture(autouse=True)
@@ -148,23 +149,30 @@ def test_cmd_check_full_miss(capsys):
     assert out.strip() == "FULL_MISS"
 
 
-def test_cmd_check_analysis_hit(capsys):
+def test_cmd_check_analysis_hit(capsys, monkeypatch):
     code = "600036"
-    today = datetime.now().strftime("%Y-%m-%d")
-    record_valid_quote(code, 10.0)
-    conn = cache.get_db()
-    conn.execute(
-        "INSERT INTO analysis_results "
-        "(code, date, name, result, created_at, quote_price) VALUES (?,?,?,?,?,?)",
-        (code, today, "招商银行", "结论：买入", datetime.now().isoformat(), 10.0),
-    )
-    conn.commit()
-    conn.close()
+    set_valid_analysis(monkeypatch, code=code, narrative="结论：买入")
+    capsys.readouterr()
 
     cache.cmd_check([code])
     out = capsys.readouterr().out
     assert out.startswith("ANALYSIS_HIT")
     assert "结论：买入" in out
+
+
+def test_cmd_check_analysis_requires_fresh_quote(capsys, monkeypatch):
+    code = "600036"
+    set_valid_analysis(monkeypatch, code=code)
+    monkeypatch.setattr(
+        store, "get_latest_quote_snapshot", lambda *args, **kwargs: None
+    )
+    capsys.readouterr()
+
+    cache.cmd_check([code])
+
+    out = capsys.readouterr().out
+    assert "ANALYSIS_HIT" not in out
+    assert "ANALYSIS_PRICE_STALE" in out
 
 
 def test_cmd_check_fundamentals_hit(capsys):
@@ -571,8 +579,7 @@ def test_set_score_displays_80_scale(capsys):
 
 
 def test_set_score_clears_breakdown_that_no_longer_matches_total(capsys, monkeypatch):
-    monkeypatch.setattr("sys.stdin", StringIO(f"分析结论\n{VALID_SUBJECTIVE_TAG}"))
-    cache.cmd_set_analysis(["600036", "A", "62"])
+    set_valid_analysis(monkeypatch, code="600036", score=62)
     cache.cmd_set_score_breakdown(
         [
             "600036",
@@ -598,32 +605,33 @@ def test_set_score_no_analysis_record(capsys):
     assert exc.value.code == 1
 
 
-# ── set-analysis 可选得分参数 ────────────────────────────────────────────────
+# ── set-analysis structured decision contract ───────────────────────────────
 
 
 def test_set_analysis_with_score(capsys, monkeypatch):
-    """set-analysis 带得分参数，同时写入 result 和 score"""
-    text = f"买入信号明确\n{VALID_SUBJECTIVE_TAG}"
-    monkeypatch.setattr("sys.stdin", StringIO(text))
-    cache.cmd_set_analysis(["600036", "A", "62"])
+    """set-analysis derives human output and score from decision-v1."""
+    payload = set_valid_analysis(
+        monkeypatch, code="600036", framework="A", score=62, narrative="买入信号明确"
+    )
 
     conn = cache.get_db()
     today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute(
-        "SELECT result, score FROM analysis_results WHERE code='600036' AND date=?",
+        """SELECT result, decision_json, score
+           FROM analysis_results WHERE code='600036' AND date=?""",
         (today,),
     ).fetchone()
     conn.close()
 
     assert row is not None
-    assert row[0] == text
-    assert row[1] == 62
+    assert "买入信号明确" in row[0]
+    assert json.loads(row[1]) == payload
+    assert row[2] == 62
 
 
 def test_set_analysis_without_score(capsys, monkeypatch):
-    """set-analysis 不带得分参数，score 应为 NULL"""
-    monkeypatch.setattr("sys.stdin", StringIO(f"观察中\n{VALID_SUBJECTIVE_TAG}"))
-    cache.cmd_set_analysis(["000001", "A"])
+    """A valid not-formed decision stores a NULL score."""
+    set_valid_analysis(monkeypatch, code="000001", framework="A", score=None)
 
     conn = cache.get_db()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -636,12 +644,10 @@ def test_set_analysis_without_score(capsys, monkeypatch):
 
 
 def test_set_analysis_with_framework_persists_column(monkeypatch):
-    """set-analysis 传框架参数后，analysis_results.framework 正确写入"""
-    monkeypatch.setattr(
-        "sys.stdin",
-        StringIO(f"行业地位领先\n{VALID_SUBJECTIVE_TAG}\n{VALID_CYCLE_STAGE_TAG}"),
+    """set-analysis persists the framework from decision-v1."""
+    set_valid_analysis(
+        monkeypatch, code="601088", framework="C资源", score=62, cycle=True
     )
-    cache.cmd_set_analysis(["601088", "C资源", "62"])
 
     conn = cache.get_db()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -655,18 +661,23 @@ def test_set_analysis_with_framework_persists_column(monkeypatch):
 
 
 def test_set_analysis_without_framework_is_rejected(monkeypatch):
-    """set-analysis must fail closed when the framework is omitted."""
-    monkeypatch.setattr("sys.stdin", StringIO(f"观察中\n{VALID_SUBJECTIVE_TAG}"))
+    """Missing safety-critical decision fields fail closed before write."""
+    payload = valid_decision_payload("000001", score=55)
+    payload.pop("framework")
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(payload)))
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis(["000001", "55"])
+        cache.cmd_set_analysis([])
+
+    conn = cache.get_db()
+    assert conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone() == (0,)
+    conn.close()
 
 
 def test_set_analysis_rerun_same_day_preserves_flags_and_score_breakdown(monkeypatch):
     """同一只股票同一天重复执行 set-analysis，不应清空已写入的 flags/score_breakdown"""
-    first_text = f"首次分析结论\n{VALID_SUBJECTIVE_TAG}"
-    second_text = f"重写后的分析结论\n{VALID_SUBJECTIVE_TAG}"
-    monkeypatch.setattr("sys.stdin", StringIO(first_text))
-    cache.cmd_set_analysis(["600036", "A", "62"])
+    set_valid_analysis(
+        monkeypatch, code="600036", framework="A", score=62, narrative="首次分析结论"
+    )
     cache.cmd_set_score_breakdown(
         [
             "600036",
@@ -675,8 +686,13 @@ def test_set_analysis_rerun_same_day_preserves_flags_and_score_breakdown(monkeyp
     )
     cache.cmd_set_flag(["600036", "yellow", "估值偏高"])
 
-    monkeypatch.setattr("sys.stdin", StringIO(second_text))
-    cache.cmd_set_analysis(["600036", "A"])
+    set_valid_analysis(
+        monkeypatch,
+        code="600036",
+        framework="A",
+        score=62,
+        narrative="重写后的分析结论",
+    )
 
     conn = cache.get_db()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -687,7 +703,8 @@ def test_set_analysis_rerun_same_day_preserves_flags_and_score_breakdown(monkeyp
     ).fetchone()
     conn.close()
 
-    assert row[0] == second_text
+    assert "重写后的分析结论" in row[0]
+    assert "首次分析结论" not in row[0]
     assert row[1] == 62
     assert (
         row[2]
@@ -698,13 +715,16 @@ def test_set_analysis_rerun_same_day_preserves_flags_and_score_breakdown(monkeyp
 
 def test_set_analysis_rerun_with_new_score_overwrites_score(monkeypatch):
     """重新执行 set-analysis 时显式传入新得分，应覆盖旧得分"""
-    monkeypatch.setattr("sys.stdin", StringIO(f"首次分析结论\n{VALID_SUBJECTIVE_TAG}"))
-    cache.cmd_set_analysis(["600519", "A", "50"])
-
-    monkeypatch.setattr(
-        "sys.stdin", StringIO(f"重写后的分析结论\n{VALID_SUBJECTIVE_TAG}")
+    set_valid_analysis(
+        monkeypatch, code="600519", framework="A", score=50, narrative="首次分析结论"
     )
-    cache.cmd_set_analysis(["600519", "A", "70"])
+    set_valid_analysis(
+        monkeypatch,
+        code="600519",
+        framework="A",
+        score=70,
+        narrative="重写后的分析结论",
+    )
 
     conn = cache.get_db()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -717,8 +737,7 @@ def test_set_analysis_rerun_with_new_score_overwrites_score(monkeypatch):
 
 
 def test_set_analysis_rescore_clears_stale_score_breakdown(monkeypatch, capsys):
-    monkeypatch.setattr("sys.stdin", StringIO(f"首次分析结论\n{VALID_SUBJECTIVE_TAG}"))
-    cache.cmd_set_analysis(["600519", "A", "50"])
+    set_valid_analysis(monkeypatch, code="600519", framework="A", score=50)
     cache.cmd_set_score_breakdown(
         [
             "600519",
@@ -726,10 +745,7 @@ def test_set_analysis_rescore_clears_stale_score_breakdown(monkeypatch, capsys):
         ]
     )
 
-    monkeypatch.setattr(
-        "sys.stdin", StringIO(f"重写后的分析结论\n{VALID_SUBJECTIVE_TAG}")
-    )
-    cache.cmd_set_analysis(["600519", "A", "70"])
+    set_valid_analysis(monkeypatch, code="600519", framework="A", score=70)
 
     conn = cache.get_db()
     row = conn.execute(
@@ -737,18 +753,21 @@ def test_set_analysis_rescore_clears_stale_score_breakdown(monkeypatch, capsys):
     ).fetchone()
     conn.close()
     assert row == (70, None)
-    assert "已清除" in capsys.readouterr().out
+    assert "分析结论已缓存" in capsys.readouterr().out
 
 
-def test_set_analysis_rerun_without_score_preserves_previous_score(monkeypatch):
-    """重新执行 set-analysis 时不传得分参数，应保留此前已写入的得分（不被冲掉）"""
-    first_text = f"首次分析结论\n{VALID_SUBJECTIVE_TAG}"
-    second_text = f"重写后的分析结论，未带分数\n{VALID_SUBJECTIVE_TAG}"
-    monkeypatch.setattr("sys.stdin", StringIO(first_text))
-    cache.cmd_set_analysis(["601318", "A", "65"])
-
-    monkeypatch.setattr("sys.stdin", StringIO(second_text))
-    cache.cmd_set_analysis(["601318", "A"])
+def test_set_analysis_rerun_with_same_score_preserves_previous_score(monkeypatch):
+    """A same-score structured rerun preserves the authoritative score."""
+    set_valid_analysis(
+        monkeypatch, code="601318", framework="A", score=65, narrative="首次分析结论"
+    )
+    set_valid_analysis(
+        monkeypatch,
+        code="601318",
+        framework="A",
+        score=65,
+        narrative="重写后的分析结论",
+    )
 
     conn = cache.get_db()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -758,7 +777,7 @@ def test_set_analysis_rerun_without_score_preserves_previous_score(monkeypatch):
     ).fetchone()
     conn.close()
 
-    assert row[0] == second_text
+    assert "重写后的分析结论" in row[0]
     assert row[1] == 65
 
 
@@ -794,162 +813,101 @@ def test_product_and_platform_technology_still_route_to_f(industry):
     assert confident is True
 
 
-# ── 主观分项证据强制校验 ──────────────────────────────────────────────────────
+# ── decision-v1 validation and machine-state independence ─────────────────────
 
 
-def test_set_analysis_accepts_valid_subjective_tag(monkeypatch):
-    """set-analysis 接受新结构化标签，并写入缓存"""
-    text = VALID_SUBJECTIVE_TAG
-    monkeypatch.setattr("sys.stdin", StringIO(text))
-    cache.cmd_set_analysis(["600036", "A通用", "62"])
+def test_set_analysis_accepts_valid_decision_json(monkeypatch):
+    payload = set_valid_analysis(
+        monkeypatch,
+        code="600036",
+        framework="A通用",
+        score=62,
+        narrative="普通分析结论，不依赖 Markdown 标签。",
+    )
 
     conn = cache.get_db()
     today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute(
-        "SELECT result, framework, score FROM analysis_results WHERE code='600036' AND date=?",
+        """SELECT result, decision_json, framework, score
+           FROM analysis_results WHERE code='600036' AND date=?""",
         (today,),
     ).fetchone()
     conn.close()
-    assert row == (text, "A通用", 62)
+
+    assert "普通分析结论，不依赖 Markdown 标签。" in row[0]
+    assert json.loads(row[1]) == payload
+    assert row[2:] == ("A通用", 62)
 
 
-def test_set_analysis_rejects_old_free_text_subjective_claim(monkeypatch):
-    """只有旧自由文本格式、没有新结构化标签时，应拒绝写入"""
-    monkeypatch.setattr(
-        "sys.stdin", StringIO("护城河[强优]：公司护城河很深，竞争优势明显。")
+def test_set_analysis_rejects_malformed_decision_json_before_write(monkeypatch):
+    monkeypatch.setattr("sys.stdin", StringIO("not-json"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cache.cmd_set_analysis([])
+
+    assert exc_info.value.code == 1
+    conn = cache.get_db()
+    assert conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone() == (0,)
+    conn.close()
+
+
+@pytest.mark.parametrize(
+    ("framework", "code"),
+    [("B银行", "600036"), ("C资源", "601088"), ("D公用", "600900")],
+)
+def test_cycle_stage_is_not_inferred_from_human_narrative(framework, code, monkeypatch):
+    payload = set_valid_analysis(
+        monkeypatch,
+        code=code,
+        framework=framework,
+        score=62,
+        cycle=False,
+        narrative=LEGACY_CYCLE_STAGE_TAG,
     )
-    with pytest.raises(SystemExit) as exc_info:
-        cache.cmd_set_analysis(["600036", "A", "62"])
-    assert exc_info.value.code == 1
 
     conn = cache.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute(
-        "SELECT result FROM analysis_results WHERE code='600036' AND date=?", (today,)
+        "SELECT result, decision_json FROM analysis_results WHERE code=?", (code,)
     ).fetchone()
     conn.close()
-    assert row is None  # 拒绝写入，缓存里不应该有这条记录
+
+    assert LEGACY_CYCLE_STAGE_TAG in row[0]
+    assert json.loads(row[1]) == payload
+    assert json.loads(row[1]).get("cycle_stage") is None
 
 
-def test_set_analysis_rejects_report_without_subjective_tags(monkeypatch):
-    """完全没有主观类别标签的报告也应拒绝写入"""
-    monkeypatch.setattr(
-        "sys.stdin", StringIO("这是一段普通分析结论，没有任何结构化主观分项标签。")
+@pytest.mark.parametrize(
+    ("framework", "code"),
+    [("B银行", "600037"), ("C资源", "601088"), ("D公用", "600901")],
+)
+def test_structured_cycle_stage_is_persisted(framework, code, monkeypatch):
+    payload = set_valid_analysis(
+        monkeypatch, code=code, framework=framework, score=62, cycle=True
     )
-    with pytest.raises(SystemExit) as exc_info:
-        cache.cmd_set_analysis(["000001", "A", "55"])
-    assert exc_info.value.code == 1
 
     conn = cache.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute(
-        "SELECT result FROM analysis_results WHERE code='000001' AND date=?", (today,)
+        "SELECT decision_json FROM analysis_results WHERE code=?", (code,)
     ).fetchone()
     conn.close()
-    assert row is None
+
+    assert json.loads(row[0]) == payload
+    assert json.loads(row[0])["cycle_stage"]["stage"] == "上行期"
 
 
-# ── 周期位置结构化校验（C框架fail-closed，B/D框架warn-only，A/E/F不校验）──────
-
-
-def test_set_analysis_c_framework_accepts_valid_cycle_stage_tag(monkeypatch):
-    """C框架报告含合法周期位置标签时，正常写入"""
-    text = f"{VALID_SUBJECTIVE_TAG}\n{VALID_CYCLE_STAGE_TAG}"
-    monkeypatch.setattr("sys.stdin", StringIO(text))
-    cache.cmd_set_analysis(["601088", "C资源", "62"])
-
-    conn = cache.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
-    row = conn.execute(
-        "SELECT result FROM analysis_results WHERE code='601088' AND date=?", (today,)
-    ).fetchone()
-    conn.close()
-    assert row == (text,)
-
-
-def test_set_analysis_c_framework_rejects_missing_cycle_stage_tag(monkeypatch):
-    """C框架报告缺失周期位置标签时，拒绝写入（fail-closed）"""
-    monkeypatch.setattr("sys.stdin", StringIO(VALID_SUBJECTIVE_TAG))
-    with pytest.raises(SystemExit) as exc_info:
-        cache.cmd_set_analysis(["601088", "C资源", "62"])
-    assert exc_info.value.code == 1
-
-    conn = cache.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
-    row = conn.execute(
-        "SELECT result FROM analysis_results WHERE code='601088' AND date=?", (today,)
-    ).fetchone()
-    conn.close()
-    assert row is None
-
-
-@pytest.mark.parametrize("framework,code", [("B银行", "600036"), ("D公用", "600900")])
-def test_set_analysis_bd_framework_rejects_missing_cycle_stage_tag(
-    framework, code, monkeypatch
-):
-    """B/D框架报告缺失周期位置标签时，拒绝写入（fail-closed，与C框架同步，
-    2026-07-01用户明确选择跳过观察期直接切换）"""
-    monkeypatch.setattr("sys.stdin", StringIO(VALID_SUBJECTIVE_TAG))
-    with pytest.raises(SystemExit) as exc_info:
-        cache.cmd_set_analysis([code, framework, "62"])
-    assert exc_info.value.code == 1
-
-    conn = cache.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
-    row = conn.execute(
-        "SELECT result FROM analysis_results WHERE code=? AND date=?", (code, today)
-    ).fetchone()
-    conn.close()
-    assert row is None
-
-
-@pytest.mark.parametrize("framework,code", [("B银行", "600037"), ("D公用", "600901")])
-def test_set_analysis_bd_framework_accepts_valid_cycle_stage_tag(
-    framework, code, monkeypatch
-):
-    """B/D框架报告含合法周期位置标签时，正常写入"""
-    tags = (
-        f"{VALID_D_TAG}\n{VALID_INDUSTRY_TAG}"
-        if framework == "D公用"
-        else VALID_SUBJECTIVE_TAG
+def test_a_framework_without_cycle_stage_stays_valid(monkeypatch, capsys):
+    set_valid_analysis(
+        monkeypatch, code="000001", framework="A通用", score=55, cycle=False
     )
-    text = f"{tags}\n{VALID_CYCLE_STAGE_TAG}"
-    monkeypatch.setattr("sys.stdin", StringIO(text))
-    cache.cmd_set_analysis([code, framework, "62"])
 
     conn = cache.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute(
-        "SELECT result FROM analysis_results WHERE code=? AND date=?", (code, today)
+        "SELECT decision_json FROM analysis_results WHERE code='000001'"
     ).fetchone()
     conn.close()
-    assert row == (text,)
 
-
-def test_set_analysis_a_framework_unaffected_by_missing_cycle_stage_tag(
-    monkeypatch, capsys
-):
-    """A框架不要求周期位置判断，缺失标签不受影响也不告警"""
-    monkeypatch.setattr("sys.stdin", StringIO(VALID_SUBJECTIVE_TAG))
-    cache.cmd_set_analysis(["000001", "A通用", "55"])
-
-    conn = cache.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
-    row = conn.execute(
-        "SELECT result FROM analysis_results WHERE code='000001' AND date=?", (today,)
-    ).fetchone()
-    conn.close()
-    assert row == (VALID_SUBJECTIVE_TAG,)
-
-    captured = capsys.readouterr()
-    assert "周期位置" not in captured.err
-
-
-def test_set_analysis_no_framework_rejected(monkeypatch, capsys):
-    """Missing framework is rejected before cycle-stage validation."""
-    monkeypatch.setattr("sys.stdin", StringIO(VALID_SUBJECTIVE_TAG))
-    with pytest.raises(SystemExit):
-        cache.cmd_set_analysis(["000002", "55"])
+    assert json.loads(row[0]).get("cycle_stage") is None
+    assert "周期位置" not in capsys.readouterr().err
 
 
 # ── 旧表迁移：无 id 列时触发 AUTOINCREMENT 迁移 ──────────────────────────────
@@ -1022,8 +980,7 @@ def test_schema_migration_ignores_only_duplicate_column():
 
 def test_update_return_writes_pct_and_days(capsys, monkeypatch):
     """update-return 写入 return_pct 和 holding_days"""
-    monkeypatch.setattr("sys.stdin", StringIO(f"买入\n{VALID_SUBJECTIVE_TAG}"))
-    cache.cmd_set_analysis(["600519", "A"])
+    set_valid_analysis(monkeypatch, code="600519", narrative="买入")
 
     cache.cmd_update_return(["600519", "18.5"])
 
@@ -1463,8 +1420,7 @@ def test_bse_920_uses_incremental_share_rule_and_quote_prefix():
 
 
 def test_update_return_uses_holding_buy_date_not_latest_analysis_date(monkeypatch):
-    monkeypatch.setattr("sys.stdin", StringIO(f"买入\n{VALID_SUBJECTIVE_TAG}"))
-    cache.cmd_set_analysis(["600519", "A"])
+    set_valid_analysis(monkeypatch, code="600519", narrative="买入")
     conn = cache.get_db()
     conn.execute(
         """INSERT INTO holdings
@@ -2176,7 +2132,7 @@ def test_cmd_checklist_a_framework_has_no_skipped_section(capsys):
     assert "框架客观指标核对清单：A通用框架 600036" in out
 
 
-def test_cmd_checklist_c_framework_warns_when_cycle_stage_missing(capsys, monkeypatch):
+def test_cmd_checklist_ignores_cycle_stage_wording_in_narrative(capsys, monkeypatch):
     set_valid_fundamentals(
         "600900",
         "长江电力",
@@ -2187,14 +2143,20 @@ def test_cmd_checklist_c_framework_warns_when_cycle_stage_missing(capsys, monkey
         },
         ttl=24,
     )
-    monkeypatch.setattr("sys.stdin", StringIO(VALID_SUBJECTIVE_TAG))
-    cache.cmd_set_analysis(["600900", "A通用", "55"])
+    set_valid_analysis(
+        monkeypatch,
+        code="600900",
+        framework="C资源",
+        score=55,
+        cycle=False,
+        narrative=LEGACY_CYCLE_STAGE_TAG,
+    )
 
     cache.cmd_checklist(["600900", "C"])
 
     out = capsys.readouterr().out
     assert "框架客观指标核对清单：能源/资源框架 600900" in out
-    assert "提前提示：C资源框架写入分析时必须包含有效的周期位置标签" in out
+    assert "提前提示：C资源框架写入分析时必须包含有效的周期位置标签" not in out
 
 
 def test_cmd_checklist_c_framework_skips_warning_when_cycle_stage_present(
@@ -2210,10 +2172,9 @@ def test_cmd_checklist_c_framework_skips_warning_when_cycle_stage_present(
         },
         ttl=24,
     )
-    monkeypatch.setattr(
-        "sys.stdin", StringIO(f"{VALID_SUBJECTIVE_TAG}\n{VALID_CYCLE_STAGE_TAG}")
+    set_valid_analysis(
+        monkeypatch, code="600900", framework="C资源", score=55, cycle=True
     )
-    cache.cmd_set_analysis(["600900", "C资源", "55"])
 
     cache.cmd_checklist(["600900", "c"])
 

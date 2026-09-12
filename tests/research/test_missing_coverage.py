@@ -117,12 +117,13 @@ class TestCmdSetAndGet:
 
 
 class TestCmdGetAnalysis:
-    def test_hit_returns_cached_result(self, capsys):
+    def test_legacy_row_is_human_only(self, capsys):
         _insert_analysis("600036", "招行分析：买入")
         cache.cmd_get_analysis(["600036"])
         out = capsys.readouterr().out
         assert "招行分析：买入" in out
-        assert "缓存命中" in out
+        assert "LEGACY_ANALYSIS_HUMAN_ONLY" in out
+        assert "缓存命中" not in out
 
     def test_miss_returns_cache_miss(self, capsys):
         cache.cmd_get_analysis(["999999"])

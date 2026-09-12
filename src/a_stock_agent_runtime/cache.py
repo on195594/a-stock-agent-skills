@@ -18,7 +18,7 @@ A股投研数据缓存管理器
   cache.py get <代码>                                    # 获取基本面缓存数据
   cache.py set <代码> <名称> <行业> <JSON> [TTL]            # 写入基本面数据（TTL自动按行业推断）
   cache.py get-analysis <代码>                           # 获取今日分析结论缓存
-  cache.py set-analysis <代码> <框架> [得分]              # 从stdin写入今日分析结论（框架必填）
+  cache.py set-analysis                                  # 从stdin写入一个 decision-v1 JSON（不接受位置参数）
   cache.py set-score <代码> <分数>                       # 写入今日综合得分（/80，向后兼容）
   cache.py set-score-breakdown <代码> '<JSON>'           # 写入今日各维度分项得分
   cache.py set-flag <代码> <yellow|red> <原因>            # 记录红黄线预警
@@ -58,7 +58,8 @@ A股投研数据缓存管理器
   cache.py cleanup                                      # 清除所有过期缓存条目
   cache.py clear [代码]                                  # 清除全部或指定股票缓存
   cache.py checklist <代码> <框架A|B|C|D|E|F>             # 打印框架客观指标核对清单（仅核对事实，不计分）
-  cache.py score-fundamentals <代码> <框架> '<JSON>'       # 只读确定性基本面评分（报告正文从stdin读取）
+  cache.py score-fundamentals <代码> <框架> '<评分输入JSON v1>'
+                                                        # 只读确定性基本面评分
 
 check 命令输出格式（供 SKILL.md 解析）：
   ANALYSIS_HIT   → 今日分析结论已缓存，直接输出结论，终止分析流程
@@ -311,7 +312,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
         ("TTL", "?"),
     ),
     "get-analysis": (("代码", "?"),),
-    "set-analysis": (("代码", None), ("框架", None), ("得分", "?")),
+    "set-analysis": (),
     "set-score": (("代码", None), ("分数", None)),
     "set-score-breakdown": (("代码", None), ("JSON", None)),
     "set-flag": (("代码", None), ("级别", None), ("原因", None)),
@@ -373,7 +374,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "cleanup": (),
     "clear": (("代码", "?"),),
     "checklist": (("代码", None), ("框架", None)),
-    "score-fundamentals": (("代码", None), ("框架", None), ("补充指标JSON", None)),
+    "score-fundamentals": (("代码", None), ("框架", None), ("评分输入JSONv1", None)),
 }
 
 _CLI_VALUE_OPTIONS = {

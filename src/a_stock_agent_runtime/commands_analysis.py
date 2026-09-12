@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import json
 import math
-import re
 import sqlite3
 import sys
 from dataclasses import asdict
-from datetime import timedelta
 
-from a_stock_agent_runtime import db, domain, risk_gates, store
+from a_stock_agent_runtime import db, decision_contract, domain, risk_gates, store
 from a_stock_lib.contracts import (
+    CycleStage,
+    CycleStageAssessment,
+    EvidenceConfidence,
     FrameworkKey,
-    parse_cycle_stage_tag,
-    parse_subjective_assessment_tags,
-    required_subjective_categories,
+    RatingTier,
+    SubjectiveAssessment,
+    SubjectiveCategory,
 )
 from a_stock_lib import framework_scoring
 
@@ -138,11 +139,6 @@ def _decision_meta(data: dict, industry: str | None) -> dict:
     }
 
 
-_VALUATION_CONFLICT_RE = re.compile(
-    r'估值冲突\[状态=待核实；PB结论="[^"]+"；交叉估值结论="[^"]+"\]'
-)
-
-
 def cmd_check(args: list[str]) -> None:
     """一次性检查分析结论+基本面缓存，输出状态码+内容"""
     if len(args) < 1:
@@ -154,47 +150,57 @@ def cmd_check(args: list[str]) -> None:
     # 优先检查今日分析结论
     with db.db_session() as conn:
         analysis_row = conn.execute(
-            """SELECT result, created_at, name, quote_price
+            """SELECT result, decision_json, created_at, name, quote_price
                FROM analysis_results WHERE code=? AND date=?""",
             (code, today),
         ).fetchone()
         if analysis_row:
-            result, created_at, name, analysis_quote = analysis_row
-            latest_quote = store.get_latest_quote_snapshot(
-                code, max_age=store.QUOTE_SNAPSHOT_MAX_AGE
-            )
-            signed_deviation = None
-            absolute_deviation = None
-            if latest_quote is not None and analysis_quote:
-                signed_deviation = (
-                    latest_quote["price"] - analysis_quote
-                ) / analysis_quote
-                absolute_deviation = abs(signed_deviation)
-            if latest_quote is None or not analysis_quote:
-                print(
-                    f"ANALYSIS_PRICE_STALE {code} 缺少新鲜行情或分析价格快照，需要重新分析"
-                )
-            elif (
-                absolute_deviation is not None
-                and signed_deviation is not None
-                and absolute_deviation < domain.ANALYSIS_PRICE_INVALIDATION_THRESHOLD
-            ):
-                name_str = f"({name})" if name else ""
-                quote_note = (
-                    f" 最新报价:{latest_quote['price']:.3f}({latest_quote['source']})"
-                    f" 较分析快照:{signed_deviation * 100:+.2f}%"
-                )
-                print(
-                    f"ANALYSIS_HIT {code}{name_str} [{domain.format_timestamp_cst(created_at)}]{quote_note}"
-                )
-                print(result)
-                return
+            result, decision_json, created_at, name, analysis_quote = analysis_row
+            if decision_json is None:
+                _print_legacy_analysis_human_only(code, created_at, result)
             else:
-                assert absolute_deviation is not None
-                print(
-                    f"ANALYSIS_PRICE_STALE {code} 最新报价较分析快照偏离"
-                    f"{absolute_deviation * 100:.2f}%（阈值3.00%），需要重新分析"
-                )
+                try:
+                    rendered = _render_stored_decision(decision_json, code)
+                except decision_contract.DecisionContractError as exc:
+                    print(f"ANALYSIS_INVALID {code} {exc}")
+                else:
+                    latest_quote = store.get_latest_quote_snapshot(
+                        code, max_age=store.QUOTE_SNAPSHOT_MAX_AGE
+                    )
+                    signed_deviation = None
+                    absolute_deviation = None
+                    if latest_quote is not None and analysis_quote:
+                        signed_deviation = (
+                            latest_quote["price"] - analysis_quote
+                        ) / analysis_quote
+                        absolute_deviation = abs(signed_deviation)
+                    if latest_quote is None or not analysis_quote:
+                        print(
+                            f"ANALYSIS_PRICE_STALE {code} 缺少新鲜行情或分析价格快照，需要重新分析"
+                        )
+                    elif (
+                        absolute_deviation is not None
+                        and signed_deviation is not None
+                        and absolute_deviation
+                        < domain.ANALYSIS_PRICE_INVALIDATION_THRESHOLD
+                    ):
+                        name_str = f"({name})" if name else ""
+                        quote_note = (
+                            f" 最新报价:{latest_quote['price']:.3f}({latest_quote['source']})"
+                            f" 较分析快照:{signed_deviation * 100:+.2f}%"
+                        )
+                        print(
+                            f"ANALYSIS_HIT {code}{name_str} "
+                            f"[{domain.format_timestamp_cst(created_at)}]{quote_note}"
+                        )
+                        print(rendered)
+                        return
+                    else:
+                        assert absolute_deviation is not None
+                        print(
+                            f"ANALYSIS_PRICE_STALE {code} 最新报价较分析快照偏离"
+                            f"{absolute_deviation * 100:.2f}%（阈值3.00%），需要重新分析"
+                        )
 
         # 再检查基本面缓存
         fund_row = conn.execute(
@@ -297,48 +303,40 @@ def cmd_get_analysis(args: list[str]) -> None:
     today = domain.cst_today()
     with db.db_session() as conn:
         row = conn.execute(
-            "SELECT result, created_at FROM analysis_results WHERE code=? AND date=?",
+            """SELECT result, decision_json, created_at FROM analysis_results
+               WHERE code=? AND date=?""",
             (code, today),
         ).fetchone()
     if not row:
         print("CACHE_MISS")
         return
-    result, created_at = row
-    print(f"[缓存命中 {domain.format_timestamp_cst(created_at)}]\n{result}")
+    result, decision_json, created_at = row
+    if decision_json is None:
+        _print_legacy_analysis_human_only(code, created_at, result)
+        return
+    try:
+        rendered = _render_stored_decision(decision_json, code)
+    except decision_contract.DecisionContractError as exc:
+        print(f"ANALYSIS_INVALID {code} {exc}")
+        print("CACHE_MISS")
+        return
+    print(f"[缓存命中 {domain.format_timestamp_cst(created_at)}]\n{rendered}")
 
 
-def _parse_set_analysis_args(args: list[str]) -> tuple[str, int | None, str]:
-    """Strictly parse framework and optional score without silent ignores."""
-    if not args:
-        print("错误：需要参数 <代码> <框架> [得分]", file=sys.stderr)
-        sys.exit(1)
-    code = args[0]
-    score: int | None = None
-    framework: str | None = None
-    for token in args[1:]:
-        if token in domain.FRAMEWORK_ALIASES:
-            normalized = domain.FRAMEWORK_ALIASES[token]
-            if framework is not None:
-                message = "冲突框架" if normalized != framework else "重复框架"
-                print(f"错误：{message}参数 {token}", file=sys.stderr)
-                sys.exit(1)
-            framework = normalized
-            continue
-        if re.fullmatch(r"-?\d+", token):
-            if score is not None:
-                print("错误：重复得分参数", file=sys.stderr)
-                sys.exit(1)
-            score = int(token)
-            continue
-        print(f"错误：未知参数 {token}", file=sys.stderr)
-        sys.exit(1)
-    if framework is None:
-        print("错误：set-analysis 必须显式提供框架 A—F", file=sys.stderr)
-        sys.exit(1)
-    if score is not None and not 0 <= score <= 80:
-        print("错误：得分必须为 0—80 的整数", file=sys.stderr)
-        sys.exit(1)
-    return code, score, framework
+def _render_stored_decision(decision_json: str, expected_code: str) -> str:
+    decision = decision_contract.loads_decision(decision_json)
+    if decision["stock_code"] != expected_code:
+        raise decision_contract.DecisionContractError(
+            "stock_code does not match analysis row"
+        )
+    return decision_contract.render_decision_markdown(decision)
+
+
+def _print_legacy_analysis_human_only(code: str, created_at: str, result: str) -> None:
+    print(
+        f"LEGACY_ANALYSIS_HUMAN_ONLY {code} [{domain.format_timestamp_cst(created_at)}]"
+    )
+    print(result)
 
 
 def _lookup_cached_stock_name(conn: sqlite3.Connection, code: str) -> str | None:
@@ -348,70 +346,82 @@ def _lookup_cached_stock_name(conn: sqlite3.Connection, code: str) -> str | None
     return row[0] if row else None
 
 
-def _read_validated_analysis_stdin(framework: str) -> str:
-    result = sys.stdin.read().strip()
-    if not result:
-        print("错误：stdin为空", file=sys.stderr)
-        sys.exit(1)
-    assessments = parse_subjective_assessment_tags(result)
-    actual_categories = {assessment.category for assessment in assessments}
-    required_categories = required_subjective_categories(FrameworkKey(framework[0]))
-    missing = required_categories - actual_categories
-    if missing:
-        labels = "、".join(sorted(category.value for category in missing))
-        print(
-            f"错误：{framework}报告缺少必需主观标签：{labels}，拒绝写入缓存。",
-            file=sys.stderr,
+def _load_scoring_input(
+    text: str,
+) -> tuple[dict, list[SubjectiveAssessment], CycleStageAssessment | None]:
+    try:
+        value = json.loads(
+            text,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"非有限数值 {token}")
+            ),
         )
-        print(
-            '格式要求：<类别>[评级=<优|格>；证据="<证据1>";"<证据2>";置信度=<高|中|低>]。',
-            file=sys.stderr,
-        )
+        if not isinstance(value, dict) or value.get("schema_version") != 1:
+            raise ValueError("schema_version 必须为整数 1")
+        metrics = value["metrics"]
+        raw_assessments = value["subjective_assessments"]
+        raw_cycle = value["cycle_stage"]
+        if not isinstance(metrics, dict):
+            raise ValueError("metrics 必须是对象")
+        if not isinstance(raw_assessments, list):
+            raise ValueError("subjective_assessments 必须是数组")
+        assessments = []
+        seen_categories = set()
+        for item in raw_assessments:
+            if not isinstance(item, dict):
+                raise ValueError("subjective_assessments 元素必须是对象")
+            evidence = item.get("evidence")
+            if (
+                not isinstance(evidence, list)
+                or not evidence
+                or any(
+                    not isinstance(entry, str) or not entry.strip()
+                    for entry in evidence
+                )
+            ):
+                raise ValueError("subjective_assessments.evidence 必须是非空字符串数组")
+            assessment = SubjectiveAssessment(
+                category=SubjectiveCategory(item.get("category")),
+                rating=RatingTier(item.get("rating")),
+                evidence=evidence,
+                confidence=EvidenceConfidence(item.get("confidence")),
+            )
+            if assessment.category in seen_categories:
+                raise ValueError("subjective_assessments.category 不得重复")
+            seen_categories.add(assessment.category)
+            assessments.append(assessment)
+        cycle_stage = None
+        if raw_cycle is not None:
+            if not isinstance(raw_cycle, dict):
+                raise ValueError("cycle_stage 必须是对象或 null")
+            rationale = raw_cycle.get("rationale")
+            if not isinstance(rationale, str) or not rationale.strip():
+                raise ValueError("cycle_stage.rationale 必须是非空字符串")
+            cycle_stage = CycleStageAssessment(
+                stage=CycleStage(raw_cycle.get("stage")), rationale=rationale
+            )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        print(f"评分输入JSON校验错误: {exc}", file=sys.stderr)
         sys.exit(1)
-    return result
-
-
-def _validate_cycle_stage_for_framework(result: str, framework: str) -> None:
-    """C/B/D框架均fail-closed（2026-07-01：用户明确选择跳过观察期，B/D与C同步切换）；
-    A/E/F框架不校验（周期判断对它们是可选项）。
-    """
-    # framework 传入的是 portfolio_label 全称（如 "C资源"/"B银行"/"D公用"），
-    # 不是裸字母，取首字符判断框架类型（与 checklist.py 的裸字母约定不同）。
-    letter = framework[0].upper()
-    if letter not in ("B", "C", "D"):
-        return
-    assessment = parse_cycle_stage_tag(result)
-    if assessment is not None:
-        return
-    print(
-        f"错误：{framework}框架报告中未找到有效的周期位置结构化标签，拒绝写入缓存。",
-        file=sys.stderr,
-    )
-    print(
-        '格式要求：周期位置[阶段=<上行期|顶部区|下行期|底部区>；依据="<依据文本>"]，依据文本须用ASCII双引号。',
-        file=sys.stderr,
-    )
-    sys.exit(1)
+    return metrics, assessments, cycle_stage
 
 
 def cmd_score_fundamentals(args: list[str]) -> None:
     """用 a-stock-lib 对缓存与显式补充指标执行只读基本面评分。"""
     if len(args) != 3:
-        print("错误：需要参数 <代码> <框架A-F> <补充指标JSON>", file=sys.stderr)
+        print(
+            "错误：需要参数 <代码> <框架A-F> '<评分输入JSON v1>'；"
+            '格式={"schema_version":1,"metrics":{},'
+            '"subjective_assessments":[],"cycle_stage":null}',
+            file=sys.stderr,
+        )
         sys.exit(1)
     code, framework_token, overrides_text = args
     framework = domain.FRAMEWORK_ALIASES.get(framework_token)
     if framework is None:
         print(f"错误：未知框架 {framework_token}", file=sys.stderr)
         sys.exit(1)
-    try:
-        overrides = json.loads(overrides_text)
-    except json.JSONDecodeError as exc:
-        print(f"JSON解析错误: {exc}", file=sys.stderr)
-        sys.exit(1)
-    if not isinstance(overrides, dict):
-        print("错误：补充指标必须是 JSON 对象", file=sys.stderr)
-        sys.exit(1)
+    overrides, assessments, cycle_assessment = _load_scoring_input(overrides_text)
     for gate_name in risk_gates.GATE_NAMES:
         if gate_name in overrides:
             error = store.validate_gate_payload(gate_name, overrides[gate_name])
@@ -447,12 +457,10 @@ def cmd_score_fundamentals(args: list[str]) -> None:
                 )
             )
             return
-    report = sys.stdin.read().strip()
-    cycle_assessment = parse_cycle_stage_tag(report)
     score = framework_scoring.score_fundamentals(
         FrameworkKey(framework[0]),
         metrics,
-        parse_subjective_assessment_tags(report),
+        assessments,
         cycle_stage=cycle_assessment.stage if cycle_assessment else None,
     )
     payload = asdict(score)
@@ -478,114 +486,60 @@ def cmd_score_fundamentals(args: list[str]) -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
-def cmd_set_analysis(args: list[str]) -> None:
-    """从stdin读取分析结论并缓存（当日有效）。
+def _cmd_set_analysis_decision() -> None:
+    try:
+        decision = decision_contract.loads_decision(sys.stdin.read())
+    except decision_contract.DecisionContractError as exc:
+        # Keep the command's local database queryable while rejecting the row.
+        with db.db_session():
+            pass
+        print(f"错误：decision JSON 校验失败: {exc}", file=sys.stderr)
+        sys.exit(1)
 
-    用法：
-      a-stock-cache set-analysis <代码> <框架> [得分] << 'EOF'
-      <分析文本>
-      EOF
-
-    参数：
-      <代码>   股票代码（必填）
-      <框架>   打分框架（必填），接受 A—F 简称或 A通用/B银行/C资源/D公用/E消费/F科技。
-               持久化下来供 add-holding/portfolio-risk 直接复用，
-               不用再靠 industry 关键词反推（反推在 industry 缺失/未知时会失真）。
-      [得分]   综合得分整数（可选）。若提供，result 与 score 一并写入，
-               无需再单独调用 set-score。若不提供，score 保持 NULL。
-      框架和得分的相对顺序不重要，按token形态严格识别；未知或重复参数会拒绝写入。
-    """
-    code, score, framework = _parse_set_analysis_args(args)
+    code = decision["stock_code"]
     quote = store.get_latest_quote_snapshot(code, max_age=store.QUOTE_SNAPSHOT_MAX_AGE)
     if quote is None:
         print("错误：没有 fetcher 刚写入的有效行情快照，拒绝写入分析", file=sys.stderr)
         sys.exit(1)
-    with db.db_session() as conn_tmp:
-        name = _lookup_cached_stock_name(conn_tmp, code)
-        industry_row = conn_tmp.execute(
-            "SELECT industry FROM stock_fundamentals WHERE code=?", (code,)
-        ).fetchone()
-        qualitative_row = conn_tmp.execute(
-            """SELECT industry FROM qualitative_only_securities
-               WHERE code=?""",
-            (code,),
-        ).fetchone()
-    industry = industry_row[0] if industry_row else None
-    if qualitative_row is not None or domain.is_unsupported_financial_industry(
-        industry
-    ):
-        print(
-            "错误：保险/券商/证券不适用当前量化框架，不允许写入 set-analysis",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    result = _read_validated_analysis_stdin(framework)
-    _validate_cycle_stage_for_framework(result, framework)
-    cached_fundamentals = store.get_fundamentals(code) or {}
-    gate_state = _risk_gate_state(cached_fundamentals)
 
+    score = decision["framework_score"]
+    framework = decision["framework"]
+    scoring_status = "complete" if score is not None else "incomplete"
+    result = decision_contract.render_decision_markdown(decision)
+    decision_json = decision_contract.dumps_decision(decision)
     today = domain.cst_today()
-    scoring_status = "complete"
-    if gate_state is not None and gate_state[0] != "clear":
-        scoring_status = "incomplete"
-        if score is not None:
-            print("错误：风险门未通过时不得写入完整总分", file=sys.stderr)
-            sys.exit(1)
-    valuation_conflict = framework == "C资源" and _VALUATION_CONFLICT_RE.search(result)
-    if valuation_conflict:
-        scoring_status = "incomplete"
-        if score is not None:
-            print("错误：C资源估值冲突待核实时不得写入完整总分", file=sys.stderr)
-            sys.exit(1)
-    elif (
-        framework == "D公用"
-        and store.get_market_indicator_snapshot(
-            "bond_yield_10y", max_age=timedelta(hours=24)
-        )
-        is None
-    ):
-        scoring_status = "incomplete"
-        if score is not None:
-            print("错误：D公用缺少可信国债收益率时不得写入完整总分", file=sys.stderr)
-            sys.exit(1)
     with db.db_session() as conn:
+        name = _lookup_cached_stock_name(conn, code)
         existing = conn.execute(
-            """SELECT score, score_breakdown FROM analysis_results
+            """SELECT score_breakdown FROM analysis_results
                WHERE code=? AND date=?""",
             (code, today),
         ).fetchone()
-        effective_score = (
-            None
-            if scoring_status == "incomplete"
-            else (score if score is not None else (existing[0] if existing else None))
-        )
-        clear_stale_breakdown = bool(
-            existing and existing[1]
-        ) and not _score_breakdown_matches_analysis(
-            existing[1],
-            framework=framework,
-            scoring_status=scoring_status,
-            score=effective_score,
+        clear_stale_breakdown = bool(existing and existing[0]) and not (
+            _score_breakdown_matches_analysis(
+                existing[0],
+                framework=framework,
+                scoring_status=scoring_status,
+                score=score,
+            )
         )
         conn.execute(
             """INSERT INTO analysis_results
-               (code, date, name, result, created_at, score, framework,
+               (code, date, name, result, decision_json, created_at, score, framework,
                 quote_price, quote_as_of, quote_source, scoring_status)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(code, date) DO UPDATE SET
-                   name = excluded.name,
-                   result = excluded.result,
-                   created_at = excluded.created_at,
-                   score = CASE
-                       WHEN excluded.scoring_status = 'incomplete' THEN NULL
-                       ELSE COALESCE(excluded.score, analysis_results.score)
-                   END,
-                   framework = excluded.framework,
-                   quote_price = excluded.quote_price,
-                   quote_as_of = excluded.quote_as_of,
-                   quote_source = excluded.quote_source,
-                   scoring_status = excluded.scoring_status,
-                   score_breakdown = CASE
+                   name=excluded.name,
+                   result=excluded.result,
+                   decision_json=excluded.decision_json,
+                   created_at=excluded.created_at,
+                   score=excluded.score,
+                   framework=excluded.framework,
+                   quote_price=excluded.quote_price,
+                   quote_as_of=excluded.quote_as_of,
+                   quote_source=excluded.quote_source,
+                   scoring_status=excluded.scoring_status,
+                   score_breakdown=CASE
                        WHEN ? THEN NULL ELSE analysis_results.score_breakdown
                    END""",
             (
@@ -593,6 +547,7 @@ def cmd_set_analysis(args: list[str]) -> None:
                 today,
                 name,
                 result,
+                decision_json,
                 domain.utc_now_iso(),
                 score,
                 framework,
@@ -604,13 +559,20 @@ def cmd_set_analysis(args: list[str]) -> None:
             ),
         )
         conn.commit()
-    name_str = f"({name})" if name else ""
-    score_str = f" 得分:{score}/80" if score is not None else ""
-    fw_str = f" 框架:{framework}" if framework else ""
-    status_str = " 评分状态:incomplete" if scoring_status == "incomplete" else ""
-    print(f"分析结论已缓存：{code}{name_str} ({today}){score_str}{fw_str}{status_str}")
-    if clear_stale_breakdown:
-        print("  ⚠️ 原分项得分与本次分析状态/综合得分不一致，已清除，须重新写入")
+    print(
+        f"分析结论已缓存：{code} ({today}) 框架:{framework} 评分状态:{scoring_status}"
+    )
+
+
+def cmd_set_analysis(args: list[str]) -> None:
+    """Read one decision JSON document from stdin and cache it for today."""
+    if args:
+        print(
+            "错误：set-analysis 不接受参数；从 stdin 读取 decision JSON",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    _cmd_set_analysis_decision()
 
 
 def cmd_set_score(args: list[str]) -> None:

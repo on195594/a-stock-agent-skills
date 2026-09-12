@@ -10,7 +10,7 @@ CLI_ARGUMENT_CASES = {
     "get": ([], ["600000"]),
     "set": (["600000", "名称", "行业", "{}"], ["600000", "名称", "行业", "{}", "24"]),
     "get-analysis": ([], ["600000"]),
-    "set-analysis": (["600000", "A"], ["600000", "A", "60"]),
+    "set-analysis": ([], []),
     "set-score": (["600000", "60"], ["600000", "60"]),
     "set-score-breakdown": (["600000", "{}"], ["600000", "{}"]),
     "set-flag": (["600000", "yellow", "原因"], ["600000", "yellow", "原因"]),
@@ -261,6 +261,29 @@ def test_top_level_help_discovers_commands_and_write_gate(capsys) -> None:
     assert all(command in output for command in cache.COMMANDS)
 
 
+def test_phase4_structured_command_help_and_schema(capsys) -> None:
+    assert cache._CLI_POSITIONALS["set-analysis"] == ()
+    assert cache.main(["set-analysis", "--help"]) == 0
+    set_analysis_help = capsys.readouterr().out
+    assert "usage: a-stock-cache set-analysis [-h]" in set_analysis_help
+    assert "代码" not in set_analysis_help
+    assert "框架" not in set_analysis_help
+
+    assert cache._CLI_POSITIONALS["score-fundamentals"] == (
+        ("代码", None),
+        ("框架", None),
+        ("评分输入JSONv1", None),
+    )
+    assert cache.main(["score-fundamentals", "--help"]) == 0
+    scoring_help = capsys.readouterr().out
+    assert "代码 框架 评分输入JSONv1" in scoring_help
+
+    usage_text = cache.__doc__ or ""
+    assert "set-analysis <代码> <框架> [得分]" not in usage_text
+    assert "报告正文从stdin读取" not in usage_text
+    assert "set-analysis" in usage_text and "decision-v1 JSON" in usage_text
+
+
 def test_sina_parser_preserves_price_when_previous_close_is_malformed() -> None:
     from a_stock_agent_runtime import commands_holdings, market_quotes
 
@@ -270,7 +293,9 @@ def test_sina_parser_preserves_price_when_previous_close_is_malformed() -> None:
         line = 'var hq_str_sh600036="' + ",".join(fields) + '";'
         expected_quote = ("600036", 101.0, "2026-09-08", "10:00:00", expected)
         assert market_quotes.parse_sina_quote_line(line, {"600036"}) == expected_quote
-        assert commands_holdings._parse_sina_quote_line(line, {"600036"}) == expected_quote
+        assert (
+            commands_holdings._parse_sina_quote_line(line, {"600036"}) == expected_quote
+        )
         fields[3] = "bad"
         line = 'var hq_str_sh600036="' + ",".join(fields) + '";'
         assert market_quotes.parse_sina_quote_line(line, {"600036"}) is None

@@ -52,25 +52,20 @@ a-stock-cache check <股票代码>
 ## 分析完成后写入缓存
 
 ```bash
-# ① 写入今日分析结论 + 框架 + 综合得分（框架必填；得分可选）
-# 框架就是第一步行业识别时已经决定的那个（A通用/B银行/C资源/D公用/E消费/F科技），
-# 直接传进来持久化，避免后续 add-holding/portfolio-risk 再靠 industry 关键词反推失真
-a-stock-cache --confirm-write set-analysis <代码> <框架> <得分> << 'ANALYSIS_EOF'
-<完整分析报告全文>
-ANALYSIS_EOF
+# ① 写入一个完整的 decision-v1 JSON；set-analysis 不接受位置参数
+a-stock-cache --confirm-write set-analysis << 'DECISION_EOF'
+<完整 decision-v1 JSON>
+DECISION_EOF
 
-# 框架可用 A—F 简称或完整标签。未知参数、冲突框架、重复/越界得分均拒绝写入。
-# D公用缺少24小时内可信国债收益率时：不传得分；报告只保存基本面小计，
-# score=null、timing.subtotal=null、scoring_status=incomplete，禁止伪装成完整80分结果。
+# schema、枚举、分数范围和安全一致性由 runtime 校验；禁止从报告正文反推或补造机器状态。
+# 可选 narrative 只用于人类展示，非权威；持久化 Markdown 由已校验 JSON 渲染。
+# D公用缺少24小时内可信国债收益率时，decision-v1 必须保持 score/timing 不完整并 fail-closed。
 
-# ② 事后补录得分（向后兼容，需先执行 set-analysis）
-a-stock-cache --confirm-write set-score <代码> <得分数字>
-
-# ③ 写入基本面数据（TTL 按行业自动推断：银行/公用72h，消费12h，其余24h）
+# ② 写入基本面数据（TTL 按行业自动推断：银行/公用72h，消费12h，其余24h）
 a-stock-cache --confirm-write set "<代码>" "<名称>" "<行业>" '<JSON>'
 
-# ④ 若触发红线/黄线，记录预警（可多次调用追加）
-# ⚠️ 注意：set-flag 依赖今日已存在 set-analysis 记录，必须先执行 ① 再执行 ④
+# ③ 若触发红线/黄线，记录预警（可多次调用追加）
+# ⚠️ 注意：set-flag 依赖今日已存在 set-analysis 记录，必须先执行 ① 再执行 ③
 a-stock-cache --confirm-write set-flag "<代码>" red "<红线原因>"
 a-stock-cache --confirm-write set-flag "<代码>" yellow "<黄线原因>"
 ```

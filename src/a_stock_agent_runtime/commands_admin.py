@@ -7,8 +7,13 @@ import math
 import sys
 from datetime import datetime, timedelta, timezone
 
-from a_stock_agent_runtime import db, domain, framework_metadata, store
-from a_stock_lib.contracts import parse_cycle_stage_tag
+from a_stock_agent_runtime import (
+    db,
+    decision_contract,
+    domain,
+    framework_metadata,
+    store,
+)
 
 _UTC = timezone.utc
 
@@ -454,17 +459,21 @@ def cmd_checklist(args: list[str]) -> None:
             items, normalized, code, metadata.subjective_items, skipped
         )
     )
-    if normalized == "C" and _latest_analysis_missing_cycle_stage(code):
-        print("\n⚠️ 提前提示：C资源框架写入分析时必须包含有效的周期位置标签；")
-        print('格式：周期位置[阶段=<上行期|顶部区|下行期|底部区>；依据="<依据文本>"]')
 
 
 def _latest_analysis_missing_cycle_stage(code: str) -> bool:
     with db.db_session() as conn:
         row = conn.execute(
-            "SELECT result FROM analysis_results WHERE code=? ORDER BY date DESC LIMIT 1",
+            """SELECT decision_json FROM analysis_results
+               WHERE code=? ORDER BY date DESC LIMIT 1""",
             (code,),
         ).fetchone()
-    if not row:
+    if not row or row[0] is None:
         return True
-    return parse_cycle_stage_tag(row[0]) is None
+    try:
+        decision = decision_contract.loads_decision(row[0])
+    except decision_contract.DecisionContractError:
+        return True
+    if decision["stock_code"] != code:
+        return True
+    return decision_contract.cycle_stage_from_decision(decision) is None
