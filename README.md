@@ -19,7 +19,8 @@ wheel SHA-256 is
 Architecture convergence Phases 1-6 are complete: A-F scoring and cache-only
 industry lookup have one typed owner, runtime decisions use the versioned
 `decision_v1` JSON contract, the three Skills are thin routers, and the eight
-captured Hermes scenarios have deterministic offline behavior checks. All nine
+captured Hermes scenarios have deterministic offline behavior checks. Three
+critical captured call plans also execute against an isolated fake CLI runtime. All nine
 client Skill entries resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
