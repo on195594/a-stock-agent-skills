@@ -3,7 +3,7 @@
 ## 0.1.12 — 2026-09-13
 
 - 将 frozen dependency 更新到不可变的 `a-stock-lib==0.8.0` Release wheel，并固定 SHA-256 `a811945b23d97eb121ff82d54bc0ba0810000a5379a9e9786fdcdc9220b30310`。
-- 保留行业缓存失败语义、Skill 防回归门、监管规则 freshness guard 与三个 fake-runtime 调用回放场景；不部署或修改生产状态。
+- 保留行业缓存失败语义、Skill 防回归门与监管规则 freshness guard；用单个固定 `openai-codex/gpt-5.6-sol` 会话直接调用隔离 fake tools，覆盖三条关键路由且不执行未授权 W1。
 
 ## 2026-09-09 (deployed runtime 0.1.11-996e552a3463)
 

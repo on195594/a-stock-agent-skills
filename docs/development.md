@@ -54,6 +54,20 @@ bash tests/test_check_holdings_cron.sh
 
 `uv run ruff format --check .` passes across maintained Python sources and tests.
 
+The checked-in Agent tool fixture comes from one fixed
+`openai-codex/gpt-5.6-sol` session using an isolated `HOME`, read-only Pi
+credentials and in-process fake tools. Refresh it explicitly (never in CI) with:
+
+```bash
+timeout 300 node scripts/capture_agent_tool_e2e.mjs \
+  tests/fixtures/agent_tool_e2e_live.json
+uv run pytest tests/test_agent_tool_e2e.py -q
+```
+
+The capture script fails unless the model makes exactly the expected calls and
+never invokes the exposed fake W1 tool. It does not call production CLIs,
+market-data networks or runtime state.
+
 The QA standalone smoke intentionally runs with `python3 -I` and no installed
 runtime. It proves that the QA Skill can be discovered and evaluated from
 text alone.
