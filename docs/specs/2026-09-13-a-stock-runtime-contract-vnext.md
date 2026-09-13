@@ -111,7 +111,7 @@ fake W1 tool 已暴露但没有被调用。
 
 ```text
 a-stock-lib/f7fd9df CI = success
-a-stock-agent-skills/266cd5e CI = success
+a-stock-agent-skills/3ca88c5 CI = success
 ```
 
 ---
@@ -1454,3 +1454,50 @@ then evaluate holdings split
 最终原则：
 
 > **Stable contracts first. Explicit ownership second. Module movement last.**
+
+---
+
+# 16. 实施复盘
+
+## 16.1 结果
+
+本轮按修订后的 Spec 完成全部 P0/P1 工作，最终代码实现停在 `a-stock-lib/f7fd9df` 与 `a-stock-agent-skills/266cd5e`；随后仅追加架构、实施证据和本 Spec 归档。两仓库对应 CI 均通过，没有生产部署或状态写入。
+
+## 16.2 做得好的部分
+
+- 先冻结 monitor-v1 wire shape，再移动 validator 与 routing owner，没有改变投资阈值或 W1 授权模型。
+- Drift guard 使用 stdlib 与临时 Git 仓库测试，保持离线且不引入依赖。
+- Framework catalog 复用既有 A–F exhaustive regression，避免重新设计行业映射和止损系数。
+- Live E2E 在单个真实模型会话中暴露 fake write tool，以“可调用但未调用”证明未授权 W1 被阻止。
+- Capture source 与 fixture 分开提交，解决 `repository_head` 的自引用问题。
+
+## 16.3 偏差、根因与修复
+
+### 旧 development lock 阻断 branch guard
+
+初始 `a-stock-lib/uv.lock` 未跟踪且仍声明 `0.7.0`。直接忽略会让本地 `uv` 与 CI 使用不同解析结果，因此将 lock 更新为 `0.8.0` 后提交，而不是用 `.gitignore` 隐藏。
+
+### 原 drift 设计漏掉 commit 前变化
+
+原文只比较 `tag..HEAD`，无法在 direct-to-master 的 pre-commit gate 中发现 staged、unstaged 或 untracked package drift。实现改为合并四类变化，并增加对应回归测试。
+
+### Monitor Skill 修改触发历史 Hermes evidence 失败
+
+Phase 3 增加 monitor-v1 说明后，旧 Hermes artifact 的测试仍要求其历史 Skill hash 等于当前 Skill，导致一次 hosted CI 失败。该 artifact 的 capture commit 不在当前 master ancestry，不能伪造为当前 snapshot，也不能在未部署 Hermes Skill 的情况下安全重跑。
+
+最终处理：保留八场景 artifact 自带的历史 hash、prompt、session 与 runtime provenance；当前 Skill 的精确 source binding 由新的 live fake-tool fixture 承担。后续修改任何 Skill 前，先搜索所有 `skill_sha256` consumer，区分历史证据与 current-head gate。
+
+### 本机 full gate 间歇超时
+
+本机完整 pytest 曾在文件系统等待中超时，但 focused suites 正常，GitHub runner 上同一 `scripts/check.sh` 完成 `1039 passed, 2 skipped`。因此超时记录为环境证据，不被误报成测试失败；最终接受以 exact-head hosted CI 为准。
+
+## 16.4 文档对齐
+
+- 本 Spec 已从 `AUTHORIZED FOR IMPLEMENTATION` 更新为 `IMPLEMENTED / COMPLETE`，并记录实际 commit、测试和安全结果。
+- `docs/architecture/runtime-contracts.md` 描述 decision-v1、monitor-v1、routing owner 和三个独立版本维度。
+- `README.md` 与 `docs/CHANGELOG.md` 已对齐 package `0.1.13`、monitor-v1、framework catalog 和 E2E provenance。
+- `docs/README.md` 已索引本 Spec 与 runtime contract 架构文档。
+
+## 16.5 后续原则
+
+当前没有必须补做的 blocker。只有在 monitor-v1 稳定运行并出现可度量维护问题后，才评估 snapshot builder/source adapter 抽取；不要提前拆分 `commands_holdings.py`、`fetcher.py` 或引入新的 schema/DDD 层。
