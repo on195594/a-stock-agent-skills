@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.13 — Unreleased
+
+- 开始 wire-compatible runtime contract、framework routing ownership 与 Agent E2E provenance 加固；投资阈值、W1 授权和生产状态不变。
+
 ## 0.1.12 — 2026-09-13
 
 - 将 frozen dependency 更新到不可变的 `a-stock-lib==0.8.0` Release wheel，并固定 SHA-256 `a811945b23d97eb121ff82d54bc0ba0810000a5379a9e9786fdcdc9220b30310`。

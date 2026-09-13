@@ -13,7 +13,7 @@ logs, locks, artifacts and credentials stay outside this repository.
 ## Current status
 
 The deployed runtime remains `v0.1.11` (`0.1.11-2c2d6018d411`). Repository
-version `0.1.12` and its frozen lock use the immutable `a-stock-lib==0.8.0`
+version `0.1.13` and its frozen lock use the immutable `a-stock-lib==0.8.0`
 GitHub Release wheel with SHA-256
 `a811945b23d97eb121ff82d54bc0ba0810000a5379a9e9786fdcdc9220b30310`.
 Architecture convergence Phases 1-6 are complete: A-F scoring and cache-only
