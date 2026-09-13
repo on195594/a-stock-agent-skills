@@ -722,11 +722,12 @@ def test_monitor_industry_unavailable_stays_within_one_bounded_request(
 
     monkeypatch.setattr(commands_holdings, "_fetch_sina_batch_quotes", fetch)
     codes = ["600036", "600000"] if case == "holdings_cap" else ["600036"]
-    quotes = commands_holdings.fetch_monitor_price_quotes(codes)
+    quotes, industry_result = commands_holdings.fetch_monitor_price_quotes(codes)
 
     if case == "holdings_cap":
         assert calls == []
         assert quotes == dict.fromkeys(codes)
+        assert industry_result is None
     else:
         expanded = case in {"missing_close", "stale_member", "invalid_time"}
         assert calls == [["600000", "600036"] if expanded else ["600036"]]
@@ -735,6 +736,7 @@ def test_monitor_industry_unavailable_stays_within_one_bounded_request(
         assert quote.industry_change_pct is None
         assert quote.industry_source is None
         assert quote.industry_as_of is None
+        assert industry_result is not None
 
 
 @pytest.mark.parametrize(
@@ -763,9 +765,54 @@ def test_failed_cached_industry_states_never_network_or_write(
 
     monkeypatch.setattr(commands_holdings, "TushareFundamentalsProvider", FakeProvider)
 
-    assert commands_holdings._fresh_industry_map() == {}
+    result = commands_holdings._fresh_industry_map()
+
+    assert result.status == "failed"
+    assert result.error_code == error_code
     assert calls == ["read_cached_industry_map"]
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("error_code", "expected_status"),
+    [
+        (None, "complete"),
+        ("CACHE_MISSING", "unavailable"),
+        ("CACHE_STALE", "stale"),
+        ("CACHE_CORRUPT", "invalid"),
+        ("CACHE_MALFORMED", "invalid"),
+        ("CACHE_FUTURE_TIMESTAMP", "invalid"),
+        ("CACHE_READ_FAILED", "unavailable"),
+    ],
+)
+def test_monitor_snapshot_preserves_industry_cache_status(
+    error_code, expected_status, isolated_cache_database
+) -> None:
+    _seed_holding(isolated_cache_database)
+    result = SimpleNamespace(
+        status="ok" if error_code is None else "failed",
+        value={"600036": "bank"} if error_code is None else None,
+        error_code=error_code,
+        freshness_days=2 if error_code in {None, "CACHE_STALE"} else None,
+        source="tushare.stock_basic",
+        fetched_at="2026-09-13T00:00:00+08:00",
+    )
+
+    payload = commands_monitor.build_monitor_snapshot(
+        commands_monitor._load_monitor_local_snapshot(),
+        _quotes(["600036"]),
+        100000,
+        industry_result=result,
+    )
+
+    assert payload["industry_context"]["status"] == expected_status
+    assert payload["industry_context"]["error_code"] == error_code
+    industry_gaps = [
+        gap for gap in payload["data_gaps"] if gap["field"] == "industry_context"
+    ]
+    assert bool(industry_gaps) is (error_code is not None)
+    if error_code is not None:
+        assert error_code in industry_gaps[0]["minimum_action"]
 
 
 @pytest.mark.parametrize(
@@ -1024,7 +1071,10 @@ def test_invalid_holding_timestamp_blocks_monitor_with_sufficient_industry_cover
         return raw
 
     monkeypatch.setattr(commands_holdings, "_fetch_sina_batch_quotes", fetch)
-    quote = commands_holdings.fetch_monitor_price_quotes(["600036"])["600036"]
+    quotes, industry_result = commands_holdings.fetch_monitor_price_quotes(["600036"])
+    quote = quotes["600036"]
+
+    assert industry_result is not None
     assert quote.industry_change_pct == 0
     calls.clear()
 

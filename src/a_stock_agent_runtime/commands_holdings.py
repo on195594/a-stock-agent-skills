@@ -8,6 +8,7 @@ import sqlite3
 import sys
 from datetime import date, datetime
 
+from a_stock_lib.market_data import MarketDataResult
 from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
 
 from a_stock_agent_runtime import db, domain, market_quotes, store
@@ -171,22 +172,31 @@ def fetch_current_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]
 _default_fetch_current_price_quotes = fetch_current_price_quotes
 
 
-def _fresh_industry_map() -> dict[str, str]:
-    result = TushareFundamentalsProvider().read_cached_industry_map()
-    return result.value if result.status == "ok" and result.value is not None else {}
+def _fresh_industry_map() -> MarketDataResult[dict[str, str]]:
+    return TushareFundamentalsProvider().read_cached_industry_map()
 
 
-def fetch_monitor_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]:
+def fetch_monitor_price_quotes(
+    codes: list[str],
+) -> tuple[
+    dict[str, PriceQuote | None],
+    MarketDataResult[dict[str, str]] | None,
+]:
     """Fetch holdings and same-industry constituents in one bounded quote request."""
     if fetch_current_price_quotes is not _default_fetch_current_price_quotes:
-        return fetch_current_price_quotes(codes)
+        return fetch_current_price_quotes(codes), None
     if not codes:
-        return {}
+        return {}, None
     codes = sorted(set(codes))
     if len(codes) > _MONITOR_BATCH_LIMIT:
-        return dict.fromkeys(codes)
+        return dict.fromkeys(codes), None
 
-    industry_map = _fresh_industry_map()
+    industry_result = _fresh_industry_map()
+    industry_map = (
+        industry_result.value
+        if industry_result.status == "ok" and industry_result.value is not None
+        else {}
+    )
     requested_industries = {
         industry_map[code] for code in codes if code in industry_map
     }
@@ -263,7 +273,7 @@ def fetch_monitor_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]
             industry_source="sina.industry_mean" if industry_quote else None,
             industry_as_of=industry_quote[1] if industry_quote else None,
         )
-    return result
+    return result, industry_result
 
 
 def _parse_add_holding_args(

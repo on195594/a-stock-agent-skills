@@ -11,6 +11,14 @@ from datetime import date, datetime
 from importlib import metadata
 from typing import Any
 
+from a_stock_lib.market_data import (
+    CACHE_CORRUPT,
+    CACHE_FUTURE_TIMESTAMP,
+    CACHE_MALFORMED,
+    CACHE_STALE,
+    MarketDataResult,
+)
+
 from a_stock_agent_runtime import commands_holdings, db, domain, risk_gates
 
 _SCOPES = {"aggregate", "core_driver", "non_core", "governance"}
@@ -304,11 +312,36 @@ def _add_gap(
         gaps.append(item)
 
 
+def _industry_context(
+    result: MarketDataResult[dict[str, str]] | None,
+) -> dict[str, Any]:
+    error_code = getattr(result, "error_code", None)
+    status = (
+        "not_applicable"
+        if result is None
+        else "complete"
+        if result.status == "ok"
+        else "stale"
+        if error_code == CACHE_STALE
+        else "invalid"
+        if error_code in {CACHE_CORRUPT, CACHE_MALFORMED, CACHE_FUTURE_TIMESTAMP}
+        else "unavailable"
+    )
+    return {
+        "status": status,
+        "error_code": error_code,
+        "freshness_days": getattr(result, "freshness_days", None),
+        "source": getattr(result, "source", None),
+        "fetched_at": getattr(result, "fetched_at", None),
+    }
+
+
 def build_monitor_snapshot(
     local: dict[str, Any],
     quotes: dict[str, commands_holdings.PriceQuote | None],
     portfolio_value: float | None,
     *,
+    industry_result: MarketDataResult[dict[str, str]] | None = None,
     now: datetime | None = None,
     stage_timings_ms: dict[str, int] | None = None,
 ) -> dict[str, Any]:
@@ -324,6 +357,18 @@ def build_monitor_snapshot(
     stale = False
     conflicted = False
     trade_requested = False
+    industry_context = _industry_context(industry_result)
+
+    if holdings and industry_context["status"] in {"unavailable", "stale", "invalid"}:
+        stale = stale or industry_context["status"] == "stale"
+        partial = True
+        error_code = industry_context["error_code"] or "unknown"
+        _add_gap(
+            gaps,
+            None,
+            "industry_context",
+            f"restore same-industry context ({error_code})",
+        )
 
     if portfolio_value is None:
         _add_escalation(
@@ -803,6 +848,7 @@ def build_monitor_snapshot(
             "active": active_count,
             "complete": quote_complete,
         },
+        "industry_context": industry_context,
         "holdings": output_holdings,
         "escalations": escalations,
         "data_gaps": gaps,
@@ -963,12 +1009,13 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
         raise SystemExit(1) from None
     local_done = time.perf_counter()
     codes = list(dict.fromkeys(item["code"] for item in local["holdings"]))
-    quotes = commands_holdings.fetch_monitor_price_quotes(codes)
+    quotes, industry_result = commands_holdings.fetch_monitor_price_quotes(codes)
     quote_done = time.perf_counter()
     payload = build_monitor_snapshot(
         local,
         quotes,
         portfolio_value,
+        industry_result=industry_result,
         now=domain.cst_now(),
         stage_timings_ms={
             "preflight": round((preflight_done - started) * 1000),
