@@ -11,6 +11,20 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
+THIN_SKILLS = {"a-stock-research", "a-stock-monitor"}
+SKILL_MAX_BYTES = 12 * 1024
+_THRESHOLD_RE = re.compile(
+    r"(?:\b(?:ROE|PE|PB|PEG)\b\s*(?:>=|<=|>|<|≥|≤)|"
+    r"(?:止损|stop[- ]?loss)[^\n]{0,20}\d+(?:\.\d+)?\s*%|"
+    r"^\s*\|?\s*[A-F](?:级|框架)?\s*\|[^\n]*(?:>=|<=|>|<|≥|≤))",
+    re.I | re.M,
+)
+_REQUIRED_MARKERS = {
+    "routing": ("## 路由",),
+    "fail-closed": ("fail-closed",),
+    "stop condition": ("停止条件",),
+    "W1 boundary": ("W1", "--confirm-write"),
+}
 
 
 def _frontmatter(path: Path) -> dict[str, str]:
@@ -52,13 +66,21 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
             if not fields.get(required):
                 errors.append(f"{path}: missing {required}")
         text = path.read_text(encoding="utf-8")
-        if skill != "a-stock-qa" and "--confirm-write" not in text:
-            errors.append(f"{path}: missing W1 confirmation boundary")
-        if skill != "a-stock-qa" and "fail-closed" not in text:
-            errors.append(f"{path}: missing fail-closed boundary")
+        if skill in THIN_SKILLS:
+            if len(text.encode("utf-8")) > SKILL_MAX_BYTES:
+                errors.append(
+                    f"{path}: SKILL.md exceeds main-file budget; "
+                    "move conditional detail to references"
+                )
+            if _THRESHOLD_RE.search(text):
+                errors.append(f"{path}: deterministic threshold duplicated in main Skill")
+            for label, markers in _REQUIRED_MARKERS.items():
+                if not all(marker in text for marker in markers):
+                    errors.append(f"{path}: missing {label}")
         for reference in re.findall(r"(?:references|assets)/[A-Za-z0-9_./-]+", text):
-            if not (skill_root / reference).is_file():
-                errors.append(f"{path}: missing reference {reference}")
+            target = (skill_root / reference).resolve()
+            if not target.is_relative_to(skill_root.resolve()) or not target.is_file():
+                errors.append(f"{path}: missing or invalid reference {reference}")
     scan_roots = [root / "skills", root / "src" / "a_stock_agent_runtime"]
     if installed_root is not None:
         scan_roots.append(installed_root)
