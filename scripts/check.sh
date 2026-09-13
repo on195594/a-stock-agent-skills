@@ -15,10 +15,12 @@ if command -v uv >/dev/null 2>&1; then
     uv run pytest -q
     uv run ruff check .
     uv run python scripts/validate.py
+    uv run python scripts/check_regulatory_freshness.py
 elif [ -d ".venv/bin" ]; then
     .venv/bin/pytest -q
     .venv/bin/ruff check .
     .venv/bin/python scripts/validate.py
+    .venv/bin/python scripts/check_regulatory_freshness.py
 else
     echo "neither uv nor .venv found" >&2
     exit 1

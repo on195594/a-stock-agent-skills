@@ -7,11 +7,18 @@ facts remain ``incomplete`` rather than being inferred as safe.
 
 from __future__ import annotations
 
+import hashlib
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
 
 CST = timezone(timedelta(hours=8))
+
+
+def _source_hash(url: str) -> str:
+    """Hash the canonical official source identity without network access."""
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()
+
 
 REGULATORY_RULES: dict[tuple[str, str], dict[str, Any]] = {
     ("SSE", "main"): {
@@ -20,6 +27,9 @@ REGULATORY_RULES: dict[tuple[str, str], dict[str, Any]] = {
         "dividend_ratio": 0.30,
         "dividend_amount": 50_000_000,
         "official_url": "https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/mainipo/c/c_20260424_10816589.shtml",
+        "verified_at": "2026-09-13",
+        "review_after": "2026-12-13",
+        "source_hash": "b0730d419c004554e879eab5d1ea721fb95f0102ada6c046ee77900797a865c9",
     },
     ("SSE", "star"): {
         "effective_from": "2026-04-24",
@@ -27,6 +37,9 @@ REGULATORY_RULES: dict[tuple[str, str], dict[str, Any]] = {
         "dividend_ratio": 0.30,
         "dividend_amount": 30_000_000,
         "official_url": "https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/staripo/c/c_20260424_10816592.shtml",
+        "verified_at": "2026-09-13",
+        "review_after": "2026-12-13",
+        "source_hash": "48735fc5c74c6077b16949b096f918bf3b1144aaee00b04dfcdd9a06ad2a033f",
     },
     ("SZSE", "main"): {
         "effective_from": "2026-04-24",
@@ -34,6 +47,9 @@ REGULATORY_RULES: dict[tuple[str, str], dict[str, Any]] = {
         "dividend_ratio": 0.30,
         "dividend_amount": 50_000_000,
         "official_url": "https://docs.static.szse.cn/www/lawrules/rule/stock/W020260424747613955674.pdf",
+        "verified_at": "2026-09-13",
+        "review_after": "2026-12-13",
+        "source_hash": "6281c29de692d66ca7ea5a97d9b6c839ccb054269809a6abf5ba4c14d7b721c8",
     },
     ("SZSE", "chinext"): {
         "effective_from": "2026-04-24",
@@ -41,13 +57,19 @@ REGULATORY_RULES: dict[tuple[str, str], dict[str, Any]] = {
         "dividend_ratio": 0.30,
         "dividend_amount": 30_000_000,
         "official_url": "https://docs.static.szse.cn/www/lawrules/rule/stock/W020260424747613955674.pdf",
+        "verified_at": "2026-09-13",
+        "review_after": "2026-12-13",
+        "source_hash": "6281c29de692d66ca7ea5a97d9b6c839ccb054269809a6abf5ba4c14d7b721c8",
     },
     ("BSE", "beijing"): {
         "effective_from": "2026-04-24",
         "rule_version": "BSE stock listing rules 2026 revision",
         "dividend_ratio": None,
         "dividend_amount": None,
-        "official_url": "https://www.bse.cn/",
+        "official_url": "https://www.bse.cn/uploads/6/file/public/202604/20260424210610_3lvk6oirgc.pdf",
+        "verified_at": "2026-09-13",
+        "review_after": "2026-12-13",
+        "source_hash": "a1539c6205b91b712fbe138c9d6ab69013d51c742b49d5c33465e78450cfb17c",
     },
 }
 
@@ -56,6 +78,29 @@ P1_STATUSES = {"clear", "blocked", "incomplete"}
 P2_STATUSES = {"clear", "blocked", "incomplete", "review_required", "not_applicable"}
 P3_STATUSES = {"not_applicable", "clear", "deferred", "untradeable", "incomplete"}
 GATE_NAMES = ("regulatory_gate", "roe_structural_gate", "cash_flow_gate")
+def evaluate_rule_freshness(
+    rule: Mapping[str, Any], today: date
+) -> str:
+    """Return current, review_due, or invalid_metadata for one rule."""
+    required = ("effective_from", "verified_at", "review_after", "official_url", "source_hash")
+    if type(today) is not date or any(
+        not isinstance(rule.get(field), str) or not rule[field].strip()
+        for field in required
+    ):
+        return "invalid_metadata"
+    try:
+        effective_from = date.fromisoformat(rule["effective_from"])
+        verified_at = date.fromisoformat(rule["verified_at"])
+        review_after = date.fromisoformat(rule["review_after"])
+    except ValueError:
+        return "invalid_metadata"
+    if not effective_from <= verified_at <= review_after:
+        return "invalid_metadata"
+    if rule["source_hash"] != _source_hash(rule["official_url"]):
+        return "invalid_metadata"
+    return "review_due" if today > review_after else "current"
+
+
 OFFICIAL_SOURCE_MARKERS = (
     "official",
     "exchange",
@@ -457,7 +502,10 @@ def _dividend_gate(
 
 
 def regulatory_gate(
-    payload: Mapping[str, Any] | None = None, **kwargs: Any
+    payload: Mapping[str, Any] | None = None,
+    *,
+    today: date | None = None,
+    **kwargs: Any,
 ) -> dict[str, Any]:
     """Evaluate the P0 four-subgate regulatory contract."""
     facts: dict[str, Any] = dict(payload or {})
@@ -473,6 +521,11 @@ def regulatory_gate(
     facts["exchange"] = exchange
     facts["board"] = board
     rule = REGULATORY_RULES.get((exchange, board)) if exchange and board else None
+    rule_freshness = (
+        evaluate_rule_freshness(rule, today or datetime.now(CST).date())
+        if rule is not None
+        else "invalid_metadata"
+    )
     common = {"report_period": facts.get("report_period")}
     checks = {
         "listing_risk": _listing_gate(facts, common),
@@ -497,6 +550,7 @@ def regulatory_gate(
         or not as_of
         or not _official(sources)
         or rule is None
+        or rule_freshness != "current"
     ):
         status = "incomplete"
     return {
@@ -508,6 +562,10 @@ def regulatory_gate(
         "rule_version": rule.get("rule_version") if rule else None,
         "effective_from": rule.get("effective_from") if rule else None,
         "rule_url": rule.get("official_url") if rule else None,
+        "verified_at": rule.get("verified_at") if rule else None,
+        "review_after": rule.get("review_after") if rule else None,
+        "source_hash": rule.get("source_hash") if rule else None,
+        "rule_freshness": rule_freshness,
         "checks": checks,
         "sources": sources,
         "reason_code": "regulatory_clear"

@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 from a_stock_agent_runtime import risk_gates, store
+from scripts.check_regulatory_freshness import check as check_regulatory_freshness
 
 CST = timezone(timedelta(hours=8))
 
@@ -178,6 +179,56 @@ def test_regulatory_aggregate_prioritizes_blocked_over_incomplete():
     gate = risk_gates.regulatory_gate(_p0(listing_status="st", financial_opinion=""))
     assert gate["status"] == "blocked"
     assert gate["action_eligible"] is False
+
+
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [
+        (date(2026, 9, 13), "current"),
+        (date(2026, 12, 13), "current"),
+        (date(2026, 12, 14), "review_due"),
+    ],
+)
+def test_regulatory_rule_freshness_dates(today, expected):
+    rule = risk_gates.REGULATORY_RULES[("SSE", "main")]
+
+    assert risk_gates.evaluate_rule_freshness(rule, today) == expected
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"review_after": None},
+        {"review_after": "invalid"},
+        {"verified_at": "2027-01-01"},
+        {"source_hash": None},
+        {"source_hash": "0" * 64},
+    ],
+)
+def test_regulatory_rule_freshness_rejects_invalid_metadata(mutation):
+    rule = {**risk_gates.REGULATORY_RULES[("SSE", "main")], **mutation}
+
+    assert (
+        risk_gates.evaluate_rule_freshness(rule, date(2026, 9, 13))
+        == "invalid_metadata"
+    )
+
+
+def test_expired_regulatory_rule_cannot_clear_gate():
+    gate = risk_gates.regulatory_gate(_p0(), today=date(2026, 12, 14))
+
+    assert gate["status"] == "incomplete"
+    assert gate["action_eligible"] is False
+    assert gate["rule_freshness"] == "review_due"
+    assert gate["verified_at"] == "2026-09-13"
+    assert gate["source_hash"]
+
+
+def test_regulatory_freshness_ci_guard_fails_expired_rules():
+    errors = check_regulatory_freshness(date(2026, 12, 14))
+
+    assert len(errors) == len(risk_gates.REGULATORY_RULES)
+    assert all("review_due" in error for error in errors)
 
 
 def test_roe_negative_wins_even_when_two_negative_values_would_make_ratio_positive():
