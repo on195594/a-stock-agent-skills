@@ -1,8 +1,10 @@
 # Development and validation
 
 This repository contains the canonical Skill source and the shared runtime.
-Development work must remain fixture-first: do not point tests at a production
-database, production credentials or the active client directories.
+Development work happens directly on `master` in small verified commits. Do not
+create feature branches, open pull requests or force-push. It must remain
+fixture-first: do not point tests at a production database, production
+credentials or the active client directories.
 
 ## Setup
 

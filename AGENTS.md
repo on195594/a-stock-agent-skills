@@ -1,5 +1,6 @@
 # Repository working rules
 
+- Develop only on `master` with small, verified direct commits. Do not create feature branches, open pull requests, or force-push.
 - Keep the three Skill directories portable and client-neutral.
 - Runtime state, credentials, logs, locks, databases, and reports stay
   outside the repository.
