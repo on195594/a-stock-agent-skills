@@ -5,6 +5,7 @@
 - [`../README.md`](../README.md) — install, safety boundary and repository map.
 - [`development.md`](development.md) — local setup, tests and evidence rules.
 - [`operations.md`](operations.md) — external state, cron, notifications and rollback.
+- [`architecture/runtime-contracts.md`](architecture/runtime-contracts.md) — current contract versions, executable owners and Agent evidence.
 
 ## Governing records
 

@@ -2,7 +2,10 @@
 
 ## 0.1.13 — Unreleased
 
-- 开始 wire-compatible runtime contract、framework routing ownership 与 Agent E2E provenance 加固；投资阈值、W1 授权和生产状态不变。
+- 抽取并统一接入 monitor-v1 验证与确定性序列化；unavailable snapshot 补齐结构化 `industry_context`。
+- 将 A–F 行业路由、组合标签和止损系数移入显式 catalog，移除 domain 对 checklist import side effect 的依赖。
+- Live Agent fake-tool capture 绑定 source commit、脚本、独立 Skill hash、暴露工具和机器可验证的隔离元数据。
+- 新增 runtime contract 架构文档；投资阈值、W1 授权和生产状态不变。
 
 ## 0.1.12 — 2026-09-13
 

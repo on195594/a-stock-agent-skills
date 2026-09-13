@@ -17,11 +17,12 @@ version `0.1.13` and its frozen lock use the immutable `a-stock-lib==0.8.0`
 GitHub Release wheel with SHA-256
 `a811945b23d97eb121ff82d54bc0ba0810000a5379a9e9786fdcdc9220b30310`.
 Architecture convergence Phases 1-6 are complete: A-F scoring and cache-only
-industry lookup have one typed owner, runtime decisions use the versioned
-`decision_v1` JSON contract, the three Skills are thin routers, and the eight
-captured Hermes scenarios have deterministic offline behavior checks. One fixed
+industry lookup have one typed owner; runtime decisions and monitor snapshots
+use the versioned decision-v1 and monitor-v1 contracts; framework routing has
+one explicit catalog; and the three Skills remain thin routers. Eight captured
+Hermes scenarios have deterministic offline checks. One fixed
 `openai-codex/gpt-5.6-sol` session also executes three critical routes directly
-against isolated in-process fake tools.
+against isolated in-process fake tools with source and isolation provenance.
 All nine client Skill entries resolve directly to `skills/`.
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
