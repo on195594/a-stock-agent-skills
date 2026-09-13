@@ -2284,17 +2284,15 @@ def test_infer_framework_changjiang_dianli_real_holding_maps_to_d():
 )
 def test_get_stop_loss_pct_all_six_frameworks(framework, expected):
     """穷举全部6个框架（4个有专属止损系数+2个走默认值），逐一核对
-    get_stop_loss_pct()改读registry前后输出完全一致。"""
+    get_stop_loss_pct()改读显式routing catalog前后输出完全一致。"""
     assert cache.get_stop_loss_pct(framework) == expected
 
 
 def test_infer_framework_works_in_subprocess_without_checklist_preimported():
     """生产CLI入口（add-holding/portfolio-risk）调cache.infer_framework()时，
     那个进程里checklist.py从未被import过（cmd_checklist()那次懒加载没有被触发）。
-    必须用子进程隔离验证infer_framework()自己能保证registry已加载，不能依赖
-    "测试套件里某个其他文件先import了checklist"这种巧合——pytest同一进程内
-    test_checklist.py被收集过，sys.modules缓存会让这里看到的registry已经是
-    填好的，掩盖了生产环境下registry为空的真实回归。"""
+    必须用子进程隔离验证infer_framework()不依赖checklist导入副作用，不能依赖
+    测试套件里某个其他文件先import了checklist。"""
     script = (
         "from a_stock_agent_runtime import domain; "
         "fw, confident = domain.infer_framework('煤炭开采'); "

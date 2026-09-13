@@ -1,4 +1,4 @@
-"""framework_metadata.py 单元测试：纯数据结构，不依赖 checklist.py/cache.py。"""
+"""framework_metadata.py 单元测试：纯 checklist 数据结构。"""
 
 import sys
 from pathlib import Path
@@ -42,9 +42,6 @@ def test_framework_metadata_required_fields_and_defaults():
     )
     assert metadata.key == "A"
     assert metadata.custom_builder is None
-    assert metadata.portfolio_label is None
-    assert metadata.industry_keywords == ()
-    assert metadata.stop_loss_pct is None
 
 
 def test_framework_metadata_is_frozen():

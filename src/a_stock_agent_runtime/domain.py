@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, time as dtime, timedelta, timezone
 
-from a_stock_agent_runtime import framework_metadata, risk_gates
+from a_stock_agent_runtime import framework_catalog, risk_gates
 from a_stock_agent_runtime.market_quotes import PriceQuote
 
 _CST = timezone(timedelta(hours=8))
@@ -101,28 +101,22 @@ def get_industry_ttl(industry: str) -> int:
 
 
 def infer_framework(industry: str | None) -> tuple[str, bool]:
-    from a_stock_agent_runtime import checklist  # noqa: F401
-
     if (
         not industry
         or "未知" in industry
         or is_unsupported_financial_industry(industry)
     ):
         return "A通用", False
-    for metadata in framework_metadata.FRAMEWORK_REGISTRY.values():
-        if metadata.portfolio_label and any(
-            keyword in industry for keyword in metadata.industry_keywords
-        ):
-            return metadata.portfolio_label, True
+    for routing in framework_catalog.FRAMEWORK_ROUTING.values():
+        if any(keyword in industry for keyword in routing.industry_keywords):
+            return routing.portfolio_label, True
     return "A通用", True
 
 
 def get_stop_loss_pct(framework: str) -> tuple[float, float]:
-    from a_stock_agent_runtime import checklist  # noqa: F401
-
-    for metadata in framework_metadata.FRAMEWORK_REGISTRY.values():
-        if metadata.portfolio_label == framework and metadata.stop_loss_pct is not None:
-            return metadata.stop_loss_pct
+    for routing in framework_catalog.FRAMEWORK_ROUTING.values():
+        if routing.portfolio_label == framework and routing.stop_loss_pct is not None:
+            return routing.stop_loss_pct
     return DEFAULT_STOP_LOSS_PCT
 
 

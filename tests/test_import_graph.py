@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 from contextlib import contextmanager
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -12,6 +14,7 @@ MODULES = (
     "fetcher",
     "checklist",
     "framework_metadata",
+    "framework_catalog",
     "market_quotes",
     "position_ledger",
     "schema_ledger",
@@ -49,6 +52,25 @@ def test_command_modules_do_not_import_cache() -> None:
     root = Path(__file__).resolve().parents[1] / "src/a_stock_agent_runtime"
     for path in root.glob("commands_*.py"):
         assert "import cache" not in path.read_text(encoding="utf-8")
+
+
+def test_domain_routing_is_independent_of_checklist_import_order() -> None:
+    root = Path(__file__).resolve().parents[1]
+    domain_source = root / "src/a_stock_agent_runtime/domain.py"
+    assert "import checklist" not in domain_source.read_text(encoding="utf-8")
+    script = (
+        "import sys; from a_stock_agent_runtime import domain; "
+        "assert 'a_stock_agent_runtime.checklist' not in sys.modules; "
+        "assert domain.infer_framework('煤炭开采') == ('C资源', True); "
+        "assert domain.get_stop_loss_pct('F科技') == (0.80, 0.72)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_commands_monitor_observes_holdings_owner_patches(monkeypatch) -> None:

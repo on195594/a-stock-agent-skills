@@ -6,7 +6,7 @@ import pytest
 from tests.helpers import set_valid_fundamentals
 from a_stock_agent_runtime import checklist
 import dataclasses
-from a_stock_agent_runtime import framework_metadata
+from a_stock_agent_runtime import framework_catalog, framework_metadata
 
 
 @pytest.fixture(autouse=True)
@@ -804,55 +804,32 @@ def test_framework_metadata_module_has_no_circular_import():
     assert result.returncode == 0, result.stderr
 
 
-def test_framework_registry_portfolio_fields_match_legacy_data():
-    """6个框架的portfolio_label/industry_keywords/stop_loss_pct字段值，必须跟
-    cache.py里原本手写的FRAMEWORK_KEYWORDS/STOP_LOSS_PCT_MAP逐字一致——这3个值
-    是从那两个旧字典直接抄过来的，不是重新设计的。"""
-    registry = framework_metadata.FRAMEWORK_REGISTRY
+def test_framework_routing_catalog_matches_legacy_data():
+    routing = framework_catalog.FRAMEWORK_ROUTING
 
-    assert registry["A"].portfolio_label == "A通用"
-    assert registry["A"].industry_keywords == ()
-    assert registry["A"].stop_loss_pct is None
-
-    assert registry["B"].portfolio_label == "B银行"
-    assert registry["B"].industry_keywords == ("银行",)
-    assert registry["B"].stop_loss_pct == (0.88, 0.82)
-
-    assert registry["C"].portfolio_label == "C资源"
-    assert registry["C"].industry_keywords == (
-        "煤炭",
-        "石油",
-        "天然气",
-        "有色金属",
-        "铜",
-        "钢铁",
-        "采矿",
+    assert set(routing) == {"A", "B", "C", "D", "E", "F"}
+    assert routing["A"] == framework_catalog.FrameworkRouting("A", "A通用", (), None)
+    assert routing["B"] == framework_catalog.FrameworkRouting(
+        "B", "B银行", ("银行",), (0.88, 0.82)
     )
-    assert registry["C"].stop_loss_pct == (0.82, 0.75)
-
-    assert registry["D"].portfolio_label == "D公用"
-    assert registry["D"].industry_keywords == (
-        "水电",
-        "水力发电",
-        "电网",
-        "水务",
-        "燃气",
-        "高速",
-        "公用事业",
+    assert routing["C"] == framework_catalog.FrameworkRouting(
+        "C",
+        "C资源",
+        ("煤炭", "石油", "天然气", "有色金属", "铜", "钢铁", "采矿"),
+        (0.82, 0.75),
     )
-    assert registry["D"].stop_loss_pct == (0.88, 0.82)
-
-    assert registry["E"].portfolio_label == "E消费"
-    assert registry["E"].industry_keywords == ("白酒", "消费", "食品", "零售", "饮料")
-    assert registry["E"].stop_loss_pct is None
-
-    assert registry["F"].portfolio_label == "F科技"
-    assert registry["F"].industry_keywords == (
-        "互联网",
-        "软件",
-        "科技",
-        "半导体",
-        "游戏",
-        "通信",
+    assert routing["D"] == framework_catalog.FrameworkRouting(
+        "D",
+        "D公用",
+        ("水电", "水力发电", "电网", "水务", "燃气", "高速", "公用事业"),
+        (0.88, 0.82),
     )
-    assert registry["F"].stop_loss_pct == (0.80, 0.72)
+    assert routing["E"] == framework_catalog.FrameworkRouting(
+        "E", "E消费", ("白酒", "消费", "食品", "零售", "饮料"), None
+    )
+    assert routing["F"] == framework_catalog.FrameworkRouting(
+        "F",
+        "F科技",
+        ("互联网", "软件", "科技", "半导体", "游戏", "通信"),
+        (0.80, 0.72),
+    )

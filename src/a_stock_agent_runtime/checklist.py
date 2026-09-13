@@ -149,7 +149,6 @@ _FRAMEWORK_A = _register(
                 trend_unverified=True,
             ),
         ],
-        portfolio_label="A通用",
     )
 )
 
@@ -181,9 +180,6 @@ _FRAMEWORK_B = _register(
         checklist_definitions=[
             ChecklistDefinition("roe_3y_avg", "ROE加权年化", "%"),
         ],
-        portfolio_label="B银行",
-        industry_keywords=("银行",),
-        stop_loss_pct=(0.88, 0.82),
     )
 )
 
@@ -210,9 +206,6 @@ _FRAMEWORK_C = _register(
             ChecklistDefinition("debt_ratio", "资产负债率", "%"),
         ],
         custom_builder=_build_c_payout_ratio_item,
-        portfolio_label="C资源",
-        industry_keywords=("煤炭", "石油", "天然气", "有色金属", "铜", "钢铁", "采矿"),
-        stop_loss_pct=(0.82, 0.75),
     )
 )
 
@@ -241,17 +234,6 @@ _FRAMEWORK_D = _register(
         checklist_definitions=[
             ChecklistDefinition("debt_ratio", "资产负债率", "%"),
         ],
-        portfolio_label="D公用",
-        industry_keywords=(
-            "水电",
-            "水力发电",
-            "电网",
-            "水务",
-            "燃气",
-            "高速",
-            "公用事业",
-        ),
-        stop_loss_pct=(0.88, 0.82),
     )
 )
 
@@ -272,8 +254,6 @@ _FRAMEWORK_E = _register(
             ChecklistDefinition("net_profit_growth", "净利润增速", "%"),
             ChecklistDefinition("gross_margin", "毛利率", "%"),
         ],
-        portfolio_label="E消费",
-        industry_keywords=("白酒", "消费", "食品", "零售", "饮料"),
     )
 )
 
@@ -300,9 +280,6 @@ _FRAMEWORK_F = _register(
             ),
         ],
         custom_builder=_build_f_operating_cf_quality_item,
-        portfolio_label="F科技",
-        industry_keywords=("互联网", "软件", "科技", "半导体", "游戏", "通信"),
-        stop_loss_pct=(0.80, 0.72),
     )
 )
 
