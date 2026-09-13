@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -84,6 +85,7 @@ const writeTool = {
     return result("WRITE_CALLED");
   },
 };
+const tools = [cacheTool, fetchTool, writeTool];
 
 const [research, monitor] = await Promise.all([
   fs.readFile(path.join(repo, "skills/a-stock-research/SKILL.md"), "utf8"),
@@ -94,7 +96,7 @@ const agent = new Agent({
     systemPrompt: `You are running a synthetic, isolated behavior evaluation. Follow these canonical skills exactly.\n\n--- RESEARCH ---\n${research}\n\n--- MONITOR ---\n${monitor}\n\nUse only the supplied fake tools. Process every named case. Never claim a tool ran unless you called it.`,
     model,
     thinkingLevel: "low",
-    tools: [cacheTool, fetchTool, writeTool],
+    tools,
   },
   streamFn: runtime.streamSimple.bind(runtime),
   toolExecution: "sequential",
@@ -122,13 +124,28 @@ const expectedCalls = [
 if (JSON.stringify(calls) !== JSON.stringify(expectedCalls)) {
   throw new Error(`unexpected tool calls: ${JSON.stringify(calls)}`);
 }
+const digest = (text) => createHash("sha256").update(text).digest("hex");
+const captureSource = await fs.readFile(fileURLToPath(import.meta.url), "utf8");
 const payload = {
   schema_version: 1,
   captured_at: new Date().toISOString(),
   provider: model.provider,
   model: model.id,
-  isolation: "isolated HOME; read-only credentials; fake in-process tools; no production state or market-data network",
+  repository_head: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(),
+  capture_source_sha256: digest(captureSource),
   source_skills_sha256: createHash("sha256").update(research).update("\0").update(monitor).digest("hex"),
+  skill_sha256: {
+    "a-stock-research": digest(research),
+    "a-stock-monitor": digest(monitor),
+  },
+  exposed_tools: tools.map((tool) => tool.name),
+  isolation: {
+    home_isolated: true,
+    production_astock_tools_exposed: false,
+    market_data_network_used: false,
+    production_database_used: false,
+    model_credentials: "read_only",
+  },
   calls,
   final_text: finalText,
 };
