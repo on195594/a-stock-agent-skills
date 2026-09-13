@@ -15,6 +15,7 @@ from a_stock_agent_runtime import (
     commands_monitor,
     db,
     domain,
+    monitor_contract,
     schema,
 )
 
@@ -512,7 +513,7 @@ def test_status_validator_rejects_cross_dimension_enums() -> None:
     for field, invalid in dimensions.items():
         candidate = {**payload, field: invalid}
         with pytest.raises(ValueError, match=field):
-            commands_monitor.validate_monitor_snapshot(candidate)
+            monitor_contract.validate_monitor_snapshot(candidate)
 
 
 def test_frozen_five_holding_replay_freezes_new_risk_without_trade_candidate(

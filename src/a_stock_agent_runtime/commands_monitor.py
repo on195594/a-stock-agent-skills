@@ -19,7 +19,13 @@ from a_stock_lib.market_data import (
     MarketDataResult,
 )
 
-from a_stock_agent_runtime import commands_holdings, db, domain, risk_gates
+from a_stock_agent_runtime import (
+    commands_holdings,
+    db,
+    domain,
+    monitor_contract,
+    risk_gates,
+)
 
 _SCOPES = {"aggregate", "core_driver", "non_core", "governance"}
 _ACTIONS = {"review", "reduce", "exit"}
@@ -30,10 +36,6 @@ def _fail(message: str) -> None:
     raise SystemExit(1)
 
 
-_DATA_STATUSES = {"complete", "partial", "stale", "unavailable", "conflicted"}
-_VALUATION_STATUSES = {"exact", "priced_positions_lower_bound", "unavailable"}
-_REVIEW_STATUSES = {"cleared", "review_required", "blocked"}
-_ACTION_STATUSES = {"no_action", "review_candidate", "trade_candidate"}
 _ESCALATION_REASON_ORDER = (
     "price_stop_1",
     "price_stop_2",
@@ -48,7 +50,6 @@ _ESCALATION_REASON_ORDER = (
     "denominator_missing",
     "data_conflict",
 )
-_ESCALATION_REASONS = set(_ESCALATION_REASON_ORDER)
 _REASON_ORDER = {reason: index for index, reason in enumerate(_ESCALATION_REASON_ORDER)}
 
 
@@ -745,8 +746,8 @@ def build_monitor_snapshot(
                 "reference_cost": holding["reference_cost"],
                 "framework": holding["framework"],
                 "framework_confident": holding["framework_confident"],
-                "stop_loss_15": holding["stop_loss_15"],
-                "stop_loss_20": holding["stop_loss_20"],
+                "stop_loss_15": _number(holding["stop_loss_15"]),
+                "stop_loss_20": _number(holding["stop_loss_20"]),
                 "quote": quote_output,
                 **risk,
                 "risk_gates": gates,
@@ -887,7 +888,7 @@ def build_monitor_snapshot(
             "stop_reason": "clean_fast_gate" if clean else None,
         },
     }
-    validate_monitor_snapshot(payload)
+    monitor_contract.validate_monitor_snapshot(payload)
     return payload
 
 
@@ -912,6 +913,13 @@ def unavailable_monitor_snapshot(portfolio_value: float | None) -> dict[str, Any
             "risk_budget_status": None,
         },
         "quote_coverage": {"priced": 0, "active": 0, "complete": False},
+        "industry_context": {
+            "status": "not_applicable",
+            "error_code": None,
+            "freshness_days": None,
+            "source": None,
+            "fetched_at": None,
+        },
         "holdings": [],
         "escalations": [],
         "data_gaps": [
@@ -940,40 +948,8 @@ def unavailable_monitor_snapshot(portfolio_value: float | None) -> dict[str, Any
             "stop_reason": None,
         },
     }
-    validate_monitor_snapshot(payload)
+    monitor_contract.validate_monitor_snapshot(payload)
     return payload
-
-
-def validate_monitor_snapshot(payload: dict[str, Any]) -> None:
-    dimensions = {
-        "data_status": _DATA_STATUSES,
-        "valuation_status": _VALUATION_STATUSES,
-        "review_status": _REVIEW_STATUSES,
-        "action_status": _ACTION_STATUSES,
-    }
-    for field, allowed in dimensions.items():
-        if payload.get(field) not in allowed:
-            raise ValueError(f"invalid {field}")
-    if any(
-        item.get("reason_code") not in _ESCALATION_REASONS
-        for item in payload["escalations"]
-    ):
-        raise ValueError("invalid escalation reason_code")
-    if payload["stop_reason"] not in {None, "clean_fast_gate"}:
-        raise ValueError("invalid stop_reason")
-    if (
-        payload["action_status"] == "trade_candidate"
-        and not payload["requires_user_confirmation"]
-    ):
-        raise ValueError("trade candidate requires user confirmation")
-    if payload["stop_reason"] == "clean_fast_gate" and (
-        payload["data_status"] != "complete"
-        or payload["valuation_status"] != "exact"
-        or payload["review_status"] != "cleared"
-        or payload["action_status"] != "no_action"
-        or payload["escalations"]
-    ):
-        raise ValueError("invalid clean_fast_gate")
 
 
 def _parse_monitor_snapshot_args(args: list[str]) -> float | None:
@@ -998,12 +974,8 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
         local = _load_monitor_local_snapshot()
     except (OSError, sqlite3.Error):
         print(
-            json.dumps(
-                unavailable_monitor_snapshot(portfolio_value),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-                allow_nan=False,
+            monitor_contract.dumps_monitor_snapshot(
+                unavailable_monitor_snapshot(portfolio_value)
             )
         )
         raise SystemExit(1) from None
@@ -1023,15 +995,7 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
             "quote_batch": round((quote_done - local_done) * 1000),
         },
     )
-    print(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-    )
+    print(monitor_contract.dumps_monitor_snapshot(payload))
     if payload["data_status"] != "complete":
         raise SystemExit(1)
 
