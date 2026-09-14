@@ -6,6 +6,8 @@
 - [`development.md`](development.md) — local setup, tests and evidence rules.
 - [`operations.md`](operations.md) — external state, cron, notifications and rollback.
 - [`architecture/runtime-contracts.md`](architecture/runtime-contracts.md) — current contract versions, executable owners and Agent evidence.
+- [`agent-behavior-eval.md`](agent-behavior-eval.md) — deterministic behavior evaluation and offline scoring for Research, Monitor, and QA skills.
+- [`CHANGELOG.md`](CHANGELOG.md) — version change log and release history.
 
 ## Governing records
 
@@ -23,6 +25,7 @@
 - [`specs/2026-09-01-a-stock-skill-contract-reconciliation-and-slimming-spec.md`](specs/2026-09-01-a-stock-skill-contract-reconciliation-and-slimming-spec.md) — deployed PE/PS contract reconciliation and progressive disclosure.
 - [`specs/2026-09-02-a-stock-research-incomplete-qa-valuation-compatibility-spec.md`](specs/2026-09-02-a-stock-research-incomplete-qa-valuation-compatibility-spec.md) — deployed latest-report PB/BPS valuation compatibility and Research/QA fail-closed alignment.
 - [`specs/2026-09-07-investment-framework-and-risk-control-enhancement-spec.md`](specs/2026-09-07-investment-framework-and-risk-control-enhancement-spec.md) — implemented deterministic P0–P3 investment risk gates (regulatory ST/audit, structural ROE deterioration, true FCF/Capex redline, and liquidity shock delay).
+- [`specs/2026-09-08-a-stock-monitoring-efficiency-and-safety-governance.md`](specs/2026-09-08-a-stock-monitoring-efficiency-and-safety-governance.md) — governance specification for daily monitoring efficiency, fast-path gate, and Level 1/Level 2 execution boundaries.
 - [`specs/2026-09-09-research-decision-availability-and-qa-integrity-repair-spec.md`](specs/2026-09-09-research-decision-availability-and-qa-integrity-repair-spec.md) — authorized Research data availability, framework routing, valuation compatibility, compact reporting and QA snapshot-integrity repairs.
 - [`specs/2026-09-13-regulatory-freshness-lifecycle-spec.md`](specs/2026-09-13-regulatory-freshness-lifecycle-spec.md) — authorized fail-closed review lifecycle for deterministic regulatory metadata.
 - [`specs/2026-09-13-a-stock-runtime-contract-vnext.md`](specs/2026-09-13-a-stock-runtime-contract-vnext.md) — completed monitor-v1, framework routing, release drift and Agent provenance implementation ledger and retrospective.
@@ -30,8 +33,10 @@
 - [`plans/2026-08-10-p2-structural-refactor-plan.md`](plans/2026-08-10-p2-structural-refactor-plan.md) — completed P2 structural refactor and evidence relocation.
 - [`plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md`](plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md) — completed implementation, review and production cutover ledger.
 - [`plans/2026-09-07-investment-framework-and-risk-control-enhancement-plan.md`](plans/2026-09-07-investment-framework-and-risk-control-enhancement-plan.md) — completed implementation, independent review and test verification ledger for P0–P3 risk control enhancement.
+- [`plans/a-stock-codex-execution-plan.md`](plans/a-stock-codex-execution-plan.md) — completed architecture convergence execution plan across a-stock-agent-skills and a-stock-lib (Phases 1–6).
 - [`migration/README.md`](migration/README.md) — provenance and redacted execution evidence.
 - [`reviews/README.md`](reviews/README.md) — tombstone and recovery instructions for the external evidence archive.
+- [`reviews/a-stock-codex-plan-agy-review.md`](reviews/a-stock-codex-plan-agy-review.md) — AGY independent review approving the architecture convergence plan.
 
 ## Evidence policy
 

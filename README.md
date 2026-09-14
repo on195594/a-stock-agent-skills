@@ -121,10 +121,11 @@ skills/                    canonical Agent Skills and references
 src/a_stock_agent_runtime/ shared runtime and CLI implementations
 tests/                     unit, contract and fixture tests
 scripts/                   installer, migration, validation and cron helpers
-docs/specs/                governing specification
-docs/plans/                implementation plan and milestone ledger
+docs/architecture/         runtime contract and ownership architecture
+docs/specs/                governing specifications
+docs/plans/                implementation plans and milestone ledgers
 docs/migration/            provenance and redacted execution evidence
 ```
 
-The governing specification is
-[`docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md`](docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md).
+The foundational specification is
+[`docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md`](docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md); current runtime contracts and ownership follow [`docs/architecture/runtime-contracts.md`](docs/architecture/runtime-contracts.md) and [`docs/specs/2026-09-13-a-stock-runtime-contract-vnext.md`](docs/specs/2026-09-13-a-stock-runtime-contract-vnext.md).
