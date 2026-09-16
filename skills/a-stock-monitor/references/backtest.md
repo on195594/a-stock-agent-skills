@@ -1,6 +1,6 @@
 ## 阈值历史回放
 
-`tools/policy_replay.py` 用 point-in-time 日度快照比较当前 Tier/止损/估值退出与买入持有。
+`scripts/policy_replay.py` 用 point-in-time 日度快照比较当前 Tier/止损/估值退出与买入持有。
 它只提供可复现的验证框架，不声明默认阈值有效。
 
 输入 CSV：
@@ -20,8 +20,8 @@ date,close,valuation_percentile,dividend_per_share
 运行：
 
 ```bash
-python3 tools/policy_replay.py <快照.csv> --fee-bps 10
-python3 tools/policy_replay.py <快照.csv> --fee-bps 10 --grid
+python3 scripts/policy_replay.py <快照.csv> --fee-bps 10
+python3 scripts/policy_replay.py <快照.csv> --fee-bps 10 --grid
 ```
 
 每个框架至少覆盖一个完整牛熊/景气周期，并报告总回报、CAGR、最大回撤、换手率和

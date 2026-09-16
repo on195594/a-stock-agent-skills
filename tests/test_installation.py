@@ -23,13 +23,20 @@ UV_CACHE_DIR = os.environ.get("UV_CACHE_DIR") or str(
 
 # Explicit checkout/wheel inputs are release-candidate test paths. Normal installs
 # resolve the immutable release dependency declared by this project's metadata.
-LIB_ROOT = Path(os.environ.get("A_STOCK_LIB_SOURCE") or Path.home() / "a-stock-lib")
-LIB_WHEEL = LIB_ROOT / "dist" / "a_stock_lib-0.8.0-py3-none-any.whl"
+LIB_SOURCE_OVERRIDE = os.environ.get("A_STOCK_LIB_SOURCE")
+LIB_ROOT = Path(LIB_SOURCE_OVERRIDE) if LIB_SOURCE_OVERRIDE else None
+LIB_WHEEL = (
+    LIB_ROOT / "dist" / "a_stock_lib-0.8.0-py3-none-any.whl"
+    if LIB_ROOT is not None
+    else None
+)
 
-_MISSING = f"a-stock-lib not provisioned at {LIB_ROOT}; set A_STOCK_LIB_SOURCE"
-requires_lib_wheel = pytest.mark.skipif(not LIB_WHEEL.is_file(), reason=_MISSING)
+_MISSING = "a-stock-lib not provisioned; set A_STOCK_LIB_SOURCE"
+requires_lib_wheel = pytest.mark.skipif(
+    LIB_WHEEL is None or not LIB_WHEEL.is_file(), reason=_MISSING
+)
 requires_lib_checkout = pytest.mark.skipif(
-    not (LIB_ROOT / "pyproject.toml").is_file(), reason=_MISSING
+    LIB_ROOT is None or not (LIB_ROOT / "pyproject.toml").is_file(), reason=_MISSING
 )
 
 

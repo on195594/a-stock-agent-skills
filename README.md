@@ -104,7 +104,9 @@ uv sync --frozen
 uv run pytest -q
 uv run ruff check .
 uv run python scripts/validate.py
+uv run python scripts/check_regulatory_freshness.py
 python3 -I tests/qa/standalone_smoke.py
+A_STOCK_NOTIFY_MODE=disabled bash tests/test_check_holdings_cron.sh
 ```
 
 Before committing, also run `git diff --check` and review the final diff.

@@ -21,8 +21,8 @@ checks.
 
 An owner source checkout is only needed for release-candidate override checks or
 the external prompt renderer. It must be passed explicitly; the project never
-guesses a sibling home-directory path. Those tests locate it at `~/a-stock-lib`
-or `A_STOCK_LIB_SOURCE`, and skip when it is not provisioned.
+guesses a sibling home-directory path. Those tests locate it via
+`A_STOCK_LIB_SOURCE`, and skip when it is not provisioned.
 
 ## Validation matrix
 
