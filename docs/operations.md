@@ -69,6 +69,49 @@ pair can return clean despite a budget breach; rollback therefore requires
 manual budget review or suspension of risk suggestions, not a claim of safety.
 No S1 database migration, cron change or account-data cleanup is required.
 
+## S3b file-only account performance candidate (not deployed)
+
+```bash
+a-stock-cache performance-report --input /private/external/account.json --json
+a-stock-cache performance-report --input /private/external/account.json \
+  --benchmark /private/external/benchmark.json
+```
+
+The input schemas and synthetic example are fixed by [spec §8.3–8.5](specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md).
+Keep real source files in a protected directory outside Git; do not mix accounts.
+The command reads files and emits stdout (text by default, JSON with `--json`);
+it neither reconstructs account equity from holdings nor saves/imports facts.
+Without `--check-ledger`, dispatch does not resolve a database path or enter a
+DB handler. No network, notification, database creation, migration or output-file
+write is performed. Source files are not corrected or modified.
+
+Amounts are Decimal strings. Returns remove only permitted external flows;
+broker equity already includes investment income, fees and corporate actions.
+Unknown/intraday flow timing breaks the chain. `end_assumed` requires the explicit
+`--allow-eod-flow-assumption` flag and remains estimated, even when source
+reconciliation is also provisional. Withdrawal-to-zero is not total loss;
+a positive balance after zero establishes a new baseline. Missing dates/intervals
+are never bridged into a full-period return or drawdown. No calendar means
+observed-only drawdown, not complete daily-close or intraday coverage.
+
+Optional benchmark NAV supports more than two decimal places. Invalid JSON,
+null/schema/currency/date/effectivity gaps preserve the absolute report but
+suppress comparison. Price-return references are explicitly distinguished from
+total-return references; neither implies an executable alternative was evaluated.
+`null_reasons` explains unavailable segment metrics; unrequested benchmark is not
+an error. Baseline-only input has no measurable return interval (exit 4).
+
+`--check-ledger` is a deliberately limited read-only diagnostic: missing database,
+missing history/schema or inferred records are disclosed. Without verifiable
+account mapping, row counts are **not** account reconciliation; the report stays
+limited/provisional and does not invent cash flows or write back to holdings.
+
+Exit codes: 0 usable requested calculation; 2 invalid account/schema/arguments;
+4 a parsed business report with gaps (including requested unusable benchmark or
+ledger evidence); 1 unexpected runtime/I/O failure. `exact` is conditional on the
+file's source declarations and flow model, not independent broker authentication,
+GIPS compliance, causal AI attribution or trading permission.
+
 ## S3a read-only risk policy candidate (not deployed)
 
 Both risk commands additionally accept `--policy-file`, `--account-scope` and

@@ -114,6 +114,18 @@ CLI_ARGUMENT_CASES = {
         ["600000", "A", "{}"],
         ["600000", "A", '{"gross_margin_stable":true}'],
     ),
+    "performance-report": (
+        ["--input", "account.json"],
+        [
+            "--input",
+            "account.json",
+            "--benchmark",
+            "benchmark.json",
+            "--check-ledger",
+            "--allow-eod-flow-assumption",
+            "--json",
+        ],
+    ),
 }
 
 

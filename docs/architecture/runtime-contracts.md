@@ -82,6 +82,26 @@ Current-budget deterministic routing tests are separate from immutable model
 captures. Actual enabled clients still need an isolated fake-tool budget case
 before activation. No production legacy-permissive parsing switch exists.
 
+## S3 application-layer additions (not deployed)
+
+`risk_policy.py` now resolves the shared effective parameters before either risk
+handler runs. A selected invalid policy fails closed even with numeric overrides;
+file identity, confirmation, scope, timezone and field sources are explicit. No
+policy is written or adopted by the model. Denominator as-of/scope gaps remain
+visible and do not grant new-risk authorization. Existing monitor-v1 safety and
+coordinated-release boundaries above remain in force.
+
+`performance.py` produces an **internal application result**, not a new wire
+contract: `schema_version=1`, `report_type=account_performance`, input provenance,
+coverage/gaps and independent segments. Null metrics have `null_reasons`;
+provisional source status cannot hide estimated cash-flow math. Benchmark returns
+are per-segment references, not execution or causal AI attribution. File-only
+R0 dispatch precedes database-path handling; optional ledger reads never imply
+account mapping/reconciliation was completed. Nothing writes to decision-v1,
+monitor-v1 or account facts. See [operations](../operations.md) for input/exit
+semantics and [the S2/S3 ledger](../plans/2026-09-17-s2-s3-implementation.md) for
+fixture evidence and unfinished reconciliation/evaluation boundaries.
+
 ## Independent version dimensions
 
 - **Package version** identifies installed code: `a-stock-lib==0.8.0` and the

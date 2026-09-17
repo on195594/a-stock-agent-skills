@@ -29,6 +29,9 @@ review, unknown risk fails closed, and local monitor reads share one transaction
 Its monitor-v1 vocabulary extension requires a coordinated runtime/Skill release;
 it is **not deployed or qualified for live clients**. Historical model captures
 remain historical evidence. See the [S1 implementation ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
+S3 adds a read-only risk-policy resolver and file-only account-performance reporting;
+these are synthetic-fixture candidates, **not deployed**. S2 Tracker evaluation remains
+an unaccepted isolated draft. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
@@ -65,6 +68,7 @@ The installer exposes these stable commands through `PATH`:
 ```text
 a-stock-cache    shared cache, holdings and portfolio-risk CLI
 a-stock-cache score-fundamentals  read-only deterministic A—F fundamental scorer
+a-stock-cache performance-report  file-only account performance, optional read-only ledger check
 a-stock-fetch    structured market-data fetch CLI
 a-stock-install  installer entrypoint
 ```

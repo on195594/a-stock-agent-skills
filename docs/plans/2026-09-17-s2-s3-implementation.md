@@ -30,6 +30,16 @@ scoring hash/date verified, or claiming `2026-09-17.e2` acceptance before the
 full snapshot/selection/weight/path rules are validated. No new universe,
 scoring weights, 44-point threshold, historical rows, schema or cron may change.
 
+S2 draft status after two implementation/review iterations: **NOT_ACCEPTED /
+NOT_COMMITTED** in `/tmp/a-stock-tracker-s2-20260917`. Parent validation with
+Python 3.13.5 and the declared lib 0.8.0 wheel passed **277 tests** and Ruff,
+but mypy reports three errors. Review also found remaining enrollment-vs-as-of,
+mutable qualitative-cache/hybrid-source validation, malformed numeric/source and
+derived-finiteness issues. These are implementation gaps, not merely a manifest
+path decision. `2026-09-17.s2-incomplete` is not e2 acceptance; no T01–T20 or
+production claim is made. Detailed handoff remains external at
+`/tmp/a-stock-s2-final-parent-review.md`. Tracker and Lib master are unchanged.
+
 ## S3a — POLICY-01
 
 Status: **IMPLEMENTED_WITH_FIXTURES_ONLY / NOT_DEPLOYED**.
@@ -77,14 +87,59 @@ exit 0, with all additional gates above passing. Full log remains external at
 `/tmp/a-stock-s3a-check.log`; `git diff --check` passed. No production state,
 real personal policy or active Skill entry was modified.
 
-## S3b / next acceptance
+## S3b — file-only performance MVP
 
-Account-performance work is separate from policy parsing; it must not depend on
-policy configuration or use real holdings to reconstruct equity. Its acceptance
-must cover P01–P12/P14–P21, public file-only dispatch, no-database behavior,
-Decimal/flow/zero/restart/gap semantics, optional benchmark, and honestly limited
-ledger reconciliation. Generated artifacts and raw accounts remain outside Git.
-No S3b acceptance is inferred from S3a test counts.
+Status: **IMPLEMENTED_WITH_SYNTHETIC_FIXTURES / NOT_DEPLOYED**. This is not full
+broker reconciliation or live-client acceptance.
+
+One `performance.py` owns strict parsing, Decimal calculation and rendering.
+The command is registered throughout the existing CLI with a local file-only
+bypass before DB-path selection/logging. File-only mode never opens a DB; both
+modes avoid network, bootstrap, notifications and output-file writes. Only an
+explicit ledger-check flag permits reading the existing database. Defaults
+produce text; JSON is a single stable object. Argument/schema errors are exit 2,
+business gaps 4, runtime/I/O failures 1. No new service/dependency/schema is added.
+
+`tests/test_performance.py` and CLI tests exercise:
+
+- P01/P02/P14/P15: gross flows, Decimal return math, no net-zero timing bypass;
+  assumptions require a flag and remain estimated even with provisional sources.
+- P03/P04/P05/P06: broker-net dividends/fees/taxes counted once, corporate actions
+  not recomputed from QFQ/positions, unsupported flow timing unavailable, no history
+  fabricated before the sourced baseline.
+- P07/P08/P16/P17/P18: normalized drawdown, withdrawal versus full loss, zero-asset
+  restart, missing/unknown calendars and separate segments without gap bridging.
+- P09: absent benchmark allowed; malformed/null/currency/date/effectivity gaps
+  retain absolute returns. Effectivity is checked per segment so later eligible
+  segments remain comparable. Price/total-return reference type is disclosed;
+  tradability is a separate unperformed assessment, not a claim of execution.
+- P10/P11/P19: byte-deterministic repeated file calls, unchanged inputs, strict
+  amounts/identity/timezones/duplicate JSON keys/duplicate Shanghai dates and
+  controlled malformed-input failures. All unavailable metrics have null reasons.
+- P12/P21: missing DB and even a forbidden DB-path resolver do not affect file-only
+  dispatch; global help/options/classification/text/JSON and exit codes are tested.
+- P20 **limited diagnostic only**: missing DB/schema, inferred history and declared
+  source conflict remain unavailable/provisional with exit 4. Literal filenames
+  cannot override the read-only SQLite URI. Connection uses one transaction and
+  closes on every path. No authoritative account mapping is available, so counts
+  are explicitly `not_reconciled`; a true account-to-ledger conflict reconciliation
+  has **not** been implemented/qualified and is not inferred from these tests.
+
+Parent added counterexamples after worker review: null/empty benchmark handling,
+read-only URI escaping, row identity conflicts, one-point unavailable returns,
+approximation plus provisional-source disclosure, null reasons, and per-segment
+benchmark effectivity. The initial independent read-only review requested changes
+for effectivity and ambiguous benchmark execution wording; both were fixed with
+regressions. Independent read-only Codex followup returned **PASS for those
+bounded fixes**, with **74 focused tests passed**, Ruff and diff checks passed;
+report: `/tmp/a-stock-s3b-review-followup.txt`. This is not full P20, real-client
+or production acceptance.
+
+Final combined `scripts/check.sh`: **1310 passed, 2 skipped**, exit 0; Ruff, Skill
+validation, regulatory freshness, standalone QA and disabled-notification cron
+fixture all pass. Log: `/tmp/a-stock-s3-final-check.log`. The skips remain the
+optional sibling-source installation scenarios. Generated artifacts and raw inputs
+remain outside Git; no S3b result writes to decision-v1/monitor-v1 or holdings.
 
 All current real-client qualifications and production identities remain
 NOT_VERIFIED. S4 remains deferred. Rollback is a normal revert of the bounded

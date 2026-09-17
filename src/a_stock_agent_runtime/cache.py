@@ -60,6 +60,8 @@ A股投研数据缓存管理器
   cache.py checklist <代码> <框架A|B|C|D|E|F>             # 打印框架客观指标核对清单（仅核对事实，不计分）
   cache.py score-fundamentals <代码> <框架> '<评分输入JSON v1>'
                                                         # 只读确定性基本面评分
+  cache.py performance-report --input <account.json> [--benchmark <benchmark.json>]
+                                                        # 文件型账户业绩报告（纯计算）
 
 check 命令输出格式（供 SKILL.md 解析）：
   ANALYSIS_HIT   → 今日分析结论已缓存，直接输出结论，终止分析流程
@@ -88,6 +90,7 @@ from a_stock_agent_runtime import (
     store,
 )
 from a_stock_agent_runtime import paths
+from a_stock_agent_runtime import performance
 
 # Explicit compatibility exports; production code calls domain.* so owner patches
 # remain observable after this module split.
@@ -199,6 +202,7 @@ COMMANDS = {
     "set-score": cmd_set_score,
     "set-score-breakdown": cmd_set_score_breakdown,
     "score-fundamentals": cmd_score_fundamentals,
+    "performance-report": performance.cmd_performance_report,
     "set-flag": cmd_set_flag,
     "clear-flag": cmd_clear_flag,
     "alert-open": cmd_alert_open,
@@ -255,6 +259,7 @@ COMMAND_CLASSIFICATION = {
             "list",
             "checklist",
             "score-fundamentals",
+            "performance-report",
         ),
         "R0",
     ),
@@ -375,6 +380,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "clear": (("代码", "?"),),
     "checklist": (("代码", None), ("框架", None)),
     "score-fundamentals": (("代码", None), ("框架", None), ("评分输入JSONv1", None)),
+    "performance-report": (),
 }
 
 _CLI_VALUE_OPTIONS = {
@@ -391,6 +397,7 @@ _CLI_VALUE_OPTIONS = {
         "--portfolio-value", "--max-position-risk-pct", "--max-portfolio-risk-pct",
         "--policy-file", "--account-scope", "--portfolio-value-as-of",
     ),
+    "performance-report": ("--input", "--benchmark"),
 }
 
 
@@ -434,6 +441,10 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         if command == "l3-list":
             command_parser.add_argument("--all", action="store_true")
             command_parser.add_argument("--active", action="store_true")
+            command_parser.add_argument("--json", action="store_true")
+        if command == "performance-report":
+            command_parser.add_argument("--check-ledger", action="store_true")
+            command_parser.add_argument("--allow-eod-flow-assumption", action="store_true")
             command_parser.add_argument("--json", action="store_true")
     return parser
 
@@ -480,6 +491,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.parse_args(args)
     except SystemExit as exc:
         return int(exc.code or 0)
+    if command == "performance-report":
+        try:
+            return int(COMMANDS[command](remaining) or 0)
+        except sqlite3.Error as exc:
+            print(f"数据库查询失败：{exc}", file=sys.stderr)
+            return 1
     try:
         database_path = paths.cache_db_path()
     except (OSError, RuntimeError, UnicodeError) as exc:
