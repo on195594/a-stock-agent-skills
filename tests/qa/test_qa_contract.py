@@ -26,6 +26,24 @@ MONITOR_VALUATION = (
 ).read_text(encoding="utf-8")
 
 
+def test_qa_documentation_and_read_only_delivery_contract() -> None:
+    readme = (QA_ROOT / "README.md").read_text(encoding="utf-8")
+    for text in (QA_SKILL, readme):
+        assert "process_verdict: SKIP" in text
+        assert "COMPLIANT | PARTIAL | NON_COMPLIANT | SKIP | INVALID_RUN" in text
+        assert "SKIP/INVALID_RUN" in text
+        assert "null" in text
+        assert "references/rubrics/a-stock-research.md" in text
+    assert "`verdict:" not in QA_SKILL
+    assert "未确认写入时跳过持久化" in RESEARCH
+    assert "不得因未写缓存而跳过 QA" in RESEARCH
+    operations = (
+        ROOT / "skills/a-stock-monitor/references/data-operations.md"
+    ).read_text(encoding="utf-8")
+    assert "CACHE=a-stock-cache" in operations
+    assert "每次新 shell 都需重新设置" in operations
+
+
 def test_qa_is_runtime_independent() -> None:
     assert "Python" not in QA_SKILL.split("---", 2)[1]
     assert "a_stock_agent_runtime" not in QA_SKILL
