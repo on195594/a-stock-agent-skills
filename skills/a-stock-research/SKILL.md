@@ -19,7 +19,7 @@ compatibility: Requires local command execution, the installed a-stock-agent run
    `fetch` 失败即停止；不得用网页报价替代。`ANALYSIS_HIT` 直接展示当日缓存并停止。其他状态只补运行时指出的缺口。
 4. 依据最新正式披露确认主营并选择 A—F 框架；无法确定时询问用户。量化框架不适用时只给定性摘要并停止评分。
 5. 需要评分时依次调用 `a-stock-cache checklist <股票代码> <框架>` 和 `a-stock-cache score-fundamentals ...`。枚举、阈值、红线、完整性、规则版本与计算结果只服从命令输出和 `a-stock-lib`，不得在 Skill 中复算或覆盖。
-6. 把完整机器状态作为 decision-v1 JSON 经 stdin 交给 `a-stock-cache --confirm-write set-analysis`；仅在用户确认具体写入后执行。Markdown 只用于展示，不得反推或充当机器状态。未确认写入时跳过持久化，仍交付只读报告并按下一步执行 QA；不得因未写缓存而跳过 QA。
+6. 把完整机器状态作为 decision-v1 JSON 经 stdin 交给 `a-stock-cache --confirm-write set-analysis`；仅在用户确认具体写入后执行。Markdown 只用于展示，不得反推或充当机器状态。
 7. 首次报告完成后，把正文固定为不可变快照再交给独立 `a-stock-qa`；正文改变必须重新 QA。
 
 ## 检索预算与停止条件

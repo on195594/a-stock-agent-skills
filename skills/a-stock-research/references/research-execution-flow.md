@@ -2,6 +2,8 @@
 
 仅在 `a-stock-cache check` 返回 `FULL_MISS`，或 `FUNDAMENTALS_HIT` 需要执行未缓存部分时读取。`ANALYSIS_HIT` 必须在主文件终止，不得加载本流程。主 `SKILL.md` 的行业/评分路由、`incomplete`、阈值、唯一动作出口、W1 和 QA 边界始终优先。
 
+未确认具体写入时跳过 `set-analysis` 持久化，仍交付只读报告并按下一步执行 QA；不得因未写缓存而跳过 QA。
+
 ## 批量对比分析（多股票同时输入）
 
 用户输入多个代码时（如「对比 600036 601288」或「分析 A、B、C」）：

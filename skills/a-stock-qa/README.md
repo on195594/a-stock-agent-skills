@@ -13,7 +13,7 @@ a-stock-monitor / a-stock-tracker 等不支持类型返回 `process_verdict: SKI
 
 ## 调用方式
 
-调用者（PM 或 skill 内部）提供：
+调用者（宿主或独立 PM 角色）提供：
 ```
 skill_type: a-stock-research
 output: <完整报告正文的不可变快照>

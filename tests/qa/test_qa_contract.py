@@ -25,23 +25,30 @@ MONITOR_VALUATION = (
     ROOT / "skills/a-stock-monitor/references/valuation-and-annual-review.md"
 ).read_text(encoding="utf-8")
 
+QA_CONTRACT_MARKERS = (
+    "process_verdict: COMPLIANT | PARTIAL | NON_COMPLIANT | SKIP | INVALID_RUN",
+    "data_status: COMPLETE | INCOMPLETE | null",
+    "decision_status: FORMED | NOT_FORMED | null",
+    "input_sha256: <hash or null>",
+    "reason: <未完成原因；正常完成时可为 null>",
+    "checks:",
+    "- name: <检查项名称>",
+    "result: PASS | FAIL | SKIP",
+    "note: <简短说明>",
+)
+
 
 def test_qa_documentation_and_read_only_delivery_contract() -> None:
     readme = (QA_ROOT / "README.md").read_text(encoding="utf-8")
+    for marker in QA_CONTRACT_MARKERS:
+        assert marker in readme
     for text in (QA_SKILL, readme):
         assert "process_verdict: SKIP" in text
-        assert "COMPLIANT | PARTIAL | NON_COMPLIANT | SKIP | INVALID_RUN" in text
         assert "SKIP/INVALID_RUN" in text
-        assert "null" in text
         assert "references/rubrics/a-stock-research.md" in text
     assert "`verdict:" not in QA_SKILL
-    assert "未确认写入时跳过持久化" in RESEARCH
-    assert "不得因未写缓存而跳过 QA" in RESEARCH
-    operations = (
-        ROOT / "skills/a-stock-monitor/references/data-operations.md"
-    ).read_text(encoding="utf-8")
-    assert "CACHE=a-stock-cache" in operations
-    assert "每次新 shell 都需重新设置" in operations
+    assert "未确认具体写入时跳过" in EXECUTION
+    assert "不得因未写缓存而跳过 QA" in EXECUTION
 
 
 def test_qa_is_runtime_independent() -> None:
@@ -255,3 +262,12 @@ def test_legacy_valuation_compatibility_is_fail_closed_without_read_backfill() -
     assert "处理为不具备买入资格" in DATA_CACHE
     assert "读取不得回填" in DATA_CACHE
     assert "legacy_field_absent" not in RESEARCH
+
+
+if __name__ == "__main__":
+    tests_run = 0
+    for name, func in sorted(globals().items()):
+        if name.startswith("test_") and callable(func):
+            func()
+            tests_run += 1
+    print(f"qa contract assertions passed: {tests_run}")

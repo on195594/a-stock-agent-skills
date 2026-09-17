@@ -6,6 +6,8 @@
 - 将 A–F 行业路由、组合标签和止损系数移入显式 catalog，移除 domain 对 checklist import side effect 的依赖。
 - Live Agent fake-tool capture 绑定 source commit、脚本、独立 Skill hash、暴露工具和机器可验证的隔离元数据。
 - 新增 runtime contract 架构文档；投资阈值、W1 授权和生产状态不变。
+- 对齐 QA 的 process verdict 合同、不可变快照边界和宿主独立调用措辞，并新增定向合同检查。
+- 新增 2026-09-17 风险闭环、Tracker 验证与账户业绩 MVP 的仅文档规范（v1.1）。
 
 ## 0.1.12 — 2026-09-13
 

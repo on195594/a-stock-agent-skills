@@ -9,7 +9,7 @@
 | 状态 | **ENGINEERING REVIEW INCORPORATED — DOCUMENT ONLY** |
 | 实施状态 | 尚未开始；本文不构成已实施、已部署或投资有效性的证明 |
 | 适用仓库 | `on195594/a-stock-agent-skills`、`on195594/a-stock-tracker`、`on195594/a-stock-lib` |
-| 建议 canonical 位置 | `a-stock-agent-skills/docs/specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec.md` |
+| 当前 canonical 位置 | `a-stock-agent-skills/docs/specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md` |
 | 当前授权范围 | 审查并修订本规范；不包含代码提交、生产部署、数据库迁移、cron 修改、真实账户写入或交易 |
 | 后续开发方式 | 获得实施授权后，仅在 `master` 小步开发、验证、直接提交与 push；不创建功能分支，不开 PR，不 force-push |
 

@@ -325,7 +325,7 @@
 
 ## Verdict 判定规则
 
-按 SKILL.md Step 4 中的通用公式执行（单一维护点）。
+按 SKILL.md Step 2 中的通用公式执行（单一维护点）。
 
 参考：
 | 状况 | Verdict |
