@@ -4,7 +4,31 @@ Governing specification: [v1.1](../specs/2026-09-17-a-stock-risk-closure-and-per
 The user's subsequent implementation request authorizes repository work; it does
 not authorize deployment, production configuration or investment parameter changes.
 
-## Status and baseline
+## Current status
+
+S1, S2, S3a and the file-only S3b MVP are implemented with fixture evidence,
+**NOT_DEPLOYED**. S2 is Tracker `41c95d3` (`2026-09-17.e2`, manifest pending).
+Real-client qualification, production evidence and full account-to-ledger
+reconciliation remain unverified; S4 stays deferred. Current cross-repository
+results and remaining gates live in the [S2/S3 ledger](2026-09-17-s2-s3-implementation.md).
+
+The rest of this page preserves **historical S1 checkpoints** and their original
+test counts/HEADs; “not started” below is not the current S2/S3 status.
+
+### 2026-09-17 maintenance
+
+Aligned historical/current status wording and removed the private, unreferenced
+`commands_admin._latest_analysis_missing_cycle_stage` plus its unused import.
+Tracked-source/test/document searches and explicit CLI exports show no caller;
+existing checklist regressions remain intact. Full checks: **1310 passed,
+2 skipped**, Ruff, Skill validation, freshness, standalone QA and cron fixture
+passed. Log: `/tmp/a-stock-agent-cleanup-check.log`. No investment rule changed.
+Reproducible caches in the isolated clones may be removed; virtual environments,
+editable-install metadata, runtime data, review evidence and versioned release
+candidates are retained. This maintenance does not regenerate or re-qualify an
+older release candidate, and is not deployment.
+
+## Initial S1 status and baseline
 
 - S0: repository HEAD/worktree checks complete; production NOT_VERIFIED.
 - S1: IMPLEMENTED_NOT_DEPLOYED (RISK-01–05; current-client qualification remains NOT_VERIFIED).
@@ -66,8 +90,8 @@ missing installed lib dependencies. Full-check log is outside the repository:
 `/tmp/a-stock-risk-check-20260917.log`. The permissions-error line in the cron
 fixture is an expected negative test; the script returned success.
 
-The tested source changes are in the commit containing this ledger. Historical
-model captures and hashes were not edited. No new real-model capture or
+The first delivery's tested source commit is `10dd9a2da6c963f6c6e11905f270bf3fa507d116`.
+Historical model captures and hashes were not edited. No new real-model capture or
 independent external-agent review was run. Dependency installation and Git
 remote inspection used network; these are not fully offline execution claims.
 No production database/account data was accessed; no production schema, cron,
@@ -79,9 +103,10 @@ The first delivery left RISK-01/02/03 outstanding. The subsequent S1 delivery
 below completes the repository implementation and A01–A22 fixture evidence;
 it does not complete production or real-client qualification.
 
-S0 still requires remaining client inventory and authorized production evidence;
-S2 requires Tracker-specific source/spec analysis; S3 requires its own bounded
-implementation. No real investment or account-performance result is claimed.
+S0 still requires remaining client inventory and authorized production evidence.
+The S2/S3 implementation work outstanding at this S1 checkpoint is now recorded
+in the linked S2/S3 ledger; its remaining production gates are separate. No real
+investment or account-performance result is claimed.
 
 The first delivery is `10dd9a2da6c963f6c6e11905f270bf3fa507d116` and introduced
 no enum extension. Revert subsequent S1 code only as a complete producer,
@@ -93,10 +118,10 @@ risk suggestions until repaired; rollback is not risk acceptance.
 ## Remaining S1 delivery — current contract
 
 Starting isolated/local and remote Agent HEAD: `10dd9a2da6c963f6c6e11905f270bf3fa507d116`.
-The resulting implementation is the commit containing this ledger update;
+The resulting S1 implementation is `125e3a0e86ad68f3965844960ba2cd5e9ceab4db`;
 release commit and package/Skill hashes identify its compatibility set.
 Original active checkout remains at `2000d750ca66b4c31e503c6c7656fbbf9a6095ea`.
-Tracker and lib HEADs listed above remain unchanged. The additional Hermes
+At this S1 checkpoint, Tracker and lib HEADs listed above were unchanged. The additional Hermes
 entries under `.hermes/skills/research` were read-only inspected and also point
 at the original active checkout. No external independently upgradeable consumer
 was found in repository call sites; uninspected clients remain unverified.
@@ -180,5 +205,5 @@ In the same isolated environment as the first delivery:
 - Network use is limited here to Git reference/push operations, dependency
   tooling if needed, and independent read-only Codex CLI code review. That
   review is not a real-client monitoring qualification test.
-- S2/S3 are not started, S4 remains deferred. There is no investment-validity
+- At this S1 checkpoint S2/S3 were not started; S4 remains deferred. There is no investment-validity
   or personal-account-return claim. Deployment remains separately authorized.

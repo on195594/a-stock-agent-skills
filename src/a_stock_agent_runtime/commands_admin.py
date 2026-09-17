@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 
 from a_stock_agent_runtime import (
     db,
-    decision_contract,
     domain,
     framework_metadata,
     store,
@@ -459,21 +458,3 @@ def cmd_checklist(args: list[str]) -> None:
             items, normalized, code, metadata.subjective_items, skipped
         )
     )
-
-
-def _latest_analysis_missing_cycle_stage(code: str) -> bool:
-    with db.db_session() as conn:
-        row = conn.execute(
-            """SELECT decision_json FROM analysis_results
-               WHERE code=? ORDER BY date DESC LIMIT 1""",
-            (code,),
-        ).fetchone()
-    if not row or row[0] is None:
-        return True
-    try:
-        decision = decision_contract.loads_decision(row[0])
-    except decision_contract.DecisionContractError:
-        return True
-    if decision["stock_code"] != code:
-        return True
-    return decision_contract.cycle_stage_from_decision(decision) is None
