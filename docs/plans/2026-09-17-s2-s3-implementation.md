@@ -31,15 +31,65 @@ scoring hash/date verified, or claiming `2026-09-17.e2` acceptance before the
 full snapshot/selection/weight/path rules are validated. No new universe,
 scoring weights, 44-point threshold, historical rows, schema or cron may change.
 
-S2 draft status after two implementation/review iterations: **NOT_ACCEPTED /
-NOT_COMMITTED** in `/tmp/a-stock-tracker-s2-20260917`. Parent validation with
-Python 3.13.5 and the declared lib 0.8.0 wheel passed **277 tests** and Ruff,
-but mypy reports three errors. Review also found remaining enrollment-vs-as-of,
-mutable qualitative-cache/hybrid-source validation, malformed numeric/source and
-derived-finiteness issues. These are implementation gaps, not merely a manifest
-path decision. `2026-09-17.s2-incomplete` is not e2 acceptance; no T01–T20 or
-production claim is made. Detailed handoff remains external at
-`/tmp/a-stock-s2-final-parent-review.md`. Tracker and Lib master are unchanged.
+S2 final software status: **IMPLEMENTED_WITH_SYNTHETIC_FIXTURES / NOT_DEPLOYED**.
+Tracker master commit: `41c95d311c0330c8340841e115a539b10d72abe3`, published to
+GitHub without updating the active checkout. Initial 277-test drafts were rejected
+for real implementation defects; the historical handoff
+`/tmp/a-stock-s2-final-parent-review.md` is superseded by this final evidence.
+
+- Default `config/experiment_manifest.json` is loaded through the existing paths
+  owner, independent of cwd. It stays **pending** with empty scoring hashes and
+  null unverified dates/evidence. Known expected=35 is shown; unmeasured DB counts
+  are null. Pending diagnostics do not read the database.
+- The fixed universe was parsed from Tracker commit `69f11c99…` rather than today's
+  watchlist: config SHA-256 `87ac0e4972aa1562ed49b034dfd94172fa1f86b77ab181f9323aabd4b27e3a11`,
+  universe SHA-256 `cdba80037cdefe10be6eeb4b4e9c4f603b1fd271fd295229ee796162c7d56cfb`.
+  Source config, hash-covered scoring/input files, weights and requirements are
+  byte-identical to that base. No actual production scoring hash is inferred.
+- `evaluation.py` separates immutable snapshot qualification, fixed tie weights,
+  fixed schedules and future outcome checks. No mutable qualitative-cache lookup,
+  historical re-scoring, member substitution or outcome-driven batch selection.
+  Strict numeric/source/component/JSON validation preserves supported null PB and
+  honest fallback evidence; unrelated bad prices remain separate diagnostics.
+- As-of is independent of enrollment end. Entry and target dates align backwards
+  using explicitly evidenced calendars and the original 10-day lag. All basket
+  endpoints and daily paths use the same dates/weights. No live calendar interface
+  was invented; absent/malformed evidence fails closed.
+- Scheduling keeps young batches, but metrics consume only fixed batches whose
+  natural-day window is due. Young rows remain diagnostic without blocking existing
+  mature 3/2/1 evidence. Due but damaged/unresolved batches are never skipped.
+  Date-mature counts and time-due counts are distinguished. Path/batch gaps prevent
+  full-chain claims; per-batch endpoints remain explicitly diagnostic. All-tied
+  complete evidence routes to manual review, never fabricated zero alpha.
+- Three windows share one read transaction; the original automatic report call
+  remains compatible. No schema, cron, CLI scoring flow, thresholds or writer
+  changes. `2026-09-17.e2` identifies the implemented software protocol, not live
+  data qualification, executable returns or investment effectiveness.
+
+Evidence: `tests/test_accuracy_report.py` covers T01–T20 plus parental review
+counterexamples; `tests/test_pipeline.py` checks default pending auto-reporting.
+Final parent validation in isolated Python 3.13.5 / declared lib 0.8.0:
+**299 tests passed**, **11 structure tests passed**, Ruff check/format, mypy
+(49 source files) and diff check passed. Log:
+`/tmp/a-stock-s2-parent-final-check.log`.
+
+Independent read-only Codex review requested two final changes (young batches
+blocking mature evidence; malformed datetime calendar errors). Nine regressions
+and the fixes passed a bounded followup: **PASS**, **53 focused tests**, mypy;
+the e2 software identifier was accepted in that scope. Reports:
+`/tmp/a-stock-s2-landing-review.txt`, `/tmp/a-stock-s2-fixes-review.txt`.
+These do not qualify real clients or production.
+
+External candidate archive/provenance manifest:
+`/tmp/a-stock-s2-release-41c95d3/`. Active Tracker stays at `69f11c99…`, active
+Agent stays at `2000d750…`, Lib remains unchanged at `6dc856ea…`. The isolated
+Tracker clone initially had a local active-checkout origin; Git refused that push.
+The active branch was verified unchanged; only the clone's origin was corrected
+to GitHub. No receive protection was weakened.
+
+Remaining activation requirements: separately authorized real hash/date/evidence
+registration, independently verified local calendar/data coverage and production
+qualification. No S4 work or production activation is included.
 
 ## S3a — POLICY-01
 

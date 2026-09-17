@@ -2,7 +2,9 @@
 
 ## 0.1.13 — Unreleased
 
-- 新增 S3b 文件型 `performance-report` MVP：Decimal 现金流调整、分段收益/回撤、按片段对齐的可选基准、明确 null 原因与退出码；默认不选数据库路径，不建库/联网/写回。账本检查仅为未完成账户映射的有限诊断，真实对账未验收；S2 仍是未接受的隔离草稿。未部署，见[S2/S3 记录](plans/2026-09-17-s2-s3-implementation.md)。
+- S2 Tracker e2 软件落地于 `41c95d3`：用户批准默认清单使用 `config/`，固定资格/并列权重/批次与逐日路径；299 tests 及产品门禁通过，清单仍 pending，未部署。Agent 仅同步规范与[S2/S3 验收记录](plans/2026-09-17-s2-s3-implementation.md)。
+
+- 新增 S3b 文件型 `performance-report` MVP：Decimal 现金流调整、分段收益/回撤、按片段对齐的可选基准、明确 null 原因与退出码；默认不选数据库路径，不建库/联网/写回。账本检查仅为未完成账户映射的有限诊断，真实对账未验收。未部署，见[S2/S3 记录](plans/2026-09-17-s2-s3-implementation.md)。
 
 - 启动 S2/S3，完成 S3a 只读风险政策解析：统一两风险 CLI 的来源优先级、文件安全与账户/时点校验，非法文件不回退；不创建真实政策、不部署。见[S2/S3 记录](plans/2026-09-17-s2-s3-implementation.md)。
 

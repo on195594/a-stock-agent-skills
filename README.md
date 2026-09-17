@@ -30,8 +30,9 @@ Its monitor-v1 vocabulary extension requires a coordinated runtime/Skill release
 it is **not deployed or qualified for live clients**. Historical model captures
 remain historical evidence. See the [S1 implementation ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
 S3 adds a read-only risk-policy resolver and file-only account-performance reporting;
-these are synthetic-fixture candidates, **not deployed**. S2 Tracker evaluation remains
-an unaccepted isolated draft. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
+these are synthetic-fixture candidates, **not deployed**. S2 Tracker e2 evaluation
+is fixture-validated with a pending manifest; production registration and calendar
+evidence remain unverified. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
