@@ -16,13 +16,14 @@ policy parameter changes, schema, cron, clients, notifications or trading.
   `收益验证`, `并列分数`, `performance-report`, `experiment.manifest`,
   `a-stock-tracker` found no applicable page. Local spec/source govern; no Wiki edits.
 
-## S2 — default manifest placement requires a decision
+## S2 — default manifest location approved
 
-Tracker `AGENTS.md` says tracked configuration belongs in `config/`;
-`docs/architecture.md` repeats that requirement. Spec §7.1 names
-`a_stock_tracker/reporting/experiment_manifest.json`. No autonomous rule waiver,
-AGENTS weakening or silently chosen path is authorized. Default tracked manifest
-creation is **BLOCKED_DOCUMENT_CONFLICT** until the user chooses the location.
+On 2026-09-17 the user explicitly approved `config/experiment_manifest.json`
+and requested implementation to continue. This follows Tracker `AGENTS.md` and
+`docs/architecture.md`; spec §7.1 now records the dated location correction.
+The prior **BLOCKED_DOCUMENT_CONFLICT** is resolved. This does not authorize
+production activation, verified production hash/date registration, schema or cron
+changes. Existing project path ownership must make loading independent of cwd.
 
 The evaluation engine and explicit synthetic manifest injection can proceed
 independently. This does not authorize production activation, declaring a real

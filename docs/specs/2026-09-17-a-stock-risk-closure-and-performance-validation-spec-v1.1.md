@@ -277,10 +277,14 @@ A19 在临时 WAL 数据库用两连接复现：读者取持仓后，写者原�
 本轮只在报告层新增一份非敏感、可审计的实验声明：
 
 ```text
-a_stock_tracker/reporting/experiment_manifest.json
+config/experiment_manifest.json
 ```
 
-这是版本化实验配置，不是生产数据、账户状态或生成报告，允许入 Git。它替代 1.0 中没有定义加载方式的“仓库外冻结文件”建议。用 `Path(__file__).with_name(...)` 或现有等价资源机制定位，不能依赖 cwd、开发者 home 或 sibling checkout；不得在运行时联网读取 GitHub。
+**2026-09-17 用户明确裁决：** 默认位置采用 Tracker 仓库规则的 `config/`，
+替代本节原定的 `a_stock_tracker/reporting/experiment_manifest.json`。仅解决配置
+目录冲突，不授权生产启用、真实 hash/日期登记、schema 或 cron 变更。
+
+这是版本化实验配置，不是生产数据、账户状态或生成报告，允许入 Git。它替代 1.0 中没有定义加载方式的“仓库外冻结文件”建议。用 Tracker 既有项目路径 owner 定位该固定 `config/` 资源，不能依赖 cwd、开发者 home 或 sibling checkout；不得在运行时联网读取 GitHub。
 
 | manifest 字段 | 必需含义与校验 |
 |---|---|
