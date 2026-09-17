@@ -233,6 +233,19 @@ def test_loads_rejects_nonfinite_json_constants(constant: str) -> None:
         monitor_contract.loads_monitor_snapshot(text)
 
 
+@pytest.mark.parametrize("reason", [[], {}, True, False, 0, 1, 1.5, "unknown"])
+@pytest.mark.parametrize("json_input", [False, True])
+def test_invalid_stop_reason_raises_contract_error(reason, json_input) -> None:
+    payload = _snapshot()
+    payload["stop_reason"] = reason
+    payload["manifest"]["stop_reason"] = reason
+    with pytest.raises(monitor_contract.MonitorContractError, match="stop_reason"):
+        if json_input:
+            monitor_contract.loads_monitor_snapshot(json.dumps(payload))
+        else:
+            monitor_contract.validate_monitor_snapshot(payload)
+
+
 def test_loads_and_dumps_round_trip() -> None:
     payload = _snapshot()
     text = monitor_contract.dumps_monitor_snapshot(payload)

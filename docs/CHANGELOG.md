@@ -2,6 +2,8 @@
 
 ## 0.1.13 — Unreleased
 
+- 部分推进风险闭环 S1：本地监控快照使用显式一致读事务，非法 `stop_reason` 统一抛出合同异常；新增并发及异常释放回归。预算闭环尚未完成、未部署，见[实施记录](plans/2026-09-17-risk-closure-implementation.md)。
+
 - 抽取并统一接入 monitor-v1 验证与确定性序列化；unavailable snapshot 补齐结构化 `industry_context`。
 - 将 A–F 行业路由、组合标签和止损系数移入显式 catalog，移除 domain 对 checklist import side effect 的依赖。
 - Live Agent fake-tool capture 绑定 source commit、脚本、独立 Skill hash、暴露工具和机器可验证的隔离元数据。

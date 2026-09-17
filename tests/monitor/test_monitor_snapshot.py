@@ -138,6 +138,96 @@ def _run(capsys, argv: list[str]) -> tuple[int, dict]:
     return result, json.loads(captured.out)
 
 
+def test_local_snapshot_keeps_one_wal_version(
+    isolated_cache_database, monkeypatch
+) -> None:
+    holding_id = _seed_holding(isolated_cache_database)
+    with sqlite3.connect(isolated_cache_database) as writer:
+        writer.execute("PRAGMA journal_mode=WAL")
+        original_session = db.read_only_db_session
+        statements = []
+        updated = []
+
+        def trace(sql):
+            statements.append(sql)
+            if "SELECT COUNT(*) FROM holdings" in sql:
+                writer.execute("UPDATE holdings SET shares=200")
+                writer.execute(
+                    """INSERT INTO holding_alerts
+                       (holding_id, code, level, category, reason_code, reason,
+                        status, evidence, opened_at, updated_at)
+                       VALUES (?, '600036', 'yellow', 'unverified',
+                               'technical_review', 'new version', 'active',
+                               'fixture', ?, ?)""",
+                    (holding_id, domain.utc_now_iso(), domain.utc_now_iso()),
+                )
+                writer.commit()
+                updated.append(True)
+
+        @contextmanager
+        def traced_session():
+            with original_session() as reader:
+                reader.set_trace_callback(trace)
+                yield reader
+                assert not reader.in_transaction
+
+        monkeypatch.setattr(db, "read_only_db_session", traced_session)
+        local = commands_monitor._load_monitor_local_snapshot()
+        assert updated == [True]
+        assert local["holdings"][0]["shares"] == 100
+        assert local["holdings"][0]["alerts"] == []
+        assert writer.execute("SELECT shares FROM holdings").fetchone() == (200,)
+        assert writer.execute("SELECT COUNT(*) FROM holding_alerts").fetchone() == (1,)
+        assert statements[0] == "BEGIN DEFERRED"
+        assert statements[-1] == "COMMIT"
+        assert all(
+            sql.lstrip().startswith(("SELECT", "BEGIN", "COMMIT"))
+            for sql in statements
+        )
+
+
+@pytest.mark.parametrize("existing_transaction", [False, True])
+@pytest.mark.parametrize("query_failure", [False, True])
+def test_local_snapshot_releases_transaction_and_connection(
+    isolated_cache_database, monkeypatch, existing_transaction, query_failure
+) -> None:
+    _seed_holding(isolated_cache_database)
+    original_session = db.read_only_db_session
+    statements = []
+    connections = []
+
+    def authorize(action, table, _column, _database, _trigger):
+        if query_failure and action == sqlite3.SQLITE_READ and table == "holding_alerts":
+            return sqlite3.SQLITE_DENY
+        if action in {sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE}:
+            pytest.fail("snapshot attempted application DML")
+        return sqlite3.SQLITE_OK
+
+    @contextmanager
+    def checked_session():
+        with original_session() as reader:
+            connections.append(reader)
+            reader.set_trace_callback(statements.append)
+            reader.set_authorizer(authorize)
+            if existing_transaction:
+                reader.execute("BEGIN DEFERRED")
+            try:
+                yield reader
+            finally:
+                assert not reader.in_transaction
+
+    monkeypatch.setattr(db, "read_only_db_session", checked_session)
+    if query_failure:
+        with pytest.raises(sqlite3.DatabaseError):
+            commands_monitor._load_monitor_local_snapshot()
+    else:
+        commands_monitor._load_monitor_local_snapshot()
+    assert statements.count("BEGIN DEFERRED") == 1
+    assert statements[-1] == ("ROLLBACK" if query_failure else "COMMIT")
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        connections[0].execute("SELECT 1")
+
+
 def test_clean_five_holding_fast_gate_uses_one_read_session_one_quote_batch_and_no_writes(
     isolated_cache_database, monkeypatch, capsys
 ) -> None:

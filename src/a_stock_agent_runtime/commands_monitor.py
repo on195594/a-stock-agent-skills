@@ -88,8 +88,10 @@ def _due(value: Any, today: date) -> bool | None:
 
 
 def _load_monitor_local_snapshot() -> dict[str, Any]:
-    """Read every local input in exactly one read-only SQLite session."""
-    with db.read_only_db_session() as conn:
+    """Read local inputs in one transaction; release it before fetching quotes."""
+    with db.read_only_db_session() as conn, conn:
+        if not conn.in_transaction:
+            conn.execute("BEGIN DEFERRED")
         holding_rows = conn.execute(
             """SELECT h.id, h.code, h.name, h.cost_price, h.shares, h.buy_date,
                       h.stop_loss_15, h.stop_loss_20, h.framework,

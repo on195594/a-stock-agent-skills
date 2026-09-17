@@ -234,7 +234,9 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
         _nonempty(item["minimum_action"], f"data_gaps[{index}].minimum_action")
 
     stop_reason = value["stop_reason"]
-    if stop_reason not in {None, "clean_fast_gate"}:
+    if stop_reason is not None and (
+        not isinstance(stop_reason, str) or stop_reason != "clean_fast_gate"
+    ):
         raise MonitorContractError("stop_reason is unsupported")
     confirmation = value["requires_user_confirmation"]
     if type(confirmation) is not bool:
