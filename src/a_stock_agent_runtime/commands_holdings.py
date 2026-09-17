@@ -11,7 +11,7 @@ from datetime import date, datetime
 from a_stock_lib.market_data import MarketDataResult
 from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
 
-from a_stock_agent_runtime import db, domain, market_quotes, risk_budget, store
+from a_stock_agent_runtime import db, domain, market_quotes, risk_budget, risk_policy, store
 from a_stock_agent_runtime.position_ledger import (
     LifecycleReturn,
     calculate_lifecycle_return,
@@ -1581,39 +1581,18 @@ def calculate_position_risk(
     }
 
 
-def _parse_portfolio_risk_args(args: list[str] | None) -> tuple[float | None, dict]:
-    portfolio_value = None
-    max_position_risk_pct = None
-    max_portfolio_risk_pct = None
-    args = args or []
-    i = 0
-    while i < len(args):
-        if args[i] not in (
-            "--portfolio-value",
-            "--max-position-risk-pct",
-            "--max-portfolio-risk-pct",
-        ) or i + 1 >= len(args):
-            print(f"错误：未知或不完整参数 {args[i]}", file=sys.stderr)
-            sys.exit(1)
-        value = _parse_cli_finite_float(
-            args[i + 1],
-            args[i],
-            minimum=0,
-            strict_minimum=True,
-        )
-        if args[i] == "--portfolio-value":
-            portfolio_value = value
-        elif args[i] == "--max-position-risk-pct":
-            max_position_risk_pct = value
-        else:
-            max_portfolio_risk_pct = value
-        i += 2
-    return portfolio_value, risk_budget.policy(max_position_risk_pct, max_portfolio_risk_pct)
+def _parse_portfolio_risk_args(args: list[str] | None) -> risk_policy.RiskParameters:
+    try:
+        return risk_policy.parse_risk_args(args)
+    except risk_policy.RiskPolicyError as exc:
+        print(f"风险参数不可用：{exc}", file=sys.stderr)
+        raise SystemExit(1) from None
 
 
 def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     """Market-value weighted portfolio view with explicit stop-loss risk budget."""
-    portfolio_value, limits = _parse_portfolio_risk_args(args)
+    parameters = _parse_portfolio_risk_args(args)
+    portfolio_value, limits = parameters.portfolio_value, parameters.risk_policy
     account_value_supplied = portfolio_value is not None
     try:
         with db.read_only_db_session() as conn:
@@ -1667,7 +1646,9 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         {"code": row[0], **calculate_position_risk(row[3], row[8], row[7], portfolio_value)}
         for row in valued_rows
     ]
-    budget = risk_budget.assess(risks, portfolio_value, limits)
+    budget = risk_budget.assess(
+        risks, portfolio_value, limits, account_scope=parameters.account_scope
+    )
     stock_market_value = sum(row[9] for row in valued_rows if row[9] is not None)
     valued_count = sum(row[9] is not None for row in valued_rows)
     if portfolio_value is None:
@@ -1680,6 +1661,15 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         return
 
     print(f"  风险分母：{denominator_label} = {portfolio_value:.2f}元")
+    evidence = parameters.denominator_evidence()
+    print(
+        f"  分母估值时间：{evidence['portfolio_value_as_of'] or 'unknown'}；"
+        f"账户范围：{evidence['account_scope'] or 'unknown'}；"
+        f"denominator_freshness_status={evidence['denominator_freshness_status']}；"
+        f"denominator_scope_status={evidence['denominator_scope_status']}"
+    )
+    if evidence["denominator_requires_review"]:
+        print("  分母时点/范围不完整：新增风险须复核，不以报告采集时间补造估值时间")
     print(
         f"  {'股票':<16} {'框架':>5} {'股数':>6} {'当前价':>7} {'市值权重':>8} "
         f"{'浮盈%':>7} {'止损风险':>9} {'风险贡献':>8} {'状态':>5}"
@@ -1767,7 +1757,9 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         f"  单股风险预算上限：{limits['max_position_risk_pct']:.2f}% | "
         f"组合风险预算上限：{limits['max_portfolio_risk_pct']:.2f}% | "
         f"policy_id={limits['policy_id']}; source={limits['source']}; "
-        f"field_sources={limits['field_sources']}（未确认个人风险预算）"
+        f"field_sources={limits['field_sources']}"
+        + ("（文件含确认元数据，不构成交易授权）" if limits["source"] == "policy_file"
+           else "（未确认个人风险预算；兼容默认/本次覆盖不等于个人政策）")
     )
     if not account_value_supplied:
         print("  未提供总资产：不判定预算超限；风险不可完整判定")

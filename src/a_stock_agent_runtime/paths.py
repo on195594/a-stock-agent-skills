@@ -15,17 +15,38 @@ def _config_path() -> Path:
     return config_home / "a-stock-agent" / "runtime.env"
 
 
+def read_private_config(path: Path, *, label: str = "runtime config") -> str:
+    """Read an owner-only regular configuration file without creating it."""
+    if not path.is_file():
+        raise RuntimeError(f"{label} is not a regular file: {path}")
+    with path.open(encoding="utf-8") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError(f"{label} is not a regular file: {path}")
+        if info.st_uid != os.getuid() or info.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+            raise RuntimeError(f"{label} must be user-owned and mode 0600: {path}")
+        return stream.read()
+
+
+def risk_policy_path(explicit: str | None = None) -> tuple[Path, bool]:
+    """Return the selected path and whether absence must be treated as an error."""
+    if explicit is None:
+        explicit = os.environ.get("A_STOCK_RISK_POLICY_FILE")
+        if explicit is None:
+            explicit = _read_config().get("A_STOCK_RISK_POLICY_FILE")
+    if explicit is not None:
+        if not explicit.strip():
+            raise RuntimeError("risk policy path cannot be empty")
+        return Path(explicit).expanduser(), True
+    return _config_path().with_name("risk-policy.json"), False
+
+
 def _read_config() -> dict[str, str]:
     path = _config_path()
     if not path.exists():
         return {}
-    if not path.is_file():
-        raise RuntimeError(f"runtime config is not a regular file: {path}")
-    info = path.stat()
-    if info.st_uid != os.getuid() or info.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
-        raise RuntimeError(f"runtime config must be user-owned and mode 0600: {path}")
     values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in read_private_config(path).splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue

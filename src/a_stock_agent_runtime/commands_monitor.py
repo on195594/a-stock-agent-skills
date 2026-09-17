@@ -27,6 +27,8 @@ from a_stock_agent_runtime import (
     risk_gates,
 )
 
+from a_stock_agent_runtime.risk_policy import RiskParameters
+
 _SCOPES = {"aggregate", "core_driver", "non_core", "governance"}
 _ACTIONS = {"review", "reduce", "exit"}
 
@@ -345,6 +347,7 @@ def build_monitor_snapshot(
     now: datetime | None = None,
     stage_timings_ms: dict[str, int] | None = None,
     risk_policy: dict | None = None,
+    denominator_evidence: dict | None = None,
 ) -> dict[str, Any]:
     """Purely combine one local snapshot and one shared quote snapshot."""
     portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
@@ -780,7 +783,10 @@ def build_monitor_snapshot(
         else "exact"
     )
     quote_complete = priced == active_count
-    budget = risk_budget.assess(output_holdings, portfolio_value, limits)
+    budget = risk_budget.assess(
+        output_holdings, portfolio_value, limits,
+        account_scope=denominator_evidence.get("account_scope") if denominator_evidence else None,
+    )
     for breach in budget.pop("breaches"):
         _add_escalation(
             escalations, breach["code"], "risk_budget_exceeded", breach["detail"]
@@ -837,6 +843,8 @@ def build_monitor_snapshot(
             "stock_weight_pct": stock_weight_pct,
             **budget,
             "risk_policy": limits,
+            **(denominator_evidence if denominator_evidence is not None
+               else RiskParameters(portfolio_value, limits).denominator_evidence()),
         },
         "quote_coverage": {
             "priced": priced,
@@ -887,7 +895,8 @@ def build_monitor_snapshot(
 
 
 def unavailable_monitor_snapshot(
-    portfolio_value: float | None, risk_policy: dict | None = None
+    portfolio_value: float | None, risk_policy: dict | None = None,
+    denominator_evidence: dict | None = None,
 ) -> dict[str, Any]:
     portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
     payload = {
@@ -910,6 +919,8 @@ def unavailable_monitor_snapshot(
             "risk_budget_status": None,
             "known_stop_risk_lower_bound": None,
             "risk_policy": risk_policy if risk_policy is not None else risk_budget.policy(),
+            **(denominator_evidence if denominator_evidence is not None
+               else RiskParameters(portfolio_value, {}).denominator_evidence()),
         },
         "quote_coverage": {"priced": 0, "active": 0, "complete": False},
         "industry_context": {
@@ -951,7 +962,7 @@ def unavailable_monitor_snapshot(
     return payload
 
 
-def _parse_monitor_snapshot_args(args: list[str]) -> tuple[float | None, dict]:
+def _parse_monitor_snapshot_args(args: list[str]) -> RiskParameters:
     if "--json" not in args:
         _fail("monitor-snapshot requires --json")
     return commands_holdings._parse_portfolio_risk_args(
@@ -962,14 +973,15 @@ def _parse_monitor_snapshot_args(args: list[str]) -> tuple[float | None, dict]:
 def cmd_monitor_snapshot(args: list[str]) -> None:
     """Emit one read-only Level-1 monitoring snapshot as stable JSON."""
     started = time.perf_counter()
-    portfolio_value, limits = _parse_monitor_snapshot_args(args)
+    parameters = _parse_monitor_snapshot_args(args)
+    portfolio_value, limits = parameters.portfolio_value, parameters.risk_policy
     preflight_done = time.perf_counter()
     try:
         local = _load_monitor_local_snapshot()
     except (OSError, sqlite3.Error):
         print(
             monitor_contract.dumps_monitor_snapshot(
-                unavailable_monitor_snapshot(portfolio_value, limits)
+                unavailable_monitor_snapshot(portfolio_value, limits, parameters.denominator_evidence())
             )
         )
         raise SystemExit(1) from None
@@ -983,6 +995,7 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
         portfolio_value,
         industry_result=industry_result,
         risk_policy=limits,
+        denominator_evidence=parameters.denominator_evidence(),
         now=domain.cst_now(),
         stage_timings_ms={
             "preflight": round((preflight_done - started) * 1000),

@@ -21,6 +21,8 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 `monitor-snapshot --json` 输出是 `monitor-v1` machine contract；状态、动作、缺口和停止条件只从结构化字段读取，不从自然语言重建。
 
+S3a 可附用户提供的 `--policy-file`、`--account-scope`、`--portfolio-value-as-of`；不得由模型生成政策、确认引用或估值时点。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时新增风险须复核，即使本轮为 clean 也不授予加仓权限。无个人文件的 2%/8% 是兼容默认，不等于满足用户回撤目标；确认元数据不是 W1 令牌，发现非法政策不得静默回退。
+
 保留退出码并解析 stdout；业务不完整时命令可能输出有效 JSON 后退出非零。解析前不得额外调用 `holdings`、Wiki、Web 或子代理。
 
 - runtime 返回干净快速路径时，输出结构化 `action_status`、异常项、覆盖率、as-of 与 `stop_reason`，立即停止。

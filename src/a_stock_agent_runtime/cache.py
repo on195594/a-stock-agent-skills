@@ -385,9 +385,11 @@ _CLI_VALUE_OPTIONS = {
     "retro-outliers": ("--loss",),
     "portfolio-risk": (
         "--portfolio-value", "--max-position-risk-pct", "--max-portfolio-risk-pct",
+        "--policy-file", "--account-scope", "--portfolio-value-as-of",
     ),
     "monitor-snapshot": (
         "--portfolio-value", "--max-position-risk-pct", "--max-portfolio-risk-pct",
+        "--policy-file", "--account-scope", "--portfolio-value-as-of",
     ),
 }
 
@@ -478,7 +480,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.parse_args(args)
     except SystemExit as exc:
         return int(exc.code or 0)
-    database_path = paths.cache_db_path()
+    try:
+        database_path = paths.cache_db_path()
+    except (OSError, RuntimeError, UnicodeError) as exc:
+        print(f"运行配置不可用：{type(exc).__name__}", file=sys.stderr)
+        return 1
     if classification == "R0" and not database_path.exists():
         machine_view_missing = (
             command in {"alerts", "l3-list"} and "--json" in remaining

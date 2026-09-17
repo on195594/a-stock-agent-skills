@@ -13,6 +13,19 @@ $CACHE portfolio-risk --portfolio-value <总资产> --max-position-risk-pct 2
 
 未提供总资产时只能用已取价股票市值作临时分母，可以监控但不判定预算超限，也不得授权加仓。部分持仓缺少有效行情时，仓位只能标为“已取价股票仓位（下限）”。
 
+### 有效政策与分母证据
+
+两个风险入口使用同一解析结果。政策路径优先级为本次 `--policy-file` → 环境或
+runtime.env 的 `A_STOCK_RISK_POLICY_FILE` → 配置目录 `risk-policy.json`；只读已有文件，
+不得自动创建或确认。文件须用户所有且权限 0600 或更严格，生效、有确认元数据并与
+用户本次 `--account-scope` 一致。显式覆盖值 > 有效文件 > 兼容默认；非法、未确认、
+未生效、过期或范围冲突的已选文件，即使有数值覆盖也不回退。
+
+`--portfolio-value-as-of` 记录用户给出的资产估值时点，不是报告采集时间。
+缺少时点或范围时 `denominator_requires_review=true`，仅可观察，新增风险须复核。
+不设置自动 TTL；有 as-of 也不自动证明新鲜或授予交易权限。止损距离估计、已发生
+回撤与可选 `drawdown_observation_target_pct` 分开，不承诺回撤上限，不默认写入 5%。
+
 ### 风险预算
 
 `单股当前净值回撤贡献 = 股数 × max(现价 − 第二档止损价, 0) ÷ 可投资组合总资产`

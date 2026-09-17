@@ -69,6 +69,33 @@ pair can return clean despite a budget breach; rollback therefore requires
 manual budget review or suspension of risk suggestions, not a claim of safety.
 No S1 database migration, cron change or account-data cleanup is required.
 
+## S3a read-only risk policy candidate (not deployed)
+
+Both risk commands additionally accept `--policy-file`, `--account-scope` and
+`--portfolio-value-as-of`. A shared resolver applies explicit numeric overrides,
+then a selected effective/confirmed file, then the unconfirmed 2%/8% defaults.
+A numeric override never suppresses an invalid selected file. It is not permission
+for a model to alter a user's policy or to record a trade.
+
+Policy path selection is CLI → `A_STOCK_RISK_POLICY_FILE` in environment/runtime.env
+→ `risk-policy.json` beside the selected runtime.env (the XDG config directory
+by default). Only absence of an unconfigured default permits fallback. Files are
+read-only, regular, current-user-owned and mode 0600 or stricter. No command
+creates, updates or confirms a policy file. The exact schema is in
+[spec §8.1](specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md).
+A file requires an explicit matching account scope and valid timezone-aware
+confirmation/effectivity timestamps. Source/confirmation metadata is not a W1 token.
+
+`account.portfolio_value_as_of` is the supplied asset valuation time, not snapshot
+collection time. `denominator_freshness_status=as_of_provided` does not independently
+prove freshness; no new TTL is imposed. Missing scope or as-of yields
+`denominator_requires_review=true`: no authorization for new risk, even if the
+existing-position budget report has a clean fast gate. No default 5% drawdown
+limit or maximum-drawdown guarantee is introduced.
+
+Invalid risk parameters return controlled failure before market/DB reads in the
+handler. No real policy file has been created and no active client is upgraded.
+
 ## Write boundary
 
 `set*`, alert/L3/Tier updates and holding or transaction commands are W1.

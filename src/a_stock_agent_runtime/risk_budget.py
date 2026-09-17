@@ -61,7 +61,13 @@ def policy(position: float | None = None, portfolio: float | None = None) -> dic
     }
 
 
-def assess(positions: list[dict], portfolio_value: float | None, limits: dict) -> dict:
+def assess(
+    positions: list[dict],
+    portfolio_value: float | None,
+    limits: dict,
+    *,
+    account_scope: str | None = None,
+) -> dict:
     """Keep proven breaches even when the complete risk total is unknown."""
     known = [item["stop_risk"] for item in positions if item["stop_risk"] is not None]
     lower_bound = sum(known)
@@ -87,6 +93,7 @@ def assess(positions: list[dict], portfolio_value: float | None, limits: dict) -
                         amount,
                         portfolio_value,
                         limits["max_position_risk_pct"],
+                        account_scope,
                     )
                 )
         if (
@@ -95,7 +102,11 @@ def assess(positions: list[dict], portfolio_value: float | None, limits: dict) -
         ):
             breaches.append(
                 _breach(
-                    None, lower_bound, portfolio_value, limits["max_portfolio_risk_pct"]
+                    None,
+                    lower_bound,
+                    portfolio_value,
+                    limits["max_portfolio_risk_pct"],
+                    account_scope,
                 )
             )
     return {
@@ -109,7 +120,7 @@ def assess(positions: list[dict], portfolio_value: float | None, limits: dict) -
     }
 
 
-def _breach(code, amount, denominator, limit) -> dict:
+def _breach(code, amount, denominator, limit, account_scope) -> dict:
     scope = "position" if code is not None else "portfolio"
     return {
         "code": code,
@@ -117,6 +128,6 @@ def _breach(code, amount, denominator, limit) -> dict:
             f"scope={scope}; amount={amount:.6g} CNY; "
             f"ratio={amount / denominator * 100:.6g}%; limit={limit:.6g}%; "
             f"denominator={denominator:.6g} CNY; denominator_source=cli; "
-            "account_scope=explicit_portfolio_value"
+            f"account_scope={account_scope or 'unknown'}"
         ),
     }

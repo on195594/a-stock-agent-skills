@@ -2,6 +2,8 @@
 
 ## 0.1.13 — Unreleased
 
+- 启动 S2/S3，完成 S3a 只读风险政策解析：统一两风险 CLI 的来源优先级、文件安全与账户/时点校验，非法文件不回退；不创建真实政策、不部署。见[S2/S3 记录](plans/2026-09-17-s2-s3-implementation.md)。
+
 - 完成仓库级风险闭环 S1：预算超限升级复核、未知风险 fail-closed、JSON/文本共用输入与政策参数校验；monitor-v1 合同和 Monitor Skill 协调扩展，新增只读事务、兼容矩阵及事实记账回归。未部署、当前客户端资格未验证，见[实施记录](plans/2026-09-17-risk-closure-implementation.md)。
 
 - 抽取并统一接入 monitor-v1 验证与确定性序列化；unavailable snapshot 补齐结构化 `industry_context`。
