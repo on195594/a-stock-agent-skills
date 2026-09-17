@@ -11,7 +11,7 @@ from datetime import date, datetime
 from a_stock_lib.market_data import MarketDataResult
 from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
 
-from a_stock_agent_runtime import db, domain, market_quotes, store
+from a_stock_agent_runtime import db, domain, market_quotes, risk_budget, store
 from a_stock_agent_runtime.position_ledger import (
     LifecycleReturn,
     calculate_lifecycle_return,
@@ -1543,7 +1543,11 @@ def calculate_position_risk(
     stop_loss_20: float | None,
     portfolio_value: float | None,
 ) -> dict[str, float | None]:
-    """Calculate the existing market-value and second-stop risk formula."""
+    """Validate inputs once, preserving the existing second-stop risk formula."""
+    shares = shares if risk_budget.valid_shares(shares) else None
+    current_price = current_price if risk_budget.positive_number(current_price) else None
+    stop_loss_20 = stop_loss_20 if risk_budget.positive_number(stop_loss_20) else None
+    portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
     market_value = (
         current_price * shares
         if current_price is not None and shares is not None
@@ -1554,7 +1558,10 @@ def calculate_position_risk(
         if current_price is not None and stop_loss_20 is not None and shares is not None
         else None
     )
-    return {
+    if not risk_budget.finite_number(market_value):
+        market_value = None
+        stop_risk = None
+    result = {
         "market_value": market_value,
         "portfolio_weight_pct": (
             market_value / portfolio_value * 100
@@ -1568,17 +1575,23 @@ def calculate_position_risk(
             else None
         ),
     }
+    return {
+        key: value if risk_budget.finite_number(value) else None
+        for key, value in result.items()
+    }
 
 
-def _parse_portfolio_risk_args(args: list[str] | None) -> tuple[float | None, float]:
+def _parse_portfolio_risk_args(args: list[str] | None) -> tuple[float | None, dict]:
     portfolio_value = None
-    max_position_risk_pct = 2.0
+    max_position_risk_pct = None
+    max_portfolio_risk_pct = None
     args = args or []
     i = 0
     while i < len(args):
         if args[i] not in (
             "--portfolio-value",
             "--max-position-risk-pct",
+            "--max-portfolio-risk-pct",
         ) or i + 1 >= len(args):
             print(f"错误：未知或不完整参数 {args[i]}", file=sys.stderr)
             sys.exit(1)
@@ -1590,23 +1603,29 @@ def _parse_portfolio_risk_args(args: list[str] | None) -> tuple[float | None, fl
         )
         if args[i] == "--portfolio-value":
             portfolio_value = value
-        else:
+        elif args[i] == "--max-position-risk-pct":
             max_position_risk_pct = value
+        else:
+            max_portfolio_risk_pct = value
         i += 2
-    return portfolio_value, max_position_risk_pct
+    return portfolio_value, risk_budget.policy(max_position_risk_pct, max_portfolio_risk_pct)
 
 
 def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     """Market-value weighted portfolio view with explicit stop-loss risk budget."""
-    portfolio_value, max_position_risk_pct = _parse_portfolio_risk_args(args)
+    portfolio_value, limits = _parse_portfolio_risk_args(args)
     account_value_supplied = portfolio_value is not None
-    with db.db_session() as conn:
-        holdings = conn.execute(
-            """SELECT h.code, h.name, h.cost_price, h.shares, h.buy_date, h.buy_score,
-                      f.industry, h.framework, h.framework_confident, h.stop_loss_20
-               FROM holdings h LEFT JOIN stock_fundamentals f ON h.code = f.code
-               WHERE h.exit_date IS NULL ORDER BY h.buy_date DESC"""
-        ).fetchall()
+    try:
+        with db.read_only_db_session() as conn:
+            holdings = conn.execute(
+                """SELECT h.code, h.name, h.cost_price, h.shares, h.buy_date, h.buy_score,
+                          f.industry, h.framework, h.framework_confident, h.stop_loss_20
+                   FROM holdings h LEFT JOIN stock_fundamentals f ON h.code = f.code
+                   WHERE h.exit_date IS NULL ORDER BY h.buy_date DESC"""
+            ).fetchall()
+    except (OSError, sqlite3.Error):
+        print("组合风险不可用：状态数据库缺失或 schema 不完整", file=sys.stderr)
+        raise SystemExit(1) from None
     if not holdings:
         print("暂无持仓")
         return
@@ -1636,12 +1655,19 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         else:
             fw, confident = domain.infer_framework(industry)
         quote = quotes.get(code)
-        curr = quote.price if quote and quote.quote_date == today_str else None
+        curr = quote.price if risk_budget.valid_quote(quote, today_str) else None
+        if codes.count(code) > 1:
+            curr = None  # Conflicting lifecycle rows are not independent positions.
         market_value = calculate_position_risk(shares, curr, sl20, None)["market_value"]
         valued_rows.append(
             (code, name, cost, shares, score, fw, confident, sl20, curr, market_value)
         )
 
+    risks = [
+        {"code": row[0], **calculate_position_risk(row[3], row[8], row[7], portfolio_value)}
+        for row in valued_rows
+    ]
+    budget = risk_budget.assess(risks, portfolio_value, limits)
     stock_market_value = sum(row[9] for row in valued_rows if row[9] is not None)
     valued_count = sum(row[9] is not None for row in valued_rows)
     if portfolio_value is None:
@@ -1650,7 +1676,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     else:
         denominator_label = "用户提供的可投资组合总资产"
     if portfolio_value <= 0:
-        print("  无法计算：所有持仓均缺少股数或实时价格")
+        print("  无法计算：所有持仓均缺少股数或实时价格；风险不可完整判定")
         return
 
     print(f"  风险分母：{denominator_label} = {portfolio_value:.2f}元")
@@ -1661,7 +1687,6 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     print(f"  {'─' * 100}")
 
     framework_values: dict[str, float] = {}
-    total_stop_risk = 0.0
     for (
         code,
         name,
@@ -1676,36 +1701,44 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     ) in valued_rows:
         fw_display = fw if confident else f"{fw}?"
         label = f"{name}({code})" if name else code
-        pnl_str = f"{(curr - cost) / cost * 100:+.1f}%" if curr and cost else "─"
+        pnl_str = (
+            f"{(curr - cost) / cost * 100:+.1f}%"
+            if curr is not None and risk_budget.positive_number(cost) else "─"
+        )
         curr_str = f"{curr:.2f}" if curr else "─"
         shares_str = str(shares) if shares is not None else "─"
         if market_value is None:
+            missing_status = (
+                "已破线/缺数据" if curr is not None and risk_budget.positive_number(sl20)
+                and curr <= sl20 else "缺数据"
+            )
             print(
                 f"  {label:<16} {fw_display:>5} {shares_str:>6} {curr_str:>7} "
-                f"{'─':>8} {pnl_str:>7} {'─':>9} {'─':>8} {'缺数据':>5}"
+                f"{'─':>8} {pnl_str:>7} {'─':>9} {'─':>8} {missing_status:>5}"
             )
             continue
         risk = calculate_position_risk(shares, curr, sl20, portfolio_value)
         weight_pct = risk["portfolio_weight_pct"]
         stop_risk = risk["stop_risk"]
         risk_pct = risk["stop_risk_pct"]
-        if stop_risk is not None:
-            total_stop_risk += stop_risk
         framework_values[fw] = framework_values.get(fw, 0.0) + market_value
         risk_str = f"{stop_risk:.0f}元" if stop_risk is not None else "─"
         risk_pct_str = f"{risk_pct:.2f}%" if risk_pct is not None else "─"
         status = (
             "已破线"
-            if sl20 is not None and curr <= sl20
+            if risk_budget.positive_number(sl20) and curr <= sl20
+            else "缺数据"
+            if stop_risk is None or risk_pct is None
             else "临时口径"
             if not account_value_supplied
             else "超预算"
-            if risk_pct is not None and risk_pct > max_position_risk_pct
+            if any(item["code"] == code for item in budget["breaches"])
             else "正常"
         )
+        weight_text = f"{weight_pct:.1f}%" if weight_pct is not None else "─"
         print(
             f"  {label:<16} {fw_display:>5} {shares_str:>6} {curr_str:>7} "
-            f"{weight_pct:>7.1f}% {pnl_str:>7} {risk_str:>9} {risk_pct_str:>8} {status:>5}"
+            f"{weight_text:>8} {pnl_str:>7} {risk_str:>9} {risk_pct_str:>8} {status:>5}"
         )
 
     if account_value_supplied:
@@ -1719,15 +1752,33 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     else:
         risk_summary = f"已取价股票市值：{stock_market_value:.2f}元（非账户总仓位）"
         risk_pct_label = "占已取价股票市值，临时口径"
-    print(
-        f"\n  {risk_summary} | 第二档止损总风险：{total_stop_risk:.2f}元 "
-        f"({total_stop_risk / portfolio_value * 100:.2f}%，{risk_pct_label})"
-    )
-    print(f"  行情覆盖：{valued_count}/{len(holdings)}只")
-    if account_value_supplied:
-        print(f"  单股风险预算上限：{max_position_risk_pct:.2f}%")
+    total = budget["total_stop_risk"]
+    if total is None:
+        lower_bound = budget["known_stop_risk_lower_bound"]
+        lower_text = f"{lower_bound:.2f}元" if lower_bound is not None else "不可用"
+        print(f"\n  {risk_summary} | 第二档止损总风险：不可完整判定；已知风险下限：{lower_text}")
     else:
-        print("  未提供总资产：不判定预算超限")
+        print(
+            f"\n  {risk_summary} | 第二档止损总风险：{total:.2f}元 "
+            f"({total / portfolio_value * 100:.2f}%，{risk_pct_label})"
+        )
+    print(f"  行情覆盖：{valued_count}/{len(holdings)}只")
+    print(
+        f"  单股风险预算上限：{limits['max_position_risk_pct']:.2f}% | "
+        f"组合风险预算上限：{limits['max_portfolio_risk_pct']:.2f}% | "
+        f"policy_id={limits['policy_id']}; source={limits['source']}; "
+        f"field_sources={limits['field_sources']}（未确认个人风险预算）"
+    )
+    if not account_value_supplied:
+        print("  未提供总资产：不判定预算超限；风险不可完整判定")
+    elif budget["risk_budget_status"] == "over_budget":
+        print("  已知超预算：冻结新增风险建议，仅只读复核；不阻断已成交事实记账")
+        for breach in budget["breaches"]:
+            print(f"    {breach['code'] or '组合'}: {breach['detail']}")
+    elif budget["risk_budget_status"] == "within_budget":
+        print("  本次有效参数内：预算内；已破线须单独复核，不代表安全")
+    else:
+        print("  风险不可完整判定：不得宣称组合在预算内")
     print(f"\n  框架分布（按市值，{len(holdings)} 只在仓）")
     for fw, value in sorted(framework_values.items()):
         print(f"    {fw}: {value:.2f}元 ({value / portfolio_value * 100:.1f}%)")

@@ -38,7 +38,9 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 | C/D 加仓复核 | `references/step3.5-cd-accumulation.md` |
 | A/E/F Tier 复核 | `references/step4-tier-system.md` |
 | 用户确认的交易或状态更新 | `references/data-operations.md` |
-| 组合再平衡或任何加仓 | `references/portfolio-risk.md` |
+| `risk_budget_exceeded`、组合再平衡或任何加仓 | `references/portfolio-risk.md` |
+
+`risk_budget_exceeded` 的 `code=null` 表示组合级只读复核：只消费当前快照的账户汇总和持仓，不扩展成全组合重新研究、不重复查价、不调用 W1。缺项只请求 `data_gaps` 指明的证据，不心算补全风险。`risk_policy` 的兼容默认或本次显式覆盖不等于已确认个人预算；不得自行构造覆盖参数绕过超限。超预算不能进入 clean/no_action；已有合法交易候选不因预算复核降级。
 
 动作冲突只服从 `references/decision-table.json` 及 runtime 输出。阈值、优先级、状态机、整手、组合风险与可执行性由 runtime/library 判定；Skill 不复算或从自然语言推断。
 
@@ -54,5 +56,6 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 - 账户状态、alerts/L3/Tier、最终动作及交易授权始终由父级拥有；支持任务只提供公开证据。
 - 数据缺失、过期、冲突、不可交易或 runtime 失败时 fail-closed，不得补造触发、股数或成交。
 - 持仓、交易账本、预警、L3 与 Tier 写入均属 W1。仅在用户确认具体动作后追加全局 `--confirm-write`；建议、授权、申报与成交必须分开。
+- 冻结新增风险仅约束拟议决策与建议授权，不阻断用户确认的已成交事实记账；即使实际买入造成超预算，也按原 W1 门禁记录并报告异常，不拒记、不改写成交。预算只读复核的 `requires_user_confirmation=false` 不授予任何写权限。
 - `a-stock-qa` 尚无 monitor rubric，监控任务不得调用它。
 - 本 Skill 基于公开信息和用户提供的账户状态，不构成投资建议。

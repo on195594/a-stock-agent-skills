@@ -268,7 +268,8 @@ def test_clean_five_holding_fast_gate_uses_one_read_session_one_quote_batch_and_
     monkeypatch.setattr(db, "read_only_db_session", counted_session)
     monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", fetch)
 
-    result, payload = _run(capsys, ["--portfolio-value", "100000"])
+    # Synthetic clean scenario: 62,000 risk on 1M stays inside both budgets.
+    result, payload = _run(capsys, ["--portfolio-value", "1000000"])
 
     assert result == 0
     assert session_count == 1
@@ -667,6 +668,8 @@ def test_frozen_five_holding_replay_freezes_new_risk_without_trade_candidate(
     assert {(item["code"], item["reason_code"]) for item in payload["escalations"]} == {
         ("603606", "alert_review_due"),
         ("002050", "alert_review_due"),
+        *((code, "risk_budget_exceeded") for code in expected),
+        (None, "risk_budget_exceeded"),
     }
     assert payload["manifest"]["research_subagents"] == 0
     assert payload["manifest"]["writes"] is False
@@ -996,7 +999,8 @@ def test_tier_review_price_entrances(
         lambda codes: _quotes(codes, price=price),
     )
 
-    result, payload = _run(capsys, ["--portfolio-value", "100000"])
+    # Isolate Tier routing from the separately tested budget upgrade.
+    result, payload = _run(capsys, ["--portfolio-value", "300000"])
 
     assert result == 0
     assert payload["action_status"] == ("review_candidate" if reached else "no_action")
@@ -1082,7 +1086,7 @@ def test_later_tier_pending_does_not_block_clean_gate_or_repeat_tier1(
         "fetch_current_price_quotes",
         lambda codes: _quotes(codes, price=125),
     )
-    result, payload = _run(capsys, ["--portfolio-value", "100000"])
+    result, payload = _run(capsys, ["--portfolio-value", "300000"])
     assert result == 0
     assert payload["data_status"] == "complete"
     assert payload["review_status"] == "cleared"

@@ -7,7 +7,7 @@ not authorize deployment, production configuration or investment parameter chang
 ## Status and baseline
 
 - S0: repository HEAD/worktree checks complete; production NOT_VERIFIED.
-- S1: PARTIALLY_IMPLEMENTED_NOT_DEPLOYED (RISK-04 and RISK-05 only).
+- S1: IMPLEMENTED_NOT_DEPLOYED (RISK-01–05; current-client qualification remains NOT_VERIFIED).
 - S2, S3a, S3b: not started. S4: DEFERRED / CONDITIONAL.
 - Agent initial local and remote master: `2000d750ca66b4c31e503c6c7656fbbf9a6095ea`.
 - Tracker unchanged local and remote master: `69f11c99d1720f2dad07113b46f17f5d87a3975d`.
@@ -75,17 +75,110 @@ client entry, W1 fact or real notification was changed.
 
 ## Remaining work and rollback
 
-Next: RISK-01/02/03 budget escalation, shared input validation, contract
-invariants, coordinated Skill extension and text risk output. A01–A11,
-A13–A18 and A21–A22 are not claimed as new-spec acceptance; existing historical
-checks do not establish the new budget semantics. A14's broader new-delivery
-side-effect coverage still belongs to that work. S1 is not complete.
+The first delivery left RISK-01/02/03 outstanding. The subsequent S1 delivery
+below completes the repository implementation and A01–A22 fixture evidence;
+it does not complete production or real-client qualification.
 
 S0 still requires remaining client inventory and authorized production evidence;
 S2 requires Tracker-specific source/spec analysis; S3 requires its own bounded
 implementation. No real investment or account-performance result is claimed.
 
-Rollback is `git revert` of this delivery commit in a non-active master
-checkout. No data migration or account-file cleanup is needed. These two
-repairs alone introduce no new monitor enum compatibility set; do not label
-this commit as delivery of the later coordinated budget extension.
+The first delivery is `10dd9a2da6c963f6c6e11905f270bf3fa507d116` and introduced
+no enum extension. Revert subsequent S1 code only as a complete producer,
+validator, CLI and Skill set in a non-active master checkout. No data migration
+or account-file cleanup is needed. Restoring the old runtime restores the
+known unsafe clean behavior: retain manual budget review / suspend automated
+risk suggestions until repaired; rollback is not risk acceptance.
+
+## Remaining S1 delivery — current contract
+
+Starting isolated/local and remote Agent HEAD: `10dd9a2da6c963f6c6e11905f270bf3fa507d116`.
+The resulting implementation is the commit containing this ledger update;
+release commit and package/Skill hashes identify its compatibility set.
+Original active checkout remains at `2000d750ca66b4c31e503c6c7656fbbf9a6095ea`.
+Tracker and lib HEADs listed above remain unchanged. The additional Hermes
+entries under `.hermes/skills/research` were read-only inspected and also point
+at the original active checkout. No external independently upgradeable consumer
+was found in repository call sites; uninspected clients remain unverified.
+
+Changes:
+
+- RISK-01: one small `risk_budget.py` shares quote/input checks and budget
+  assessment. The original economic formula remains in `calculate_position_risk`.
+  Proven position/portfolio breaches produce `risk_budget_exceeded` reviews,
+  including when another risk is unknown. Complete totals remain null where
+  incomplete; the known lower bound is separate. Actual default/override policy
+  metadata is explicit. No personal policy, threshold change or W1 gate added.
+- RISK-02: current monitor-v1 consumers require safety evidence, matching active
+  counts, valid account numbers and budget/status consistency. Clean holdings
+  need usable quote and risk evidence. Budget escalation cannot clear review,
+  duplicate a scope/code or manufacture a trade candidate. Existing valid
+  trade candidates and blocked-data precedence remain intact.
+- RISK-03: text risk uses the same validation, limits and assessment; invalid
+  inputs never print normal, incomplete totals remain unknown, and broken
+  stops are separate from remaining-distance risk. Database reads cannot
+  bootstrap missing schema. Both CLIs register explicit per-name/portfolio
+  overrides and show their source; unconfirmed compatibility defaults stay 2/8.
+- Skill routes code=null to portfolio-only review of the current snapshot;
+  no repeated quotes, full-portfolio research, W1 calls or mental risk completion.
+  Proposed new risk is frozen, but confirmed executed facts retain the existing
+  concrete-action/global-confirmation recording path.
+- Immutable captures and fixture source hashes were not rewritten. The live
+  capture test now verifies its historical Skill bytes at its recorded commit,
+  rather than incorrectly treating old capture as qualification of today's Skill.
+  Synthetic clean/Tier scenarios now use genuinely within-budget denominators;
+  original over-budget five-holding inputs explicitly test the new escalations.
+
+### A01–A22 evidence map
+
+Names below are pytest functions. Unless otherwise stated they live in
+`tests/monitor/test_risk_closure.py`; they use synthetic state, not real accounts.
+
+| ID | Actual regression evidence |
+|---|---|
+| A01–A04 | `test_budget_controls_review` (single breach, portfolio-only breach, exact 2/8 boundaries, within-budget clean); `test_budget_does_not_compare_rounded_percentages` |
+| A05 | `test_unknown_inputs_never_mean_zero_risk`, `test_text_unknown_risk_never_prints_normal`, `test_text_and_json_share_quote_validation` |
+| A06 | `test_invalid_denominator_does_not_clear_even_empty` |
+| A07 | `test_text_distinguishes_breach_and_unknown_and_broken_stop`; existing P3 and stop-tier tests |
+| A08 | `test_budget_does_not_downgrade_legal_trade_candidate` (reduce and exit) |
+| A09 | `test_known_breach_survives_other_unknown_risk`; existing stale/unavailable/conflicted snapshot tests |
+| A10 | `test_valid_empty_account_keeps_original_requirements`, `test_text_missing_database_does_not_bootstrap`; existing missing-database JSON test |
+| A11 | `test_contract_rejects_over_budget_clean_combinations`, `test_contract_requires_current_safety_evidence`, `test_duplicate_holdings_remain_visible_but_not_known_risk` |
+| A12 | `tests/test_monitor_contract.py::test_invalid_stop_reason_raises_contract_error` (object and JSON) |
+| A13 | `test_both_public_clis_consume_same_input_and_policy` plus text/JSON invalid-input cases |
+| A14 | `test_risk_commands_do_not_write_migrate_or_network`: authorizer, SQL trace, business/schema dump equality, socket and external-command spies; missing-schema test; full cron fixture disables notifications |
+| A15 | `test_portfolio_escalation_routes_only_to_existing_reference`: actual portfolio-only escalation matched to the current Skill table and bounded reference; no real model claim |
+| A16 | `test_new_old_contract_matrix_without_a_legacy_runtime_switch`: fixed old producer/validator source, current producer/validator, both crossing directions; old unsafe clean explicitly recorded, old rejection not represented as supported compatibility |
+| A17 | `test_known_breach_survives_other_unknown_risk`, `test_known_portfolio_lower_bound_can_already_exceed_limit` |
+| A18 | `test_confirmed_executed_buy_is_not_blocked_by_budget`: unconfirmed exit 3, confirmed fixture buy recorded, subsequent snapshot still reports breach |
+| A19–A20 | `test_monitor_snapshot.py::test_local_snapshot_keeps_one_wal_version`, `test_local_snapshot_releases_transaction_and_connection`, and the one-session/one-quote-batch test |
+| A21 | current full suite, `tests/test_agent_tool_e2e.py` recorded-source/Skill hashes, unchanged historical capture files |
+| A22 | `test_contract_requires_current_safety_evidence`, `test_clean_contract_rejects_invalid_holding_risk`, `test_clean_contract_requires_usable_quote_evidence`, `test_omitted_stop_reason_cannot_bypass_clean_evidence` |
+
+### Verification and boundaries
+
+In the same isolated environment as the first delivery:
+
+- `bash scripts/check.sh`: exit 0, **1183 passed, 2 skipped**; Ruff, Skill
+  validation, regulatory freshness, `python3 -I` standalone QA and disabled
+  notification cron fixture all passed. Optional sibling source/wheel
+  installation scenarios remain skipped because A_STOCK_LIB_SOURCE is unset.
+- `.venv/bin/python -m pytest -q tests/monitor/test_risk_closure.py tests/test_monitor_contract.py tests/monitor/test_monitor_snapshot.py`:
+  exit 0, **273 passed**.
+- `git diff --check`: exit 0. Full log: `/tmp/a-stock-s1-check.log` (outside Git).
+- Real Codex CLI independent read-only review initially requested two fixes:
+  cleared/no_action without a clean gate, and over_budget without risk evidence.
+  Both were fixed and regression-tested. Targeted follow-up returned PASS with
+  no remaining direct blocker in those fixes; the reviewer did not run tests.
+  Reports remain outside Git: `/tmp/a-stock-s1-independent-review.txt` and
+  `/tmp/a-stock-s1-review-followup.txt`. This is code review, not client qualification.
+- No production database, broker account, live quote service, schema, cron or
+  active client entry was modified/accessed by these fixture checks. No real
+  notifications were sent. Real-client fake-tool budget qualification is
+  **NOT_VERIFIED** for Claude, Codex and Hermes; historical captures do not
+  replace it. Production is **NOT_VERIFIED / NOT_DEPLOYED**.
+- Network use is limited here to Git reference/push operations, dependency
+  tooling if needed, and independent read-only Codex CLI code review. That
+  review is not a real-client monitoring qualification test.
+- S2/S3 are not started, S4 remains deferred. There is no investment-validity
+  or personal-account-return claim. Deployment remains separately authorized.

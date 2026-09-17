@@ -51,11 +51,6 @@ EXPECTED_CALLS = [
 
 def test_live_model_invoked_only_the_expected_fake_tools() -> None:
     capture = json.loads(CAPTURE.read_text(encoding="utf-8"))
-    skills = "\0".join(
-        (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
-        for name in ("a-stock-research", "a-stock-monitor")
-    )
-
     assert capture["schema_version"] == 1
     assert capture["provider"] == "openai-codex"
     assert capture["model"] == "gpt-5.6-sol"
@@ -79,21 +74,20 @@ def test_live_model_invoked_only_the_expected_fake_tools() -> None:
         hashlib.sha256(recorded_source).hexdigest() == capture["capture_source_sha256"]
     )
 
-    expected_skill_hashes = {
-        name: hashlib.sha256(
-            (ROOT / "skills" / name / "SKILL.md").read_bytes()
-        ).hexdigest()
-        for name in ("a-stock-research", "a-stock-monitor")
-    }
-    assert capture["skill_sha256"] == expected_skill_hashes
-    for name, expected_hash in expected_skill_hashes.items():
-        recorded_skill = subprocess.check_output(
+    # Immutable historical qualification is bound to its release, not today's Skill.
+    recorded_skills = {
+        name: subprocess.check_output(
             ["git", "show", f"{repository_head}:skills/{name}/SKILL.md"], cwd=ROOT
         )
-        assert hashlib.sha256(recorded_skill).hexdigest() == expected_hash
-    assert (
-        capture["source_skills_sha256"] == hashlib.sha256(skills.encode()).hexdigest()
-    )
+        for name in ("a-stock-research", "a-stock-monitor")
+    }
+    assert capture["skill_sha256"] == {
+        name: hashlib.sha256(content).hexdigest()
+        for name, content in recorded_skills.items()
+    }
+    assert capture["source_skills_sha256"] == hashlib.sha256(
+        b"\0".join(recorded_skills.values())
+    ).hexdigest()
     assert capture["exposed_tools"] == [
         "a_stock_cache",
         "a_stock_fetch",

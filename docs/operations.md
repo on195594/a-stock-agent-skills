@@ -46,6 +46,29 @@ A_STOCK_NOTIFY_MODE=disabled \
   bash scripts/check-holdings-cron.sh
 ```
 
+## S1 risk closure candidate (not deployed)
+
+`monitor-snapshot --json` and `portfolio-risk` accept the same optional
+`--portfolio-value`, `--max-position-risk-pct` and `--max-portfolio-risk-pct`.
+Absent overrides, limits remain 2% / 8%, explicitly marked unconfirmed
+compatibility defaults. The report displays the effective source; models must
+not invent overrides to bypass a breach. Missing total assets or risk inputs
+cannot establish budget compliance. A known breach remains visible even if
+another holding is unpriced; complete total risk remains unavailable.
+
+Budget review is read-only. It does not sell, change stops, persist alerts or
+block recording a user-confirmed broker execution under existing W1 rules.
+The `risk_budget_exceeded` reason requires the matching monitor-v1 validator,
+CLI and Skill release set; see [runtime contracts](architecture/runtime-contracts.md).
+
+S1 work is isolated from the active Skill symlinks. Do not pull the new source
+into that active working tree as an implicit deployment. Deploy only under a
+separate authorization using a complete immutable release directory, after
+client qualification and compatibility inventory. The old producer/consumer
+pair can return clean despite a budget breach; rollback therefore requires
+manual budget review or suspension of risk suggestions, not a claim of safety.
+No S1 database migration, cron change or account-data cleanup is required.
+
 ## Write boundary
 
 `set*`, alert/L3/Tier updates and holding or transaction commands are W1.

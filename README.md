@@ -23,7 +23,12 @@ one explicit catalog; and the three Skills remain thin routers. Eight captured
 Hermes scenarios have deterministic offline checks. One fixed
 `openai-codex/gpt-5.6-sol` session also executes three critical routes directly
 against isolated in-process fake tools with source and isolation provenance.
-All nine client Skill entries resolve directly to `skills/`.
+All nine client Skill entries resolve directly to the active checkout's `skills/`.
+The S1 risk-closure candidate is prepared separately: budget breaches now require
+review, unknown risk fails closed, and local monitor reads share one transaction.
+Its monitor-v1 vocabulary extension requires a coordinated runtime/Skill release;
+it is **not deployed or qualified for live clients**. Historical model captures
+remain historical evidence. See the [S1 implementation ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the

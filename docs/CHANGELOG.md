@@ -2,7 +2,7 @@
 
 ## 0.1.13 — Unreleased
 
-- 部分推进风险闭环 S1：本地监控快照使用显式一致读事务，非法 `stop_reason` 统一抛出合同异常；新增并发及异常释放回归。预算闭环尚未完成、未部署，见[实施记录](plans/2026-09-17-risk-closure-implementation.md)。
+- 完成仓库级风险闭环 S1：预算超限升级复核、未知风险 fail-closed、JSON/文本共用输入与政策参数校验；monitor-v1 合同和 Monitor Skill 协调扩展，新增只读事务、兼容矩阵及事实记账回归。未部署、当前客户端资格未验证，见[实施记录](plans/2026-09-17-risk-closure-implementation.md)。
 
 - 抽取并统一接入 monitor-v1 验证与确定性序列化；unavailable snapshot 补齐结构化 `industry_context`。
 - 将 A–F 行业路由、组合标签和止损系数移入显式 catalog，移除 domain 对 checklist import side effect 的依赖。

@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from a_stock_agent_runtime import commands_monitor, monitor_contract
+from a_stock_agent_runtime import commands_monitor, monitor_contract, risk_budget
 
 
 def test_escalation_sort_order_matches_contract_vocabulary() -> None:
@@ -23,7 +23,17 @@ def _snapshot(*, clean: bool = True) -> dict:
         "valuation_status": "exact" if clean else "unavailable",
         "review_status": "cleared" if clean else "blocked",
         "action_status": "no_action" if clean else "review_candidate",
-        "account": {},
+        "account": {
+            "portfolio_value": 100000,
+            "denominator_status": "explicit",
+            "stock_market_value": 0 if clean else None,
+            "stock_weight_pct": 0 if clean else None,
+            "total_stop_risk": 0 if clean else None,
+            "total_stop_risk_pct": 0 if clean else None,
+            "known_stop_risk_lower_bound": 0 if clean else None,
+            "risk_budget_status": "within_budget" if clean else None,
+            "risk_policy": risk_budget.policy(),
+        },
         "quote_coverage": {"priced": 0, "active": 0, "complete": clean},
         "industry_context": {
             "status": "not_applicable",
@@ -228,7 +238,7 @@ def test_nonfinite_numbers_are_rejected(constant: float) -> None:
 
 @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
 def test_loads_rejects_nonfinite_json_constants(constant: str) -> None:
-    text = json.dumps(_snapshot()).replace("{}", f'{{"value":{constant}}}', 1)
+    text = json.dumps(_snapshot()).replace('"portfolio_value": 100000', f'"portfolio_value": {constant}', 1)
     with pytest.raises(monitor_contract.MonitorContractError, match="finite"):
         monitor_contract.loads_monitor_snapshot(text)
 

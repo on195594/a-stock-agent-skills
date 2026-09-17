@@ -31,6 +31,7 @@ ESCALATION_REASON_CODES = frozenset(
         "l3_review_due",
         "l3_candidate",
         "governance_gate",
+        "risk_budget_exceeded",
         "quote_gap",
         "denominator_missing",
         "data_conflict",
@@ -130,7 +131,98 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
     _supported(value["valuation_status"], VALUATION_STATUSES, "valuation_status")
     _supported(value["review_status"], REVIEW_STATUSES, "review_status")
     action_status = _supported(value["action_status"], ACTION_STATUSES, "action_status")
-    _object(value["account"], "account")
+    account = _object(value["account"], "account")
+    _required(
+        account,
+        {
+            "portfolio_value",
+            "denominator_status",
+            "stock_market_value",
+            "stock_weight_pct",
+            "total_stop_risk",
+            "total_stop_risk_pct",
+            "known_stop_risk_lower_bound",
+            "risk_budget_status",
+            "risk_policy",
+        },
+        "account",
+    )
+    for field in (
+        "portfolio_value",
+        "stock_market_value",
+        "stock_weight_pct",
+        "total_stop_risk",
+        "total_stop_risk_pct",
+        "known_stop_risk_lower_bound",
+    ):
+        number = account[field]
+        if number is not None and (
+            isinstance(number, bool)
+            or not isinstance(number, (int, float))
+            or number < 0
+            or field == "portfolio_value"
+            and number == 0
+        ):
+            raise MonitorContractError(
+                f"account.{field} must be a valid number or null"
+            )
+    denominator_status = _supported(
+        account["denominator_status"],
+        frozenset({"explicit", "missing"}),
+        "account.denominator_status",
+    )
+    if (account["portfolio_value"] is not None) != (denominator_status == "explicit"):
+        raise MonitorContractError("account denominator evidence is inconsistent")
+    budget_status = account["risk_budget_status"]
+    if budget_status is not None:
+        _supported(
+            budget_status,
+            frozenset({"within_budget", "over_budget"}),
+            "risk_budget_status",
+        )
+        if account["portfolio_value"] is None:
+            raise MonitorContractError("risk budget requires an explicit denominator")
+    if budget_status == "within_budget" and (
+        account["total_stop_risk"] is None or account["total_stop_risk_pct"] is None
+    ):
+        raise MonitorContractError("within_budget requires complete risk totals")
+    if (
+        account["total_stop_risk"] is None
+        and account["total_stop_risk_pct"] is not None
+    ):
+        raise MonitorContractError(
+            "incomplete risk total cannot have a complete percentage"
+        )
+    if account["total_stop_risk"] is not None and (
+        account["known_stop_risk_lower_bound"] != account["total_stop_risk"]
+    ):
+        raise MonitorContractError(
+            "complete risk total must match its known lower bound"
+        )
+    policy = _object(account["risk_policy"], "account.risk_policy")
+    _required(
+        policy,
+        {
+            "policy_id",
+            "source",
+            "max_position_risk_pct",
+            "max_portfolio_risk_pct",
+            "field_sources",
+        },
+        "account.risk_policy",
+    )
+    _nonempty(policy["policy_id"], "risk_policy.policy_id")
+    _nonempty(policy["source"], "risk_policy.source")
+    sources = _object(policy["field_sources"], "risk_policy.field_sources")
+    for field in ("max_position_risk_pct", "max_portfolio_risk_pct"):
+        number = policy[field]
+        if (
+            isinstance(number, bool)
+            or not isinstance(number, (int, float))
+            or number <= 0
+        ):
+            raise MonitorContractError(f"risk_policy.{field} must be positive")
+        _nonempty(sources.get(field), f"risk_policy.field_sources.{field}")
 
     coverage = _object(value["quote_coverage"], "quote_coverage")
     _required(coverage, {"priced", "active", "complete"}, "quote_coverage")
@@ -169,6 +261,8 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
         raise MonitorContractError("complete industry_context cannot have error_code")
 
     holdings = _array(value["holdings"], "holdings")
+    if coverage["active"] != len(holdings):
+        raise MonitorContractError("quote_coverage.active must match holdings count")
     holding_fields = {"id", "code", "name", "framework", "framework_confident", "quote"}
     for index, raw in enumerate(holdings):
         holding = _object(raw, f"holdings[{index}]")
@@ -191,6 +285,25 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
                 f"holdings[{index}].framework_confident must be a boolean"
             )
         _object(holding["quote"], f"holdings[{index}].quote")
+        for field in (
+            "market_value",
+            "portfolio_weight_pct",
+            "stop_risk",
+            "stop_risk_pct",
+        ):
+            number = holding.get(field)
+            if number is not None and (
+                isinstance(number, bool)
+                or not isinstance(number, (int, float))
+                or number < 0
+            ):
+                raise MonitorContractError(
+                    f"holdings[{index}].{field} must be non-negative or null"
+                )
+            if budget_status == "within_budget" and number is None:
+                raise MonitorContractError(
+                    "within_budget requires complete holding risk evidence"
+                )
 
     escalations = _array(value["escalations"], "escalations")
     for index, raw in enumerate(escalations):
@@ -248,6 +361,87 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
     if manifest["stop_reason"] != stop_reason:
         raise MonitorContractError("manifest.stop_reason must match stop_reason")
 
+    budget_escalations = [
+        item for item in escalations if item["reason_code"] == "risk_budget_exceeded"
+    ]
+    if any(
+        item["code"] is not None
+        and item["code"] not in {holding["code"] for holding in holdings}
+        for item in budget_escalations
+    ):
+        raise MonitorContractError(
+            "position budget escalation requires an active holding code"
+        )
+    if len({item["code"] for item in budget_escalations}) != len(budget_escalations):
+        raise MonitorContractError("duplicate risk budget escalation scope/code")
+    if budget_escalations:
+        known = account["known_stop_risk_lower_bound"]
+        if known is None or known <= 0:
+            raise MonitorContractError(
+                "budget escalation requires a positive known risk lower bound"
+            )
+        for escalation in budget_escalations:
+            if not any(
+                (escalation["code"] is None or item["code"] == escalation["code"])
+                and item.get("stop_risk") is not None
+                and item["stop_risk"] > 0
+                for item in holdings
+            ):
+                raise MonitorContractError(
+                    "budget escalation requires corresponding holding risk evidence"
+                )
+    if budget_escalations and (
+        budget_status != "over_budget"
+        or any(item["candidate"] != "review" for item in budget_escalations)
+    ):
+        raise MonitorContractError(
+            "budget escalations require over_budget and review candidates"
+        )
+    if budget_status == "over_budget" and (
+        not budget_escalations
+        or value["review_status"] == "cleared"
+        or action_status == "no_action"
+        or stop_reason == "clean_fast_gate"
+    ):
+        raise MonitorContractError(
+            "over_budget cannot clear review or produce no_action/clean"
+        )
+    if (
+        holdings
+        and budget_status is None
+        and (value["review_status"] == "cleared" or action_status == "no_action")
+    ):
+        raise MonitorContractError("unknown holding risk budget cannot clear review")
+    if stop_reason == "clean_fast_gate" and (
+        budget_status != "within_budget"
+        or account["portfolio_value"] is None
+        or holdings
+        and (
+            account["stock_market_value"] is None
+            or account["stock_weight_pct"] is None
+            or any(
+                item.get(field) is None
+                for item in holdings
+                for field in (
+                    "market_value",
+                    "stop_risk",
+                    "stop_risk_pct",
+                    "portfolio_weight_pct",
+                )
+            )
+        )
+    ):
+        raise MonitorContractError(
+            "clean_fast_gate requires complete budget safety evidence"
+        )
+
+    if (
+        action_status == "no_action" or value["review_status"] == "cleared"
+    ) and stop_reason != "clean_fast_gate":
+        raise MonitorContractError(
+            "cleared/no_action requires clean_fast_gate safety evidence"
+        )
+
     if data_status != "complete" and action_status == "no_action":
         raise MonitorContractError("incomplete data cannot produce no_action")
     if action_status == "trade_candidate" and not any(
@@ -264,6 +458,29 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
         and not any(item["field"] == "industry_context" for item in gaps)
     ):
         raise MonitorContractError("degraded industry_context requires a data gap")
+    if stop_reason == "clean_fast_gate":
+        for holding in holdings:
+            quote = holding["quote"]
+            if quote.get("status") != "fresh":
+                raise MonitorContractError(
+                    "clean_fast_gate requires fresh holding quotes"
+                )
+            for field, number in (
+                ("price", quote.get("price")),
+                ("stop_loss_20", holding.get("stop_loss_20")),
+            ):
+                if (
+                    isinstance(number, bool)
+                    or not isinstance(number, (int, float))
+                    or number <= 0
+                ):
+                    raise MonitorContractError(
+                        f"clean_fast_gate requires valid {field}"
+                    )
+            if type(holding.get("shares")) is not int or holding["shares"] <= 0:
+                raise MonitorContractError("clean_fast_gate requires valid shares")
+            _nonempty(quote.get("source"), "clean quote.source")
+            _iso8601(quote.get("as_of"), "clean quote.as_of")
     if stop_reason == "clean_fast_gate" and (
         value["data_status"] != "complete"
         or value["valuation_status"] != "exact"

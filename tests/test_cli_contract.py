@@ -98,12 +98,12 @@ CLI_ARGUMENT_CASES = {
     "position-return": (["600000"], ["600000", "10"]),
     "portfolio-risk": (
         [],
-        ["--portfolio-value", "100000", "--max-position-risk-pct", "2"],
+        ["--portfolio-value", "100000", "--max-position-risk-pct", "2", "--max-portfolio-risk-pct", "8"],
     ),
     "check-holdings": ([], []),
     "monitor-snapshot": (
         ["--json"],
-        ["--portfolio-value", "100000", "--json"],
+        ["--portfolio-value", "100000", "--max-position-risk-pct", "2", "--max-portfolio-risk-pct", "8", "--json"],
     ),
     "watchlist": ([], ["--json", "--breakdown"]),
     "list": ([], []),

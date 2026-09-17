@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import sqlite3
 import sys
 import time
@@ -24,6 +23,7 @@ from a_stock_agent_runtime import (
     db,
     domain,
     monitor_contract,
+    risk_budget,
     risk_gates,
 )
 
@@ -46,6 +46,7 @@ _ESCALATION_REASON_ORDER = (
     "l3_review_due",
     "l3_candidate",
     "governance_gate",
+    "risk_budget_exceeded",
     "quote_gap",
     "denominator_missing",
     "data_conflict",
@@ -54,11 +55,7 @@ _REASON_ORDER = {reason: index for index, reason in enumerate(_ESCALATION_REASON
 
 
 def _finite(value: Any) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-    )
+    return risk_budget.finite_number(value)
 
 
 def _number(value: Any) -> float | None:
@@ -347,8 +344,11 @@ def build_monitor_snapshot(
     industry_result: MarketDataResult[dict[str, str]] | None = None,
     now: datetime | None = None,
     stage_timings_ms: dict[str, int] | None = None,
+    risk_policy: dict | None = None,
 ) -> dict[str, Any]:
     """Purely combine one local snapshot and one shared quote snapshot."""
+    portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
+    limits = risk_policy if risk_policy is not None else risk_budget.policy()
     current = now or domain.cst_now()
     today = current.date()
     today_text = today.isoformat()
@@ -402,12 +402,10 @@ def build_monitor_snapshot(
     priced = 0
     valued = 0
     total_market_value = 0.0
-    total_stop_risk = 0.0
-    stop_risk_complete = True
     for holding in holdings:
         code = holding["code"]
         required_fields = {
-            "shares": type(holding["shares"]) is int and holding["shares"] > 0,
+            "shares": risk_budget.valid_shares(holding["shares"]),
             "framework": bool(holding["framework"] and holding["framework_confident"]),
             "stop_loss_15": _finite(holding["stop_loss_15"])
             and holding["stop_loss_15"] > 0,
@@ -420,15 +418,7 @@ def build_monitor_snapshot(
                 _add_gap(gaps, code, field, f"reconcile holding {field}")
 
         quote = quotes.get(code)
-        quote_valid = bool(
-            quote
-            and _finite(quote.price)
-            and quote.price > 0
-            and quote.quote_date == today_text
-            and risk_gates._parse_time(quote.quote_as_of) is not None
-            and quote.source
-            and not quote.conflicted
-        )
+        quote_valid = risk_budget.valid_quote(quote, today_text)
         if quote and quote.conflicted:
             conflicted = True
             _add_escalation(
@@ -450,7 +440,7 @@ def build_monitor_snapshot(
             priced += 1
 
         risk = commands_holdings.calculate_position_risk(
-            holding["shares"] if required_fields["shares"] else None,
+            holding["shares"] if required_fields["shares"] and code not in duplicate_codes else None,
             current_price,
             holding["stop_loss_20"] if required_fields["stop_loss_20"] else None,
             portfolio_value,
@@ -458,10 +448,11 @@ def build_monitor_snapshot(
         if risk["market_value"] is not None:
             valued += 1
             total_market_value += risk["market_value"]
-        if risk["stop_risk"] is not None:
-            total_stop_risk += risk["stop_risk"]
-        else:
-            stop_risk_complete = False
+        if risk["stop_risk"] is None or (
+            portfolio_value is not None and risk["stop_risk_pct"] is None
+        ):
+            partial = True
+            _add_gap(gaps, code, "stop_risk", "restore valid risk inputs")
 
         previous_close = _number(quote.previous_close) if quote else None
         if previous_close is None or previous_close <= 0:
@@ -743,7 +734,7 @@ def build_monitor_snapshot(
                 "id": holding["id"],
                 "code": code,
                 "name": holding["name"],
-                "shares": holding["shares"],
+                "shares": holding["shares"] if required_fields["shares"] else None,
                 "cost_price": holding["cost_price"],
                 "reference_cost": holding["reference_cost"],
                 "framework": holding["framework"],
@@ -761,6 +752,14 @@ def build_monitor_snapshot(
         )
 
     active_count = len(holdings)
+    stock_market_value = _number(total_market_value) if valued else None
+    stock_weight_pct = (
+        _number(total_market_value / portfolio_value * 100)
+        if valued and portfolio_value is not None else None
+    )
+    if valued and (stock_market_value is None or portfolio_value is not None and stock_weight_pct is None):
+        partial = True
+        _add_gap(gaps, None, "account_valuation", "restore finite account valuation inputs")
     if active_count and priced == 0 and not stale and not conflicted:
         data_status = "unavailable"
     elif conflicted:
@@ -781,17 +780,11 @@ def build_monitor_snapshot(
         else "exact"
     )
     quote_complete = priced == active_count
-    total_stop_risk_pct = (
-        total_stop_risk / portfolio_value * 100
-        if portfolio_value is not None and stop_risk_complete
-        else None
-    )
-    risk_budget_status = None
-    if total_stop_risk_pct is not None:
-        over_budget = total_stop_risk_pct > 8 or any(
-            (item["stop_risk_pct"] or 0) > 2 for item in output_holdings
+    budget = risk_budget.assess(output_holdings, portfolio_value, limits)
+    for breach in budget.pop("breaches"):
+        _add_escalation(
+            escalations, breach["code"], "risk_budget_exceeded", breach["detail"]
         )
-        risk_budget_status = "over_budget" if over_budget else "within_budget"
 
     escalations.sort(
         key=lambda item: (
@@ -806,7 +799,7 @@ def build_monitor_snapshot(
     )
     if data_status in {"stale", "unavailable", "conflicted"}:
         review_status = "blocked"
-    elif data_status == "partial" or escalations:
+    elif data_status == "partial" or escalations or budget["risk_budget_status"] is None:
         review_status = "review_required"
     else:
         review_status = "cleared"
@@ -822,6 +815,10 @@ def build_monitor_snapshot(
         and valuation_status == "exact"
         and review_status == "cleared"
         and action_status == "no_action"
+        and budget["risk_budget_status"] == "within_budget"
+        and quote_complete
+        and not escalations
+        and not gaps
     )
     payload = {
         "schema_version": 1,
@@ -836,15 +833,10 @@ def build_monitor_snapshot(
             "denominator_status": "explicit"
             if portfolio_value is not None
             else "missing",
-            "stock_market_value": total_market_value if valued else None,
-            "stock_weight_pct": (
-                total_market_value / portfolio_value * 100
-                if valued and portfolio_value is not None
-                else None
-            ),
-            "total_stop_risk": total_stop_risk if stop_risk_complete and valued else None,
-            "total_stop_risk_pct": total_stop_risk_pct,
-            "risk_budget_status": risk_budget_status,
+            "stock_market_value": stock_market_value,
+            "stock_weight_pct": stock_weight_pct,
+            **budget,
+            "risk_policy": limits,
         },
         "quote_coverage": {
             "priced": priced,
@@ -894,7 +886,10 @@ def build_monitor_snapshot(
     return payload
 
 
-def unavailable_monitor_snapshot(portfolio_value: float | None) -> dict[str, Any]:
+def unavailable_monitor_snapshot(
+    portfolio_value: float | None, risk_policy: dict | None = None
+) -> dict[str, Any]:
+    portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
     payload = {
         "schema_version": 1,
         "as_of": domain.cst_now().isoformat(),
@@ -913,6 +908,8 @@ def unavailable_monitor_snapshot(portfolio_value: float | None) -> dict[str, Any
             "total_stop_risk": None,
             "total_stop_risk_pct": None,
             "risk_budget_status": None,
+            "known_stop_risk_lower_bound": None,
+            "risk_policy": risk_policy if risk_policy is not None else risk_budget.policy(),
         },
         "quote_coverage": {"priced": 0, "active": 0, "complete": False},
         "industry_context": {
@@ -954,30 +951,25 @@ def unavailable_monitor_snapshot(portfolio_value: float | None) -> dict[str, Any
     return payload
 
 
-def _parse_monitor_snapshot_args(args: list[str]) -> float | None:
+def _parse_monitor_snapshot_args(args: list[str]) -> tuple[float | None, dict]:
     if "--json" not in args:
         _fail("monitor-snapshot requires --json")
-    values = [arg for arg in args if arg != "--json"]
-    if not values:
-        return None
-    if len(values) != 2 or values[0] != "--portfolio-value":
-        _fail("usage: monitor-snapshot --portfolio-value <total_assets> --json")
-    return commands_holdings._parse_cli_finite_float(
-        values[1], "--portfolio-value", minimum=0, strict_minimum=True
+    return commands_holdings._parse_portfolio_risk_args(
+        [arg for arg in args if arg != "--json"]
     )
 
 
 def cmd_monitor_snapshot(args: list[str]) -> None:
     """Emit one read-only Level-1 monitoring snapshot as stable JSON."""
     started = time.perf_counter()
-    portfolio_value = _parse_monitor_snapshot_args(args)
+    portfolio_value, limits = _parse_monitor_snapshot_args(args)
     preflight_done = time.perf_counter()
     try:
         local = _load_monitor_local_snapshot()
     except (OSError, sqlite3.Error):
         print(
             monitor_contract.dumps_monitor_snapshot(
-                unavailable_monitor_snapshot(portfolio_value)
+                unavailable_monitor_snapshot(portfolio_value, limits)
             )
         )
         raise SystemExit(1) from None
@@ -990,6 +982,7 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
         quotes,
         portfolio_value,
         industry_result=industry_result,
+        risk_policy=limits,
         now=domain.cst_now(),
         stage_timings_ms={
             "preflight": round((preflight_done - started) * 1000),

@@ -1,6 +1,6 @@
 # Runtime contracts
 
-Current state as of 2026-09-13.
+Repository contract state as of 2026-09-17; not a deployment assertion.
 
 ## Ownership
 
@@ -29,6 +29,59 @@ JSON serialization. Both normal and unavailable `monitor-snapshot --json`
 outputs use this contract. Additive unknown fields are accepted; renaming a v1
 field requires a future contract version.
 
+#### Coordinated S1 monitor-v1 extension (2026-09-17)
+
+`schema_version=1` is retained, but the new `risk_budget_exceeded` enumeration
+is **not compatible with old strict consumers**. This is a coordinated
+runtime/validator/command-adapter/Monitor-Skill release, not a generally
+backward-compatible additive-field change. Do not mix release sets.
+
+| Producer / consumer | Support |
+|---|---|
+| New / new | Budget upgrades, required safety evidence and current invariants |
+| Old / new | Missing safety evidence is rejected with MonitorContractError; never filled into clean |
+| New / old | Unsupported; old validator rejects the unknown reason code; prohibited deployment |
+| Historical capture | Validates its original source/Skill identity and behavior only |
+
+`account.risk_budget_status` is `over_budget`, `within_budget`, or null. Known
+single-name or portfolio lower-bound breaches survive other missing risks.
+Incomplete `total_stop_risk` and `total_stop_risk_pct` remain null; only the
+explicit `known_stop_risk_lower_bound` may describe the known part. Required
+`account.risk_policy` carries actual limits, policy_id, source and field_sources.
+S1 sources are compatibility defaults (2% / 8%) or explicit CLI overrides,
+not confirmed personal policy. Comparisons are strict `>` before formatting.
+
+A budget escalation is a review candidate; code=null means portfolio scope.
+There is at most one budget escalation per scope/code. Details identify amount,
+ratio, limit, denominator and source/scope. Proven breaches cannot coexist with
+cleared/no_action/clean. Existing valid trade candidates retain precedence;
+stale/unavailable/conflicted data remains blocked. No alert is persisted.
+Clean additionally requires complete risk, quotes, valuation and denominator
+evidence, with active quote count matching the holdings array. Missing DB state
+is unavailable, not empty holdings. Validation checks evidence and consistency;
+it does not reproduce financial calculations.
+
+`risk_budget.py` owns shared risk input validity and budget assessment. The
+existing `calculate_position_risk()` retains its economic formula. Both risk
+CLIs use the same parsed limits and quote checks; monitor local multi-table
+reads use one deferred read transaction, released before quotes. Portfolio-risk
+opens a read-only connection and cannot bootstrap missing schema.
+
+Candidate identity is the release commit plus package/source-archive and Skill
+SHA-256 values, not the unchanged development package version alone. Package
+the matching runtime, validator, CLI adapter and all Skill files as one release
+set; archive/build hashes belong in the external release manifest. Inventory
+known consumers before rollout. The inspected local Claude, Codex (`.agents`)
+and Hermes Skill entries point at the active checkout; only the isolated master
+clone contains this candidate. No independent external consumer requiring mixed
+versions was found in repository call sites; uninspected installations remain
+unverified. Any independently upgradeable consumer requirement blocks this v1
+rollout pending an explicit compatibility decision.
+
+Current-budget deterministic routing tests are separate from immutable model
+captures. Actual enabled clients still need an isolated fake-tool budget case
+before activation. No production legacy-permissive parsing switch exists.
+
 ## Independent version dimensions
 
 - **Package version** identifies installed code: `a-stock-lib==0.8.0` and the
@@ -52,4 +105,6 @@ script and Skill hashes, exposed tools and structured isolation metadata.
 the exposed fake W1 tool was not called.
 
 Production A-stock CLIs, databases, holdings and market-data credentials are
-not exposed to this capture.
+not exposed to this capture. This capture is historical: the test checks its
+recorded Skill bytes at its recorded commit, not today's edited Skills. It does
+not qualify the S1 budget extension or current production clients.

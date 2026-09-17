@@ -1699,7 +1699,9 @@ def test_legacy_flags_migration_does_not_revive_old_flags_when_latest_is_clear()
 
 
 def test_portfolio_risk_no_holdings(capsys):
-    """无持仓时输出'暂无持仓'不报错"""
+    """真实空仓不等于缺失数据库：先建立空 fixture schema。"""
+    with cache.get_db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM holdings").fetchone() == (0,)
     cache.cmd_portfolio_risk()
     out = capsys.readouterr().out
     assert "暂无持仓" in out
@@ -1711,7 +1713,7 @@ def test_portfolio_risk_with_holdings(capsys, monkeypatch):
     monkeypatch.setattr(
         commands_holdings,
         "fetch_current_price_quote",
-        lambda code: cache.PriceQuote(50.0, cache.cst_today(), "15:00:00"),
+        lambda code: cache.PriceQuote(50.0, cache.cst_today(), "15:00:00", "fixture"),
     )
     cache.cmd_portfolio_risk()
     out = capsys.readouterr().out
@@ -1729,7 +1731,7 @@ def test_portfolio_risk_labels_explicit_account_weight(capsys, monkeypatch):
     monkeypatch.setattr(
         commands_holdings,
         "fetch_current_price_quote",
-        lambda code: cache.PriceQuote(50.0, cache.cst_today(), "15:00:00"),
+        lambda code: cache.PriceQuote(50.0, cache.cst_today(), "15:00:00", "fixture"),
     )
 
     cache.cmd_portfolio_risk(["--portfolio-value", "10000"])
@@ -1746,7 +1748,7 @@ def test_portfolio_risk_labels_partial_quote_weight_as_lower_bound(capsys, monke
         commands_holdings,
         "fetch_current_price_quote",
         lambda code: (
-            cache.PriceQuote(50.0, cache.cst_today(), "15:00:00")
+            cache.PriceQuote(50.0, cache.cst_today(), "15:00:00", "fixture")
             if code == "600036"
             else None
         ),

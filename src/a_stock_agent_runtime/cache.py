@@ -383,8 +383,12 @@ _CLI_VALUE_OPTIONS = {
     "sell-holding": ("--fee", "--tax", "--date"),
     "retro-add": ("--note", "--thesis", "--gap"),
     "retro-outliers": ("--loss",),
-    "portfolio-risk": ("--portfolio-value", "--max-position-risk-pct"),
-    "monitor-snapshot": ("--portfolio-value",),
+    "portfolio-risk": (
+        "--portfolio-value", "--max-position-risk-pct", "--max-portfolio-risk-pct",
+    ),
+    "monitor-snapshot": (
+        "--portfolio-value", "--max-position-risk-pct", "--max-portfolio-risk-pct",
+    ),
 }
 
 
