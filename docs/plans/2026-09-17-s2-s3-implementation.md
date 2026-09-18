@@ -2,9 +2,10 @@
 
 Governing spec: [risk closure v1.1](../specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md).
 The initial S2/S3 request authorized repository implementation only. Later Agent
-runtime/client deployment and migration 035 received separate explicit authorization
-(see below). No investment parameter change, personal policy adoption, experiment
-registration, other schema change, cron edit or trading action is authorized here.
+runtime/client deployment, migration 035 and later Tracker S2 code deployment received
+separate explicit authorization (see below). No investment parameter change,
+personal policy adoption, experiment registration, other schema change, cron edit
+or trading action is authorized here.
 
 ## Baseline and delivery boundaries
 
@@ -29,7 +30,9 @@ in native Hermes/Codex, including Hermes's configured default model. Claude's
 explicit authentication/verification waiver remains recorded, not a pass. Only
 schema/data-integrity checks accessed production financial state; no personal policy,
 real-account performance or live notification test was performed.
-Tracker S2 is still NOT_DEPLOYED and its manifest remains pending. See the
+Tracker S2 `7516535` / lib 0.8.0 was deployed at 13:17 CST. Its manifest remains
+pending and the read-only report smoke correctly returned
+`MANIFEST_PENDING / INSUFFICIENT_EVIDENCE`. See the
 [current deployment record](../operations.md#current-deployment-record) for exact
 provenance, first-attempt rollback, final activation and rollback limits. The
 implementation checkpoints below retain their original test counts and scope.
@@ -49,9 +52,10 @@ scoring hash/date verified, or claiming `2026-09-17.e2` acceptance before the
 full snapshot/selection/weight/path rules are validated. No new universe,
 scoring weights, 44-point threshold, historical rows, schema or cron may change.
 
-S2 final software status: **IMPLEMENTED_WITH_SYNTHETIC_FIXTURES / NOT_DEPLOYED**.
-Tracker master commit: `41c95d311c0330c8340841e115a539b10d72abe3`, published to
-GitHub without updating the active checkout. Initial 277-test drafts were rejected
+S2 current software status: **DEPLOYED / PRODUCTION_EVIDENCE_PENDING**.
+The implementation commit is `41c95d311c0330c8340841e115a539b10d72abe3`;
+the deployed Tracker master is the documentation/equivalent-cleanup successor
+`7516535893d94fcf4b424ce3356aa3f75274d58b`. Initial 277-test drafts were rejected
 for real implementation defects; the historical handoff
 `/tmp/a-stock-s2-final-parent-review.md` is superseded by this final evidence.
 
@@ -99,16 +103,18 @@ the e2 software identifier was accepted in that scope. Reports:
 These do not qualify real clients or production.
 
 External candidate archive/provenance manifest:
-`/tmp/a-stock-s2-release-41c95d3/`. Active Tracker stays at `69f11c99…`; the original
+`/tmp/a-stock-s2-release-41c95d3/` (historical pre-deployment candidate). Active
+Tracker contains S2 source `7516535…` plus deployment-status documentation; its
+production checkout and remote master are synchronized. The original
 Agent checkout stays at `2000d750…` but is no longer the Skill discovery target
 after the 2026-09-18 cutover. Lib source remains unchanged at `6dc856ea…`. The isolated
 Tracker clone initially had a local active-checkout origin; Git refused that push.
 The active branch was verified unchanged; only the clone's origin was corrected
 to GitHub. No receive protection was weakened.
 
-Remaining activation requirements: separately authorized real hash/date/evidence
-registration, independently verified local calendar/data coverage and production
-qualification. No S4 work or production activation is included.
+Remaining qualification requirements: separately authorized real hash/date/evidence
+registration, independently verified local calendar/data coverage and mature samples.
+No S4 work or investment-validity claim is included.
 
 ## S3a — POLICY-01
 

@@ -35,8 +35,9 @@ performance or live notification test was performed.
 Historical captures retain their original scope. See the
 [deployment/rollback record](docs/operations.md#current-deployment-record) and
 [S1 ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
-S2 Tracker e2 evaluation remains **not deployed**, fixture-validated with a pending
-manifest; production registration and calendar evidence remain unverified. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
+S2 Tracker e2 evaluation is deployed at `7516535` / lib 0.8.0 with a pending
+manifest; production registration, calendar evidence and investment results remain
+unverified. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the

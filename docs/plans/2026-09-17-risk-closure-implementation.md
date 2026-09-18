@@ -16,7 +16,9 @@ Claude is deployed under its explicit verification waiver (not a pass). Hermes
 gateway is active and cron is unchanged. The earlier schema-gated rollback is
 historical, not the current state.
 See the [deployment record](../operations.md#current-deployment-record).
-S2 is Tracker `41c95d3` (`2026-09-17.e2`, manifest pending), **NOT_DEPLOYED**.
+S2 is Tracker `7516535` (`2026-09-17.e2`, manifest pending), **DEPLOYED** since
+2026-09-18 13:17 CST; production experiment registration and investment evidence
+remain unverified.
 Real-account performance, full ledger reconciliation and live-channel verification
 remain unverified; S4 stays deferred. Current cross-repository
 results and remaining gates live in the [S2/S3 ledger](2026-09-17-s2-s3-implementation.md).

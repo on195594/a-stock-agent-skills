@@ -6,8 +6,8 @@
 |---|---|
 | 文档版本 | **1.1 — 工程与可实施性审查修订版** |
 | 编制日期 | 2026-09-17 |
-| 状态 | **PARTIALLY IMPLEMENTED — S1/S3 DEPLOYED; S2 FIXTURE-VALIDATED** |
-| 实施状态 | S1、S3a 和文件型 S3b MVP 已部署；S2 已以合成 fixture 实施但未部署；真实账户业绩与 S4 仍未验证 |
+| 状态 | **PARTIALLY IMPLEMENTED — S1/S2/S3 DEPLOYED; EVIDENCE PENDING** |
+| 实施状态 | S1、S3a、文件型 S3b MVP 与 S2 软件已部署；S2 真实 manifest/日历/成熟样本、真实账户业绩与 S4 仍未验证 |
 | 适用仓库 | `on195594/a-stock-agent-skills`、`on195594/a-stock-tracker`、`on195594/a-stock-lib` |
 | 当前 canonical 位置 | `a-stock-agent-skills/docs/specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md` |
 | 当前状态依据 | `docs/plans/2026-09-17-risk-closure-implementation.md`、`docs/plans/2026-09-17-s2-s3-implementation.md` 与 `docs/operations.md` |
@@ -581,8 +581,9 @@ MDD = min(DD)
 
 **2026-09-18 实施回执：** Agent S1/S3 运行时 `4789fc9`（`0.1.13` / lib
 `0.8.0`）在单独授权的迁移 035 后已部署；个人风险政策未被创建或采用，
-真实账户业绩与完整账本对账仍未验证。Tracker S2 `41c95d3` 仅以合成
-fixture 实施，manifest 仍为 pending 且未部署；S4 仍延后。精确验收、部署、
+真实账户业绩与完整账本对账仍未验证。Tracker S2 已于 2026-09-18 以
+`7516535` / lib 0.8.0 部署，manifest 仍为 pending，真实日历与成熟样本
+仍未验证；S4 仍延后。精确验收、部署、
 回滚与剩余门禁以上表所列的实施记录和运维记录为准。
 
 ---

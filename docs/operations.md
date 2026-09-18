@@ -245,7 +245,19 @@ Hermes gateway is active/running after restart (Result=success, NRestarts=0).
   check added. Live channel delivery and real-account performance remain untested.
 - Crontab bytes are unchanged. No trading/holding/event write, personal-policy
   adoption, experiment registration, provider/credential edit or test notification
-  was performed. Tracker e2 remains NOT_DEPLOYED.
+  was performed.
+
+### Tracker S2 deployment — 2026-09-18 13:17 CST
+
+After explicit deployment authorization, the production Tracker checkout was
+fast-forwarded from `69f11c9` to remote master `7516535`; its virtual environment
+was coordinated from a-stock-lib 0.7.0 to the declared immutable 0.8.0 wheel.
+Post-cutover validation passed 299 tests, 11 structure tests, Ruff check/format,
+mypy and diff check. A read-only production DB smoke returned
+`MANIFEST_PENDING / INSUFFICIENT_EVIDENCE`, as required by the unregistered
+manifest. Existing cron was inspected and left unchanged. No manual daily run,
+database write, notification, credential edit, experiment registration or S4 work
+was performed.
 
 The permanent release directory below contains `migration-035-result.json`,
 `authorized-cutover-result.json` and the final `ACTIVE_RELEASE.json`. The private
