@@ -177,6 +177,38 @@ If the new runtime has written state, stop all writers first. Do not simply
 switch databases; export and reconcile the event/holding differences before
 choosing a recovery path.
 
+## 2026-09-18 authorized deployment preflight — not activated
+
+The user authorized pushing and production deployment. Agent `4789fc9` and
+Tracker `7516535` were pushed to master. Cutover is **blocked pending current-client
+qualification**, not pending another generic deployment authorization.
+
+- Live read-only inventory confirms the active Agent runtime is still 0.1.11,
+  Python 3.13.5 / lib 0.7.0. Tracker's active interpreter also reports lib 0.7.0.
+  All nine Skill links still resolve to the original Agent checkout; all three
+  stable CLI links still resolve to `0.1.11-2c2d6018d411`.
+- A candidate wheel/runtime (0.1.13 / declared lib 0.8.0), exact Skill sources,
+  Tracker source archive and hash-bound preflight record are staged outside Git:
+  `~/.local/share/a-stock-agent/deployment-candidates/20260918-4789fc9/`.
+  `pip check`, isolated CLI help, and byte comparison of all 25 runtime Python
+  files against both wheel and installed candidate passed. No active link changed.
+- Native `claude auth status` returned exit 1, `loggedIn=false`, `authMethod=none`.
+  Credentials were not changed. The required current-release budget scenario has
+  not qualified Claude, Codex or Hermes. Historical captures cannot replace it.
+- Hermes CLI warns that gateways may retain pre-update modules; that warning
+  needs live verification, not an assumption that a CLI run qualifies the gateway.
+  No gateway restart was attempted.
+- No production database, runtime config, cron, policy or experiment registration
+  was modified. Tracker remains on its prior active checkout; pending remains
+  pending. The staging tree is not a production deployment or a new rollback target.
+
+Next: restore Claude authentication through its supported login/configuration,
+run the isolated current-release budget scenario for each intended client, verify
+Hermes gateway consistency, and coordinate a complete immutable runtime/Skill
+cutover with rollback evidence. Do not partially switch the shared CLI while old
+consumers remain active. Until then, retain manual budget review; the old runtime's
+unsafe clean behavior is not made safe by this staging exercise.
+
 ## Current deployment record
 
 The current runtime is `v0.1.11` (`0.1.11-2c2d6018d411`, runtime source
