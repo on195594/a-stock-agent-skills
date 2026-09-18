@@ -259,11 +259,18 @@ manifest. Existing cron was inspected and left unchanged. No manual daily run,
 database write, notification, credential edit, experiment registration or S4 work
 was performed.
 
-The permanent release directory below contains `migration-035-result.json`,
+This was an independent Tracker checkout deployment, not a mutation of the earlier
+Agent runtime/Skill release. The Agent-scoped `ACTIVE_RELEASE.json` was finalized
+before this cutover; its `tracker: NOT_DEPLOYED` field is a timestamped 09:36 CST
+fact, not the current Tracker state or a unified three-repository manifest. Keep
+that evidence immutable. Current Tracker identity is established by its synchronized
+production checkout, installed lib version, read-only smoke and this separate record.
+
+The permanent Agent release directory below contains `migration-035-result.json`,
 `authorized-cutover-result.json` and the final `ACTIVE_RELEASE.json`. The private
 backup directory also contains the integrity and original-row fingerprint receipt.
-A runtime rollback must preserve the additive column, ledger entry and all subsequent
-facts: switch the paired code/Skills, **never automatically restore the old DB**.
+A runtime/Skill rollback must preserve the additive column, ledger entry and all
+subsequent facts: switch the paired code/Skills, **never automatically restore the old DB**.
 
 ### Earlier schema-gated rollback (historical)
 
@@ -302,7 +309,8 @@ Permanent active release/evidence directory (despite its original staging name;
 **do not delete it as temporary content**):
 `~/.local/share/a-stock-agent/deployment-candidates/20260918-4789fc9/`.
 `deployment-preflight.json` binds wheel, source and Skill hashes;
-`ACTIVE_RELEASE.json` records the latest authorized deployment and twelve-link state;
+`ACTIVE_RELEASE.json` records the latest authorized Agent runtime/Skill deployment
+and twelve-link state at its recorded timestamp; it is not a mutable Tracker registry.
 `activation-result.json` preserves the temporary cutover checkpoint, and `rollback.json` keeps
 the original twelve link targets. `release-view` contains the current paired set;
 `rollback-view` retains the old Skill bytes and 0.1.11 CLI targets.

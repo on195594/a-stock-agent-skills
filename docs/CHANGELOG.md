@@ -2,7 +2,7 @@
 
 ## 0.1.13 — 2026-09-18 (runtime deployed)
 
-- 13:17 CST：用户明确授权上线后，Tracker S2 `7516535` / lib 0.8.0 已部署；299 tests 与全部项目门禁通过，只读报告 smoke 按 pending manifest 返回证据不足。cron、schema、生产数据库、通知与实验登记均未改动；S4 继续延后。
+- 13:17 CST：用户明确授权上线后，Tracker S2 `7516535` / lib 0.8.0 已作为独立 checkout 部署；299 tests 与全部项目门禁通过，只读报告 smoke 按 pending manifest 返回证据不足。09:36 的 Agent `ACTIVE_RELEASE.json` 是不可变的 runtime/Skill 快照，其 `tracker: NOT_DEPLOYED` 不代表 13:17 后的 Tracker 现场。cron、schema、生产数据库、通知与实验登记均未改动；S4 继续延后。
 
 - 09:36 CST：用户单独授权后，完成备份与迁移 035，仅新增可空 `analysis_results.decision_json TEXT` 列并登记一次；事务内核验原有列值、业务行与旧迁移记录不变。Agent `4789fc9` / lib 0.8.0 已协调切换三个 CLI 和九个 Skill 入口，Hermes 网关正常，crontab 未变。Hermes/Codex 同版本预算回放通过；Claude 按用户要求部署但未验证。此前 schema 门禁回滚为历史检查点。见[部署与回滚记录](operations.md#current-deployment-record)。
 

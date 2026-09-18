@@ -12,7 +12,9 @@ or trading action is authorized here.
 - Agent implementation starts from `125e3a0e86ad68f3965844960ba2cd5e9ceab4db` on
   isolated master, not the active Skill checkout (`2000d750ca66b4c31e503c6c7656fbbf9a6095ea`).
 - Tracker starts from `69f11c99d1720f2dad07113b46f17f5d87a3975d` on an isolated
-  master clone. Lib remains `6dc856ea1183fe6f6c8ff9f5201b0c920b5008ec`, unchanged.
+  master clone. Lib source remains `6dc856ea1183fe6f6c8ff9f5201b0c920b5008ec`,
+  unchanged: that master identifies the unreleased 0.8.1 maintenance source, while
+  both production consumers intentionally use the immutable published 0.8.0 wheel.
 - Remote HEADs and clean starting worktrees were checked, not copied from the spec.
 - Bounded Wiki search in concepts/operations/queries for `账户业绩`, `风险政策`,
   `收益验证`, `并列分数`, `performance-report`, `experiment.manifest`,
@@ -36,6 +38,9 @@ pending and the read-only report smoke correctly returned
 [current deployment record](../operations.md#current-deployment-record) for exact
 provenance, first-attempt rollback, final activation and rollback limits. The
 implementation checkpoints below retain their original test counts and scope.
+The Agent `ACTIVE_RELEASE.json` remains an immutable 09:36 CST runtime/Skill
+snapshot; its then-correct `tracker: NOT_DEPLOYED` value is not the later independent
+Tracker deployment record and must not be retroactively rewritten.
 
 ## S2 — default manifest location approved
 
