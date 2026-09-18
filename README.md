@@ -12,10 +12,10 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-Production remains on `0.1.11` / lib 0.7.0 after the 2026-09-18 cutover was
-rolled back: production lacks `analysis_results.decision_json`, and migration
-`035-analysis-decision-json` requires separate explicit authorization. The
-prepared `0.1.13` candidate (source `4789fc9`) and frozen lock use `a-stock-lib==0.8.0`
+Production is `0.1.13` (source `4789fc9`) / lib 0.8.0, activated on 2026-09-18
+after separately authorized migration `035-analysis-decision-json`. The nullable
+column and migration entry committed without changing original business rows.
+The runtime and frozen lock use `a-stock-lib==0.8.0`
 GitHub Release wheel with SHA-256
 `a811945b23d97eb121ff82d54bc0ba0810000a5379a9e9786fdcdc9220b30310`.
 Architecture convergence Phases 1-6 are complete: A-F scoring and cache-only
@@ -27,13 +27,11 @@ Hermes scenarios have deterministic offline checks. One fixed
 against isolated in-process fake tools with source and isolation provenance.
 All nine client Skill entries and three CLI links now resolve through one atomic
 `~/.local/share/a-stock-agent/current` pointer to a versioned runtime/Skill set,
-not the mutable source checkout. That pointer currently selects the retained old
-CLI/Skill pair. S1/S3 remain **NOT_DEPLOYED** pending schema authorization; no
-migration was executed and financial DB/WAL hashes remained unchanged. Hermes and
-Codex passed candidate-Skill budget replays (including Hermes's configured default
-model); Claude's authentication/verification waiver is recorded, not a pass.
-Hermes gateway is running on the restored pair. No real-account or live notification
-test was performed.
+not the mutable source checkout. S1/S3 runtime functionality is now deployed as
+one paired set. Hermes and Codex passed same-release budget replays (including
+Hermes's configured default model); Claude is **DEPLOYED_NOT_VERIFIED_USER_WAIVER**,
+not a passed client. Hermes gateway is running on the new release. No real-account
+performance or live notification test was performed.
 Historical captures retain their original scope. See the
 [deployment/rollback record](docs/operations.md#current-deployment-record) and
 [S1 ledger](docs/plans/2026-09-17-risk-closure-implementation.md).

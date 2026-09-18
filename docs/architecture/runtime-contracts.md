@@ -73,9 +73,10 @@ the matching runtime, validator, CLI adapter and all Skill files as one release
 set; archive/build hashes belong in the external release manifest. Inventory
 known consumers before rollout. Since the 2026-09-18 cutover, local Claude,
 Codex (`.agents`) and Hermes Skill entries and the three stable CLIs share one
-atomic versioned-release pointer, not the mutable checkout. It currently selects
-the old paired set: the 0.1.13 attempt was rolled back pending authorization for
-production migration 035 (`analysis_results.decision_json`). No independent
+atomic versioned-release pointer, not the mutable checkout. It now selects the
+0.1.13 paired set after separately authorized migration 035 on 2026-09-18 09:36 CST.
+The nullable `analysis_results.decision_json` column and ledger entry committed
+together after backup; original rows and old ledger records were preserved. No independent
 external consumer requiring mixed versions was found in repository call sites;
 uninspected installations remain unverified. Any independently upgradeable consumer requirement blocks this v1
 rollout pending an explicit compatibility decision.
@@ -84,12 +85,13 @@ Current-budget deterministic routing tests are separate from immutable model
 captures. Current-client fake-tool budget evidence remains the normal activation
 requirement. For the 2026-09-18 release, Hermes/Codex passed bounded injected-result
 replays; the user explicitly waived Claude authentication/verification and requested
-its cutover. Claude's temporary activation was DEPLOYED_NOT_VERIFIED, not a passed
-client; the candidate was subsequently rolled back with the shared set. This waiver
-is not a general exemption for future changes. No production legacy-permissive parsing
+its cutover. Claude remains DEPLOYED_NOT_VERIFIED, not a passed client. The initial
+schema-gated rollback is historical; the subsequent migration and final coordinated
+activation are recorded in operations. This waiver is not a general exemption for
+future changes. No production legacy-permissive parsing
 switch exists. See the [deployment record](../operations.md#current-deployment-record).
 
-## S3 application-layer additions (candidate; schema-gated after rollback)
+## S3 application-layer additions (runtime deployed after authorized migration 035)
 
 `risk_policy.py` now resolves the shared effective parameters before either risk
 handler runs. A selected invalid policy fails closed even with numeric overrides;

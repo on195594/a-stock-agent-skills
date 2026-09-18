@@ -1,16 +1,20 @@
 # Risk closure implementation ledger — 2026-09-17
 
 Governing specification: [v1.1](../specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md).
-The user's subsequent implementation request authorizes repository work; it does
-not authorize deployment, production configuration or investment parameter changes.
+The initial implementation request authorized repository work only. Later runtime
+deployment and migration 035 were separately authorized as recorded below; those
+authorizations do not permit other schema, configuration or investment changes.
 
 ## Current status
 
-S1, S3a and the file-only S3b MVP candidate `4789fc9` (0.1.13 / lib 0.8.0)
-have Hermes/Codex isolated budget replay evidence and an explicit Claude verification
-waiver (not a pass). The 2026-09-18 cutover was rolled back: production lacks the
-`decision_json` column required by migration 035, which needs separate authorization.
-Runtime remains 0.1.11 / lib 0.7.0; S1/S3 are NOT_DEPLOYED. No migration occurred.
+S1, S3a and the file-only S3b MVP `4789fc9` (0.1.13 / lib 0.8.0) are **DEPLOYED**
+since 2026-09-18 09:36 CST, after the user separately authorized migration 035.
+The nullable `decision_json` column and migration entry committed together after
+verified backup; original rows/columns and old ledger records were preserved.
+Hermes/Codex isolated budget replay evidence applies to this unchanged release;
+Claude is deployed under its explicit verification waiver (not a pass). Hermes
+gateway is active and cron is unchanged. The earlier schema-gated rollback is
+historical, not the current state.
 See the [deployment record](../operations.md#current-deployment-record).
 S2 is Tracker `41c95d3` (`2026-09-17.e2`, manifest pending), **NOT_DEPLOYED**.
 Real-account performance, full ledger reconciliation and live-channel verification

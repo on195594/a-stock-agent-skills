@@ -46,7 +46,7 @@ A_STOCK_NOTIFY_MODE=disabled \
   bash scripts/check-holdings-cron.sh
 ```
 
-## S1 risk closure candidate (activation rolled back; schema approval required)
+## S1 risk closure (deployed after authorized migration 035)
 
 `monitor-snapshot --json` and `portfolio-risk` accept the same optional
 `--portfolio-value`, `--max-position-risk-pct` and `--max-portfolio-risk-pct`.
@@ -62,14 +62,14 @@ The `risk_budget_exceeded` reason requires the matching monitor-v1 validator,
 CLI and Skill release set; see [runtime contracts](architecture/runtime-contracts.md).
 
 Active Skill and CLI links share the versioned release pointer described below,
-currently selecting the old pair after rollback. Do not pull source into a live discovery target or install a single client
+selecting the complete 0.1.13 pair after the authorized 09:36 cutover on 2026-09-18. Do not pull source into a live discovery target or install a single client
 against an incompatible shared runtime. Deploy a complete release under explicit
 authorization with compatibility inventory and qualification/waiver recorded. The old producer/consumer
 pair can return clean despite a budget breach; rollback therefore requires
 manual budget review or suspension of risk suggestions, not a claim of safety.
 No S1 database migration, cron change or account-data cleanup is required.
 
-## S3b file-only account performance candidate (not active in production)
+## S3b file-only account performance (runtime deployed; real accounts unverified)
 
 ```bash
 a-stock-cache performance-report --input /private/external/account.json --json
@@ -112,7 +112,7 @@ ledger evidence); 1 unexpected runtime/I/O failure. `exact` is conditional on th
 file's source declarations and flow model, not independent broker authentication,
 GIPS compliance, causal AI attribution or trading permission.
 
-## S3a read-only risk policy candidate (not active; no personal policy adopted)
+## S3a read-only risk policy (runtime deployed; no personal policy adopted)
 
 Both risk commands additionally accept `--policy-file`, `--account-scope` and
 `--portfolio-value-as-of`. A shared resolver applies explicit numeric overrides,
@@ -215,30 +215,67 @@ unsafe clean behavior is not made safe by this staging exercise.
 
 ## Current deployment record
 
-**ROLLED_BACK_SCHEMA_AUTHORIZATION_REQUIRED.**
+**DEPLOYED_AFTER_AUTHORIZED_MIGRATION_035 — 2026-09-18 09:36 CST.**
 
-Current production is **0.1.11 / lib 0.7.0**, with the old Skill source `2000d750`.
-The shared `current` pointer selects the retained `rollback-view`; all twelve
-entries remain coordinated and no longer depend on a mutable Skill checkout.
-Hermes gateway was restored and is active/running (Result=success). The supervised
+The user separately authorized migration 035: add nullable
+`analysis_results.decision_json TEXT` and register `035-analysis-decision-json`.
+Only that migration was executed. Runtime **0.1.13 / lib 0.8.0**, source
+`4789fc9272149d97f8297376afd8f469eed30f7f`, is now active through the shared
+`current` release pointer: three CLI links and nine client Skill links.
+Hermes gateway is active/running after restart (Result=success, NRestarts=0).
+
+- Before mutation, SQLite Online Backup produced the protected snapshot
+  `~/.local/share/a-stock-agent/backups/migration-035-20260918T013603Z/cache-before-035.db`
+  (directory 0700, file 0600); its integrity and row fingerprints were verified.
+- The existing schema process lock and `BEGIN IMMEDIATE` serialized writers.
+  The nullable column and one ledger entry committed in the same transaction;
+  general bootstrap/backfill was not invoked. An in-memory check also verified
+  that explicit-transaction DDL rolls back on failure.
+- All original columns, every original table row, old migration records and
+  other schema objects were compared inside the transaction and remained
+  unchanged. Existing analysis rows received NULL, not fabricated decisions.
+  Foreign-key check results were unchanged; independent backup/production
+  readback passed `quick_check`. Database bytes necessarily changed for the
+  authorized schema/ledger operation; this is **not** a zero-DB-write claim.
+- Current CLI help and twelve target links were checked. All 28 Skill files
+  match the release Git tree; all 25 runtime Python files match Git, source,
+  wheel and installed files. `uv pip check` passed for 34 installed packages.
+  The previously captured same-release Hermes/Codex budget replays remain applicable;
+  Claude is **DEPLOYED_NOT_VERIFIED_USER_WAIVER**, with no authentication/model
+  check added. Live channel delivery and real-account performance remain untested.
+- Crontab bytes are unchanged. No trading/holding/event write, personal-policy
+  adoption, experiment registration, provider/credential edit or test notification
+  was performed. Tracker e2 remains NOT_DEPLOYED.
+
+The permanent release directory below contains `migration-035-result.json`,
+`authorized-cutover-result.json` and the final `ACTIVE_RELEASE.json`. The private
+backup directory also contains the integrity and original-row fingerprint receipt.
+A runtime rollback must preserve the additive column, ledger entry and all subsequent
+facts: switch the paired code/Skills, **never automatically restore the old DB**.
+
+### Earlier schema-gated rollback (historical)
+
+At 08:47 production was restored to **0.1.11 / lib 0.7.0**, with Skill source `2000d750`.
+The shared `current` pointer then selected the retained `rollback-view`; all twelve
+entries remained coordinated and no longer depended on a mutable Skill checkout.
+Hermes gateway was restored and was active/running (Result=success). The supervised
 rollback restart raised NRestarts to 1; this is not a reported crash loop.
 
 A late schema compatibility check found that the cumulative 0.1.11 → 0.1.13 delta
 includes `035-analysis-decision-json`: `ALTER TABLE analysis_results ADD COLUMN
-decision_json TEXT`. Production lacks that column. The initial preflight checked
+decision_json TEXT`. Production then lacked that column. The initial preflight checked
 `db.py` but missed the migration in `schema.py`; latest-schema fixtures and CLI
 help do not establish production-schema readiness. Before any future activation,
 compare **both schema code and migration list** with the active release, then
 inspect the live schema read-only. Do not let a subsequent business command
 implicitly perform an unapproved migration.
 
-No migration was executed. Main financial DB/WAL fingerprints and crontab bytes
-still match the pre-cutover baseline. `ACTIVE_RELEASE.json` and
-`schema-rollback-result.json` contain the final state; `activation-result.json`
-below is the preserved earlier, temporary success checkpoint. The candidate,
-its client replay evidence and the user's Claude waiver remain reusable for the
-same release after explicit authorization of the missing schema step. Tracker
-remains NOT_DEPLOYED. Retain manual budget review on the restored old runtime.
+At this rollback checkpoint no migration had been executed; financial DB/WAL
+fingerprints and crontab bytes matched the pre-cutover baseline.
+`schema-rollback-result.json` preserves that checkpoint, while
+`activation-result.json` preserves the earlier temporary activation. The later
+explicit schema authorization and final successful deployment are recorded above.
+Any return to the old runtime still requires manual budget review.
 
 ## Historical 2026-09-18 activation attempt
 
@@ -253,7 +290,7 @@ Permanent active release/evidence directory (despite its original staging name;
 **do not delete it as temporary content**):
 `~/.local/share/a-stock-agent/deployment-candidates/20260918-4789fc9/`.
 `deployment-preflight.json` binds wheel, source and Skill hashes;
-`ACTIVE_RELEASE.json` now records the final rollback and twelve-link state;
+`ACTIVE_RELEASE.json` records the latest authorized deployment and twelve-link state;
 `activation-result.json` preserves the temporary cutover checkpoint, and `rollback.json` keeps
 the original twelve link targets. `release-view` contains the current paired set;
 `rollback-view` retains the old Skill bytes and 0.1.11 CLI targets.

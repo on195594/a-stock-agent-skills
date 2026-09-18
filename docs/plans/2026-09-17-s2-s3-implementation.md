@@ -1,9 +1,10 @@
 # S2 / S3 implementation ledger — 2026-09-17
 
 Governing spec: [risk closure v1.1](../specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md).
-User explicitly requested starting S2/S3 after S1. This authorizes repository
-implementation, not production report enablement, real account inputs/policies,
-policy parameter changes, schema, cron, clients, notifications or trading.
+The initial S2/S3 request authorized repository implementation only. Later Agent
+runtime/client deployment and migration 035 received separate explicit authorization
+(see below). No investment parameter change, personal policy adoption, experiment
+registration, other schema change, cron edit or trading action is authorized here.
 
 ## Baseline and delivery boundaries
 
@@ -18,14 +19,16 @@ policy parameter changes, schema, cron, clients, notifications or trading.
 
 ## 2026-09-18 deployment update
 
-Agent S1/S3 candidate `4789fc9` (0.1.13 / lib 0.8.0) was briefly activated via a
-single versioned CLI/Skill pointer, then rolled back because production lacks the
-`decision_json` column required by migration 035. No migration was executed;
-separate schema authorization is required. Current-Skill budget replays passed
+Agent S1/S3 `4789fc9` (0.1.13 / lib 0.8.0) is **DEPLOYED** as of 09:36 CST.
+After the earlier rollback, the user separately authorized migration 035. A verified
+SQLite backup preceded the single transaction adding nullable `decision_json` and
+its ledger entry. All original rows/columns and old ledger records remained intact;
+no historical structured decisions were fabricated. The paired CLI/Skill pointer
+was switched and Hermes gateway restarted. Current-Skill budget replays passed
 in native Hermes/Codex, including Hermes's configured default model. Claude's
-explicit authentication/verification waiver remains recorded, not a pass. Current
-production is again 0.1.11 / lib 0.7.0 and Hermes gateway is active. No real policy/
-account or live notification was tested.
+explicit authentication/verification waiver remains recorded, not a pass. Only
+schema/data-integrity checks accessed production financial state; no personal policy,
+real-account performance or live notification test was performed.
 Tracker S2 is still NOT_DEPLOYED and its manifest remains pending. See the
 [current deployment record](../operations.md#current-deployment-record) for exact
 provenance, first-attempt rollback, final activation and rollback limits. The
@@ -109,7 +112,7 @@ qualification. No S4 work or production activation is included.
 
 ## S3a — POLICY-01
 
-Status: **IMPLEMENTED_WITH_FIXTURES / NOT_DEPLOYED_SCHEMA_GATE**.
+Status: **IMPLEMENTED_WITH_FIXTURES / RUNTIME_DEPLOYED_AFTER_AUTHORIZED_035**.
 No real personal policy was created or adopted.
 
 - One `risk_policy.py` resolves an effective `RiskParameters` object outside both
@@ -157,7 +160,7 @@ real personal policy or active Skill entry was modified.
 
 ## S3b — file-only performance MVP
 
-Status: **IMPLEMENTED_WITH_SYNTHETIC_FIXTURES / NOT_DEPLOYED_SCHEMA_GATE**. This is not full
+Status: **IMPLEMENTED_WITH_SYNTHETIC_FIXTURES / RUNTIME_DEPLOYED_AFTER_AUTHORIZED_035**. This is not full
 broker reconciliation or live-client acceptance.
 
 One `performance.py` owns strict parsing, Decimal calculation and rendering.
