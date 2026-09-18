@@ -284,15 +284,8 @@ _FRAMEWORK_F = _register(
 )
 
 
-def build_checklist(
-    code: str, framework: str, cycle_stage: str | None = None
-) -> list[ChecklistItem]:
-    """基于缓存数据构建框架客观指标核对清单。
-
-    cycle_stage 为后续周期判断预留；当前暂不使用。
-    """
-    del cycle_stage
-
+def build_checklist(code: str, framework: str) -> list[ChecklistItem]:
+    """基于缓存数据构建框架客观指标核对清单。"""
     normalized_framework = framework.upper()
     metadata = framework_metadata.FRAMEWORK_REGISTRY.get(normalized_framework)
     if metadata is None:

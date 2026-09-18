@@ -237,12 +237,6 @@ def validate_decision(decision: Any) -> dict[str, Any]:
     return decision
 
 
-def cycle_stage_from_decision(decision: Any) -> CycleStageAssessment | None:
-    """Return the validated additive cycle-stage field, when present."""
-    value = validate_decision(decision)
-    return _validate_cycle_stage(value.get("cycle_stage"))
-
-
 def loads_decision(text: str) -> dict[str, Any]:
     """Parse and validate one JSON decision."""
     try:
