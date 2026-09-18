@@ -16,6 +16,21 @@ policy parameter changes, schema, cron, clients, notifications or trading.
   `收益验证`, `并列分数`, `performance-report`, `experiment.manifest`,
   `a-stock-tracker` found no applicable page. Local spec/source govern; no Wiki edits.
 
+## 2026-09-18 deployment update
+
+Agent S1/S3 candidate `4789fc9` (0.1.13 / lib 0.8.0) was briefly activated via a
+single versioned CLI/Skill pointer, then rolled back because production lacks the
+`decision_json` column required by migration 035. No migration was executed;
+separate schema authorization is required. Current-Skill budget replays passed
+in native Hermes/Codex, including Hermes's configured default model. Claude's
+explicit authentication/verification waiver remains recorded, not a pass. Current
+production is again 0.1.11 / lib 0.7.0 and Hermes gateway is active. No real policy/
+account or live notification was tested.
+Tracker S2 is still NOT_DEPLOYED and its manifest remains pending. See the
+[current deployment record](../operations.md#current-deployment-record) for exact
+provenance, first-attempt rollback, final activation and rollback limits. The
+implementation checkpoints below retain their original test counts and scope.
+
 ## S2 — default manifest location approved
 
 On 2026-09-17 the user explicitly approved `config/experiment_manifest.json`
@@ -81,8 +96,9 @@ the e2 software identifier was accepted in that scope. Reports:
 These do not qualify real clients or production.
 
 External candidate archive/provenance manifest:
-`/tmp/a-stock-s2-release-41c95d3/`. Active Tracker stays at `69f11c99…`, active
-Agent stays at `2000d750…`, Lib remains unchanged at `6dc856ea…`. The isolated
+`/tmp/a-stock-s2-release-41c95d3/`. Active Tracker stays at `69f11c99…`; the original
+Agent checkout stays at `2000d750…` but is no longer the Skill discovery target
+after the 2026-09-18 cutover. Lib source remains unchanged at `6dc856ea…`. The isolated
 Tracker clone initially had a local active-checkout origin; Git refused that push.
 The active branch was verified unchanged; only the clone's origin was corrected
 to GitHub. No receive protection was weakened.
@@ -93,7 +109,8 @@ qualification. No S4 work or production activation is included.
 
 ## S3a — POLICY-01
 
-Status: **IMPLEMENTED_WITH_FIXTURES_ONLY / NOT_DEPLOYED**.
+Status: **IMPLEMENTED_WITH_FIXTURES / NOT_DEPLOYED_SCHEMA_GATE**.
+No real personal policy was created or adopted.
 
 - One `risk_policy.py` resolves an effective `RiskParameters` object outside both
   handlers. CLI numeric values override a valid selected file, which overrides
@@ -140,7 +157,7 @@ real personal policy or active Skill entry was modified.
 
 ## S3b — file-only performance MVP
 
-Status: **IMPLEMENTED_WITH_SYNTHETIC_FIXTURES / NOT_DEPLOYED**. This is not full
+Status: **IMPLEMENTED_WITH_SYNTHETIC_FIXTURES / NOT_DEPLOYED_SCHEMA_GATE**. This is not full
 broker reconciliation or live-client acceptance.
 
 One `performance.py` owns strict parsing, Decimal calculation and rendering.

@@ -6,10 +6,15 @@ not authorize deployment, production configuration or investment parameter chang
 
 ## Current status
 
-S1, S2, S3a and the file-only S3b MVP are implemented with fixture evidence,
-**NOT_DEPLOYED**. S2 is Tracker `41c95d3` (`2026-09-17.e2`, manifest pending).
-Real-client qualification, production evidence and full account-to-ledger
-reconciliation remain unverified; S4 stays deferred. Current cross-repository
+S1, S3a and the file-only S3b MVP candidate `4789fc9` (0.1.13 / lib 0.8.0)
+have Hermes/Codex isolated budget replay evidence and an explicit Claude verification
+waiver (not a pass). The 2026-09-18 cutover was rolled back: production lacks the
+`decision_json` column required by migration 035, which needs separate authorization.
+Runtime remains 0.1.11 / lib 0.7.0; S1/S3 are NOT_DEPLOYED. No migration occurred.
+See the [deployment record](../operations.md#current-deployment-record).
+S2 is Tracker `41c95d3` (`2026-09-17.e2`, manifest pending), **NOT_DEPLOYED**.
+Real-account performance, full ledger reconciliation and live-channel verification
+remain unverified; S4 stays deferred. Current cross-repository
 results and remaining gates live in the [S2/S3 ledger](2026-09-17-s2-s3-implementation.md).
 
 The rest of this page preserves **historical S1 checkpoints** and their original

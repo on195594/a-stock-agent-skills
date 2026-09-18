@@ -67,22 +67,29 @@ CLIs use the same parsed limits and quote checks; monitor local multi-table
 reads use one deferred read transaction, released before quotes. Portfolio-risk
 opens a read-only connection and cannot bootstrap missing schema.
 
-Candidate identity is the release commit plus package/source-archive and Skill
+Release identity is the source commit plus package/source-archive and Skill
 SHA-256 values, not the unchanged development package version alone. Package
 the matching runtime, validator, CLI adapter and all Skill files as one release
 set; archive/build hashes belong in the external release manifest. Inventory
-known consumers before rollout. The inspected local Claude, Codex (`.agents`)
-and Hermes Skill entries point at the active checkout; only the isolated master
-clone contains this candidate. No independent external consumer requiring mixed
-versions was found in repository call sites; uninspected installations remain
-unverified. Any independently upgradeable consumer requirement blocks this v1
+known consumers before rollout. Since the 2026-09-18 cutover, local Claude,
+Codex (`.agents`) and Hermes Skill entries and the three stable CLIs share one
+atomic versioned-release pointer, not the mutable checkout. It currently selects
+the old paired set: the 0.1.13 attempt was rolled back pending authorization for
+production migration 035 (`analysis_results.decision_json`). No independent
+external consumer requiring mixed versions was found in repository call sites;
+uninspected installations remain unverified. Any independently upgradeable consumer requirement blocks this v1
 rollout pending an explicit compatibility decision.
 
 Current-budget deterministic routing tests are separate from immutable model
-captures. Actual enabled clients still need an isolated fake-tool budget case
-before activation. No production legacy-permissive parsing switch exists.
+captures. Current-client fake-tool budget evidence remains the normal activation
+requirement. For the 2026-09-18 release, Hermes/Codex passed bounded injected-result
+replays; the user explicitly waived Claude authentication/verification and requested
+its cutover. Claude's temporary activation was DEPLOYED_NOT_VERIFIED, not a passed
+client; the candidate was subsequently rolled back with the shared set. This waiver
+is not a general exemption for future changes. No production legacy-permissive parsing
+switch exists. See the [deployment record](../operations.md#current-deployment-record).
 
-## S3 application-layer additions (not deployed)
+## S3 application-layer additions (candidate; schema-gated after rollback)
 
 `risk_policy.py` now resolves the shared effective parameters before either risk
 handler runs. A selected invalid policy fails closed even with numeric overrides;
@@ -105,7 +112,7 @@ fixture evidence and unfinished reconciliation/evaluation boundaries.
 ## Independent version dimensions
 
 - **Package version** identifies installed code: `a-stock-lib==0.8.0` and the
-  `a-stock-agent-skills==0.1.13` development line.
+  `a-stock-agent-skills==0.1.13` source line.
 - **Contract version** identifies a wire shape: decision v1 and monitor v1.
 - **Policy version** identifies investment or regulatory rules independently of
   package and wire versions. Framework policy uses `RULE_VERSION` and

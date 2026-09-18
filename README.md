@@ -12,8 +12,10 @@ logs, locks, artifacts and credentials stay outside this repository.
 
 ## Current status
 
-The deployed runtime remains `v0.1.11` (`0.1.11-2c2d6018d411`). Repository
-version `0.1.13` and its frozen lock use the immutable `a-stock-lib==0.8.0`
+Production remains on `0.1.11` / lib 0.7.0 after the 2026-09-18 cutover was
+rolled back: production lacks `analysis_results.decision_json`, and migration
+`035-analysis-decision-json` requires separate explicit authorization. The
+prepared `0.1.13` candidate (source `4789fc9`) and frozen lock use `a-stock-lib==0.8.0`
 GitHub Release wheel with SHA-256
 `a811945b23d97eb121ff82d54bc0ba0810000a5379a9e9786fdcdc9220b30310`.
 Architecture convergence Phases 1-6 are complete: A-F scoring and cache-only
@@ -23,16 +25,20 @@ one explicit catalog; and the three Skills remain thin routers. Eight captured
 Hermes scenarios have deterministic offline checks. One fixed
 `openai-codex/gpt-5.6-sol` session also executes three critical routes directly
 against isolated in-process fake tools with source and isolation provenance.
-All nine client Skill entries resolve directly to the active checkout's `skills/`.
-The S1 risk-closure candidate is prepared separately: budget breaches now require
-review, unknown risk fails closed, and local monitor reads share one transaction.
-Its monitor-v1 vocabulary extension requires a coordinated runtime/Skill release;
-it is **not deployed or qualified for live clients**. Historical model captures
-remain historical evidence. See the [S1 implementation ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
-S3 adds a read-only risk-policy resolver and file-only account-performance reporting;
-these are synthetic-fixture candidates, **not deployed**. S2 Tracker e2 evaluation
-is fixture-validated with a pending manifest; production registration and calendar
-evidence remain unverified. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
+All nine client Skill entries and three CLI links now resolve through one atomic
+`~/.local/share/a-stock-agent/current` pointer to a versioned runtime/Skill set,
+not the mutable source checkout. That pointer currently selects the retained old
+CLI/Skill pair. S1/S3 remain **NOT_DEPLOYED** pending schema authorization; no
+migration was executed and financial DB/WAL hashes remained unchanged. Hermes and
+Codex passed candidate-Skill budget replays (including Hermes's configured default
+model); Claude's authentication/verification waiver is recorded, not a pass.
+Hermes gateway is running on the restored pair. No real-account or live notification
+test was performed.
+Historical captures retain their original scope. See the
+[deployment/rollback record](docs/operations.md#current-deployment-record) and
+[S1 ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
+S2 Tracker e2 evaluation remains **not deployed**, fixture-validated with a pending
+manifest; production registration and calendar evidence remain unverified. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the

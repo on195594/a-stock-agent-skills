@@ -2,6 +2,10 @@
 
 ## 0.1.13 — Unreleased
 
+- 2026-09-18：Agent `4789fc9` / lib 0.8.0 的协调切换已因 schema 门禁回滚，当前仍为 0.1.11 / lib 0.7.0。生产缺少迁移 035 所需 `analysis_results.decision_json` 列；未执行迁移，待单独授权。Hermes/Codex 候选 Skill 隔离预算回放通过，Claude 验证按用户明确要求豁免。财务 DB/WAL 与 crontab hash 不变；Hermes 网关已恢复。S2 Tracker 未部署。见[部署与回滚记录](operations.md#current-deployment-record)。
+
+以下实现条目的“未部署”描述保留各自交付时点含义；当前状态以上述部署记录为准。
+
 - S2 Tracker e2 软件落地于 `41c95d3`：用户批准默认清单使用 `config/`，固定资格/并列权重/批次与逐日路径；299 tests 及产品门禁通过，清单仍 pending，未部署。Agent 仅同步规范与[S2/S3 验收记录](plans/2026-09-17-s2-s3-implementation.md)。
 
 - 新增 S3b 文件型 `performance-report` MVP：Decimal 现金流调整、分段收益/回撤、按片段对齐的可选基准、明确 null 原因与退出码；默认不选数据库路径，不建库/联网/写回。账本检查仅为未完成账户映射的有限诊断，真实对账未验收。未部署，见[S2/S3 记录](plans/2026-09-17-s2-s3-implementation.md)。
