@@ -48,11 +48,13 @@ Useful focused checks:
 uv run pytest tests/test_cli_contract.py tests/test_command_classification.py -q
 uv run pytest tests/test_installation.py tests/test_state_migration.py -q
 uv run pytest tests/test_l3_thesis_versioning.py tests/test_cli_contract.py -q
+uv run pytest tests/test_risk_policy.py tests/test_performance.py -q
 uv run pytest tests/monitor tests/qa tests/research -q
 bash tests/test_check_holdings_cron.sh
 ```
 
-`uv run ruff format --check .` passes across maintained Python sources and tests.
+Run `uv run ruff format --check <changed Python files>` for Python files touched by
+the patch. Full-repository formatting is not part of the automated matrix.
 
 The checked-in Agent tool fixture comes from one fixed
 `openai-codex/gpt-5.6-sol` session using an isolated `HOME`, read-only Pi

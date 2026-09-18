@@ -6,12 +6,12 @@
 |---|---|
 | 文档版本 | **1.1 — 工程与可实施性审查修订版** |
 | 编制日期 | 2026-09-17 |
-| 状态 | **ENGINEERING REVIEW INCORPORATED — DOCUMENT ONLY** |
-| 实施状态 | 尚未开始；本文不构成已实施、已部署或投资有效性的证明 |
+| 状态 | **PARTIALLY IMPLEMENTED — S1/S3 DEPLOYED; S2 FIXTURE-VALIDATED** |
+| 实施状态 | S1、S3a 和文件型 S3b MVP 已部署；S2 已以合成 fixture 实施但未部署；真实账户业绩与 S4 仍未验证 |
 | 适用仓库 | `on195594/a-stock-agent-skills`、`on195594/a-stock-tracker`、`on195594/a-stock-lib` |
 | 当前 canonical 位置 | `a-stock-agent-skills/docs/specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md` |
-| 当前授权范围 | 审查并修订本规范；不包含代码提交、生产部署、数据库迁移、cron 修改、真实账户写入或交易 |
-| 后续开发方式 | 获得实施授权后，仅在 `master` 小步开发、验证、直接提交与 push；不创建功能分支，不开 PR，不 force-push |
+| 当前状态依据 | `docs/plans/2026-09-17-risk-closure-implementation.md`、`docs/plans/2026-09-17-s2-s3-implementation.md` 与 `docs/operations.md` |
+| 后续变更方式 | 仅实施明确授权范围；生产、schema、cron、活动客户端、真实账户或 W1 变更仍需分别授权 |
 
 > **下一阶段的主线：先使风险计算真正影响复核结论，再核实投资证据，最后衡量个人账户的真实表现。**
 >
@@ -579,6 +579,12 @@ MDD = min(DD)
 
 **完成条件：** S3a以解析/同输入同政策测试验收；S3b以公开接口、输入合同与纯计算fixture验收。真实账户数据不可用时只标 IMPLEMENTED_WITH_FIXTURES_ONLY。软件完成不等于用户数据已核实或新政策已生效。
 
+**2026-09-18 实施回执：** Agent S1/S3 运行时 `4789fc9`（`0.1.13` / lib
+`0.8.0`）在单独授权的迁移 035 后已部署；个人风险政策未被创建或采用，
+真实账户业绩与完整账本对账仍未验证。Tracker S2 `41c95d3` 仅以合成
+fixture 实施，manifest 仍为 pending 且未部署；S4 仍延后。精确验收、部署、
+回滚与剩余门禁以上表所列的实施记录和运维记录为准。
+
 ---
 
 ## 9. S4：下一轮投资实验的启动条件
@@ -725,7 +731,8 @@ Rollback:
 
 ## 附录 A：给执行 Agent 的任务入口
 
-以下入口仅在用户明确要求实施后使用；当前“审查并修复文档”不构成代码、配置或生产执行授权。
+以下入口仅在用户明确要求实施后使用。已完成阶段的授权与生产记录见上表所列文档；
+它们不自动授权后续阶段或新的生产、数据库、cron、客户端及 W1 变更。
 
 ```text
 请按本规范实施当前已获授权阶段。
