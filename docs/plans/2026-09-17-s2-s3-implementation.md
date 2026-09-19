@@ -223,7 +223,12 @@ fixture all pass. Log: `/tmp/a-stock-s3-final-check.log`. The skips remain the
 optional sibling-source installation scenarios. Generated artifacts and raw inputs
 remain outside Git; no S3b result writes to decision-v1/monitor-v1 or holdings.
 
-All current real-client qualifications and production identities remain
-NOT_VERIFIED. S4 remains deferred. Rollback is a normal revert of the bounded
-release commits; retain facts and personal files. Never silently return to
-compatibility defaults while claiming a newer personal policy is still active.
+Agent runtime/Skill production identity is deployed and read back; Hermes/Codex
+have only the bounded current-release budget replays recorded above, while Claude
+remains deployed under the explicit verification waiver. Tracker checkout/lib
+identity is deployed, but its scoring registration, calendar, mature samples and
+investment result remain unverified. Real-account performance and complete ledger
+reconciliation are also NOT_VERIFIED. S4 remains deferred. Rollback is a normal
+revert of the bounded release commits; retain facts and personal files. Never
+silently return to compatibility defaults while claiming a newer personal policy
+is still active.
