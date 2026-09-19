@@ -247,6 +247,23 @@ Hermes gateway is active/running after restart (Result=success, NRestarts=0).
   adoption, experiment registration, provider/credential edit or test notification
   was performed.
 
+### Tracker experiment registration activation — 2026-09-20 00:30 CST
+
+After separate configuration-activation authorization, Tracker was fast-forwarded
+to `304010027bd427cd26216443bbeed22851e89320`. The active
+`config/experiment_manifest.json` now verifies scoring hash
+`d312c8995522b563` for enrollment 2026-09-18 through 2026-11-17, and the active
+`config/trading_calendar.json` contains TuShare SSE calendar evidence through
+2026-09-20 with the Shanghai Stock Exchange holiday notice cross-check.
+
+Post-cutover default-path readback used SQLite `mode=ro`, `query_only=ON` and one
+explicit deferred read transaction. It returned `S2_EVALUATION /
+INSUFFICIENT_EVIDENCE`: each window selected the 2026-09-18 35/35 section, but no
+window was mature. The calendar must be refreshed from the approved source before
+a later evaluation as-of; stale evidence fails closed. Full 322 tests, 11 structure
+tests, Ruff check/format, mypy and diff check passed. Crontab and database bytes were
+unchanged; no schema/DML, notification, account or trading action occurred.
+
 ### Tracker S2 deployment — 2026-09-18 13:17 CST
 
 After explicit deployment authorization, the production Tracker checkout was

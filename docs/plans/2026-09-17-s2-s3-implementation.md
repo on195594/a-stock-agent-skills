@@ -20,6 +20,20 @@ or trading action is authorized here.
   `收益验证`, `并列分数`, `performance-report`, `experiment.manifest`,
   `a-stock-tracker` found no applicable page. Local spec/source govern; no Wiki edits.
 
+## 2026-09-20 Tracker experiment activation update
+
+After separate authorization, Tracker master and the production checkout were
+fast-forwarded to `304010027bd427cd26216443bbeed22851e89320`. This includes the
+independently reviewed evaluator rounding repair plus the active verified manifest
+for scoring hash `d312c8995522b563`, enrollment 2026-09-18 through 2026-11-17,
+and sourced SSE local calendar evidence through 2026-09-20. The default report
+read the real Tracker database in one explicit read-only transaction and returned
+`S2_EVALUATION / INSUFFICIENT_EVIDENCE`, with 35/35 qualified snapshots and one
+immature section for every window. The calendar must be refreshed from an approved
+source before its as-of expires. No database/schema, cron, dependency, notification,
+account or trading write occurred; real-account performance remains untested and S4
+stays deferred.
+
 ## 2026-09-18 deployment update
 
 Agent S1/S3 `4789fc9` (0.1.13 / lib 0.8.0) is **DEPLOYED** as of 09:36 CST.

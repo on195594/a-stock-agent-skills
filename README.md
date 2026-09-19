@@ -35,9 +35,11 @@ performance or live notification test was performed.
 Historical captures retain their original scope. See the
 [deployment/rollback record](docs/operations.md#current-deployment-record) and
 [S1 ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
-S2 Tracker e2 evaluation is deployed at `7516535` / lib 0.8.0 with a pending
-manifest; production registration, calendar evidence and investment results remain
-unverified. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
+S2 Tracker e2 plus the reviewed rounding repair is deployed at `3040100` / lib
+0.8.0. The verified `d312c8995522b563` experiment manifest and sourced local
+calendar are active for the 2026-09-18 through 2026-11-17 enrollment range. The
+30/60/90-day windows remain immature, so investment evidence is still
+`INSUFFICIENT_EVIDENCE`. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
 
 The original M7 production cutover completed on 2026-08-09; the 2026-08-11
 maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
