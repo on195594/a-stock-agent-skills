@@ -1,6 +1,6 @@
 ---
 name: a-stock-qa
-description: Use after an a-stock-research report to independently check the supported text rubric. Unsupported types return SKIP; invalid inputs return INVALID_RUN.
+description: "Use for a-stock-research QA review. Others: SKIP."
 license: Proprietary
 compatibility: Reads only the supplied immutable text snapshot and this Skill's rubric.
 ---

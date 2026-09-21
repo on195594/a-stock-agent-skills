@@ -1,6 +1,6 @@
 ---
 name: a-stock-monitor
-description: Use when an existing A-share holding needs an action decision, stop-loss/L3 review, periodic review, add/reduce/sell, or a confirmed state update. New positions use a-stock-research.
+description: "Use for existing holdings only. New: a-stock-research."
 license: Proprietary
 compatibility: Requires local command execution, the installed a-stock-agent runtime and a-stock-lib, plus network access for live monitoring.
 ---
