@@ -30,7 +30,6 @@
 - [`specs/2026-09-13-regulatory-freshness-lifecycle-spec.md`](specs/2026-09-13-regulatory-freshness-lifecycle-spec.md) — authorized fail-closed review lifecycle for deterministic regulatory metadata.
 - [`specs/2026-09-13-a-stock-runtime-contract-vnext.md`](specs/2026-09-13-a-stock-runtime-contract-vnext.md) — completed monitor-v1, framework routing, release drift and Agent provenance implementation ledger and retrospective.
 - [`specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md`](specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec-v1.1.md) — governing specification; S1/S2/S3 software is deployed, while S2 production evidence and real-account performance remain unverified.
-- [`specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec.md`](specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec.md) — superseded v1.0 document-only specification; replaced by v1.1.
 - [`plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md`](plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md) — milestone ledger, execution commands and rollback plan.
 - [`plans/2026-08-10-p2-structural-refactor-plan.md`](plans/2026-08-10-p2-structural-refactor-plan.md) — completed P2 structural refactor and evidence relocation.
 - [`plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md`](plans/2026-08-23-research-data-capability-and-skill-slimming-plan.md) — completed implementation, review and production cutover ledger.
@@ -41,6 +40,10 @@
 - [`migration/README.md`](migration/README.md) — provenance and redacted execution evidence.
 - [`reviews/README.md`](reviews/README.md) — tombstone and recovery instructions for the external evidence archive.
 - [`reviews/a-stock-codex-plan-agy-review.md`](reviews/a-stock-codex-plan-agy-review.md) — AGY independent review approving the architecture convergence plan.
+
+## Historical records
+
+- [`specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec.md`](specs/2026-09-17-a-stock-risk-closure-and-performance-validation-spec.md) — superseded v1.0 specification retained for audit history; use v1.1 above.
 
 ## Evidence policy
 

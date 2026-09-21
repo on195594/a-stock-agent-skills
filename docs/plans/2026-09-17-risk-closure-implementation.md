@@ -129,6 +129,10 @@ risk suggestions until repaired; rollback is not risk acceptance.
 
 ## Remaining S1 delivery — current contract
 
+The implementation and verification details below preserve the pre-deployment
+checkpoint; the current deployment status is recorded at the top of this ledger
+and in the [operations record](../operations.md#current-deployment-record).
+
 Starting isolated/local and remote Agent HEAD: `10dd9a2da6c963f6c6e11905f270bf3fa507d116`.
 The resulting S1 implementation is `125e3a0e86ad68f3965844960ba2cd5e9ceab4db`;
 release commit and package/Skill hashes identify its compatibility set.
@@ -213,9 +217,11 @@ In the same isolated environment as the first delivery:
   active client entry was modified/accessed by these fixture checks. No real
   notifications were sent. Real-client fake-tool budget qualification is
   **NOT_VERIFIED** for Claude, Codex and Hermes; historical captures do not
-  replace it. Production is **NOT_VERIFIED / NOT_DEPLOYED**.
+  replace it. At this historical checkpoint, production was **NOT_VERIFIED /
+  NOT_DEPLOYED**; later deployment is recorded above.
 - Network use is limited here to Git reference/push operations, dependency
   tooling if needed, and independent read-only Codex CLI code review. That
   review is not a real-client monitoring qualification test.
 - At this S1 checkpoint S2/S3 were not started; S4 remains deferred. There is no investment-validity
-  or personal-account-return claim. Deployment remains separately authorized.
+  or personal-account-return claim. Deployment was separately authorized after
+  this checkpoint; the current state is recorded above.

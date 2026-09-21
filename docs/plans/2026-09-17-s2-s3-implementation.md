@@ -60,7 +60,8 @@ Tracker deployment record and must not be retroactively rewritten.
 
 On 2026-09-17 the user explicitly approved `config/experiment_manifest.json`
 and requested implementation to continue. This follows Tracker `AGENTS.md` and
-`docs/architecture.md`; spec §7.1 now records the dated location correction.
+its architecture rules; the current Agent contract reference is
+`docs/architecture/runtime-contracts.md`. Spec §7.1 records the dated location correction.
 The prior **BLOCKED_DOCUMENT_CONFLICT** is resolved. This does not authorize
 production activation, verified production hash/date registration, schema or cron
 changes. Existing project path ownership must make loading independent of cwd.

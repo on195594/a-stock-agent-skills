@@ -1,8 +1,8 @@
 # Operations runbook
 
-This runbook covers the installed runtime after the M7 cutover. Claude, Codex
-and Hermes remain supported clients. Nothing here authorizes investment
-decisions or unattended W1 writes.
+This runbook covers the currently installed runtime after the M7 cutover and
+later coordinated releases. Claude, Codex and Hermes remain supported clients.
+Nothing here authorizes investment decisions or unattended W1 writes.
 
 ## Configuration and state
 
@@ -183,9 +183,10 @@ choosing a recovery path.
 The client checkpoint was subsequently resolved by bounded Hermes/Codex qualification
 and the user's explicit Claude verification waiver, but a separate schema gap later
 required rollback. See the current record below.
-The user authorized pushing and production deployment. Agent `4789fc9` and
-Tracker `7516535` were pushed to master. Cutover is **blocked pending current-client
-qualification**, not pending another generic deployment authorization.
+At this historical preflight checkpoint, the user had authorized pushing and
+production deployment. Agent `4789fc9` and Tracker `7516535` were pushed to
+master, but cutover was **blocked pending current-client qualification**, not
+pending another generic deployment authorization.
 
 - Live read-only inventory confirms the active Agent runtime is still 0.1.11,
   Python 3.13.5 / lib 0.7.0. Tracker's active interpreter also reports lib 0.7.0.
@@ -354,8 +355,9 @@ the original twelve link targets. `release-view` contains the current paired set
   checks. Financial DB and WAL hashes and crontab bytes matched before/after.
 - No production SQL writes, schema migration, cron/config edit, policy creation, trading
   write, or test notification was executed. Hermes recorded its native synthetic
-  verification session; that is not a financial-state write. Tracker remains at
-  active source `69f11c9` / lib 0.7.0 and is **not deployed** to e2.
+  verification session; that is not a financial-state write. At this earlier
+  09:36 checkpoint, Tracker was still at active source `69f11c9` / lib 0.7.0 and
+  was **not deployed** to e2; the later 13:17 deployment is recorded above.
 
 Rollback in a coordinated maintenance window: use the native Hermes planned stop,
 atomically repoint `current` to the retained `rollback-view`, then start the gateway

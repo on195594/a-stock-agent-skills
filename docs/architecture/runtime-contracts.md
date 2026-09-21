@@ -1,6 +1,8 @@
 # Runtime contracts
 
-Repository contract state as of 2026-09-17; not a deployment assertion.
+Repository contract and deployment alignment as of 2026-09-18. Deployment facts are
+summarized here; the [operations record](../operations.md#current-deployment-record)
+is authoritative for cutover and rollback details.
 
 ## Ownership
 
