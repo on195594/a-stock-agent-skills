@@ -1,6 +1,6 @@
 ---
 name: a-stock-research
-description: "Use for new-position research. Held: a-stock-monitor."
+description: "Use for A股首次投研 (new A-shares). Held: a-stock-monitor."
 license: Proprietary
 compatibility: Requires local command execution, the installed a-stock-agent runtime and a-stock-lib, plus network access for live research.
 ---

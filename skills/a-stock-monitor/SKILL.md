@@ -1,6 +1,6 @@
 ---
 name: a-stock-monitor
-description: "Use for existing holdings only. New: a-stock-research."
+description: "Use for held A-shares only (A股持仓). New: a-stock-research."
 license: Proprietary
 compatibility: Requires local command execution, the installed a-stock-agent runtime and a-stock-lib, plus network access for live monitoring.
 ---

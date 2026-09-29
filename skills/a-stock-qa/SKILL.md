@@ -1,6 +1,6 @@
 ---
 name: a-stock-qa
-description: "Use for a-stock-research QA review. Others: SKIP."
+description: "Use for a-stock-research report QA (A股投研QA). Others: SKIP."
 license: Proprietary
 compatibility: Reads only the supplied immutable text snapshot and this Skill's rubric.
 ---

@@ -245,6 +245,33 @@ Rollback is the retained September 28 release-view pointer recorded in
 
 ## Previous deployment records
 
+### Description-only publication — 2026-09-28
+
+After explicit user authorization, `current` atomically selects
+`~/.local/share/a-stock-agent/deployment-candidates/20260928-skill-descriptions/release-view`.
+Only the three frontmatter description lines were promoted from the canonical
+working tree; monitor/research/QA descriptions are 57/53/58 characters. All 28
+Skill payload files otherwise retain their observed pre-publication bytes and
+modes. In particular, monitor's existing terminal-only execution note (absent
+from canonical source) was retained, not silently removed by a full-file copy.
+
+All nine client aliases resolve to the new payload; all three CLI aliases still
+resolve to the exact previous runtime binaries. Runtime 0.1.13 / lib 0.8.0,
+financial state, schema, cron and credentials are not changed. No gateway stop,
+restart, client/MCP reload or fresh model qualification was performed. Candidate
+Skill validation, standalone QA smoke and byte-identical old/new CLI help passed;
+fresh native Hermes discovery renders all three descriptions without truncation.
+Existing long conversations can retain their prior Skill context.
+
+The new directory contains `ACTIVE_RELEASE.json` and `rollback.json`; scoped
+checks and exact backups are in `~/.hermes/reports/hermes-publication-20260928/`.
+Metadata-only rollback restores the previous `20260918-4789fc9/release-view`
+with an atomic `current` switch, **not** its older `rollback-view` / 0.1.11.
+Keep the same runtime binaries and all financial data; this rollback requires
+neither database restoration nor a gateway restart. Retain both release trees.
+
+### Runtime migration — 2026-09-18
+
 **DEPLOYED_AFTER_AUTHORIZED_MIGRATION_035 — 2026-09-18 09:36 CST.**
 
 The user separately authorized migration 035: add nullable
@@ -352,14 +379,15 @@ activated at 08:33, then rolled back at 08:47 for the schema gate above.
 All three public CLIs and nine Claude/Codex/Hermes Skill entries resolve through
 `~/.local/share/a-stock-agent/current` to the same complete release view.
 
-Permanent active release/evidence directory (despite its original staging name;
+Permanent base runtime/evidence directory (also required by the 2026-09-28 overlay;
 **do not delete it as temporary content**):
 `~/.local/share/a-stock-agent/deployment-candidates/20260918-4789fc9/`.
 `deployment-preflight.json` binds wheel, source and Skill hashes;
-`ACTIVE_RELEASE.json` records the latest authorized Agent runtime/Skill deployment
-and twelve-link state at its recorded timestamp; it is not a mutable Tracker registry.
+`ACTIVE_RELEASE.json` records the Agent runtime/Skill deployment and twelve-link
+state at its recorded timestamp; it is not a mutable Tracker registry.
 `activation-result.json` preserves the temporary cutover checkpoint, and `rollback.json` keeps
-the original twelve link targets. `release-view` contains the current paired set;
+the original twelve link targets. Its `release-view` retains the prior paired set;
+`current` now selects the description-only view recorded above. The older
 `rollback-view` retains the old Skill bytes and 0.1.11 CLI targets.
 
 - **Claude: DEPLOYED_NOT_VERIFIED_USER_WAIVER.** No authentication or model check
