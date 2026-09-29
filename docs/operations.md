@@ -216,6 +216,35 @@ unsafe clean behavior is not made safe by this staging exercise.
 
 ## Current deployment record
 
+### Runtime maintenance — 2026-09-29
+
+The user authorized commit, push and deployment of the repository cleanup.
+Agent runtime source is `cc0c1c360b9d143e7bdcc5250dd3b7dcfca61130` (package
+0.1.13); the immutable lib 0.8.0 wheel and all dependency versions are unchanged.
+`current` now selects
+`~/.local/share/a-stock-agent/deployment-candidates/20260929-cc0c1c3-cleanup/release-view`.
+The wheel, source archive, file hashes, smoke logs and `ACTIVE_RELEASE.json` are
+in its parent directory. All 28 previously active Skill files were copied
+unchanged, including the September 28 descriptions and the local Monitor
+execution note; this is not a publication of the mutable checkout's Skill text.
+
+Installed files match committed runtime source. Offline fail-closed/W1 checks,
+monitor-v1 validation and three CLI help commands passed from an independent cwd
+before and after the atomic pointer switch. All twelve stable entry links were
+preserved. DB/WAL files present at preflight and crontab retained their byte
+hashes; no schema migration, data writes, cron change or gateway restart occurred.
+No new native-client model qualification or live notification test is claimed.
+
+Tracker cron already runs `/home/lin/a-stock-tracker`, now at `9ea2f4519bd73d9453858407e5c509dc7cc896de`;
+its retired investment entrypoints are absent, while the data collectors and
+watchlist are unchanged. No collection job was manually triggered. Lib repository
+cleanup is `58c7f6b6379ca00a1c9f69f7eba8222102ac9777`; it required no new wheel.
+
+Rollback is the retained September 28 release-view pointer recorded in
+`rollback.json`, not a database restore. The dated records below are historical.
+
+## Previous deployment records
+
 **DEPLOYED_AFTER_AUTHORIZED_MIGRATION_035 — 2026-09-18 09:36 CST.**
 
 The user separately authorized migration 035: add nullable
