@@ -122,11 +122,11 @@ src/a_stock_agent_runtime/ shared runtime and CLI implementations
 tests/                     unit, contract and fixture tests
 scripts/                   installer, migration, validation and cron helpers
 docs/architecture/         runtime contract and ownership architecture
-docs/specs/                governing specifications
-docs/plans/                implementation plans and milestone ledgers
+docs/specs/                retained investment/risk-rule specifications
 docs/migration/            provenance and redacted execution evidence
 ```
 
 Start with the [current runtime contracts](docs/architecture/runtime-contracts.md).
-Read dated specs only for the rule or historical decision being changed, rather
-than loading the full migration history before ordinary development.
+Read dated specs only for the rule being changed. Completed implementation plans
+and superseded architecture drafts are recoverable from Git using the
+[archive instructions](docs/README.md#历史只从-git-追溯), not a standing task queue.

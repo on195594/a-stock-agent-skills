@@ -16,8 +16,6 @@ from a_stock_agent_runtime import (
     commands_monitor,
     db,
     domain,
-    risk_gates,
-    schema,
     store,
 )
 from a_stock_agent_runtime import paths
@@ -28,42 +26,23 @@ from a_stock_agent_runtime import performance
 utc_now = domain.utc_now
 utc_now_iso = domain.utc_now_iso
 cst_today = domain.cst_today
-parse_timestamp_utc = domain.parse_timestamp_utc
-format_timestamp_cst = domain.format_timestamp_cst
 is_expired = domain.is_expired
-is_unsupported_financial_industry = domain.is_unsupported_financial_industry
 get_industry_ttl = domain.get_industry_ttl
 infer_framework = domain.infer_framework
 get_stop_loss_pct = domain.get_stop_loss_pct
 _is_a_share_trading_hours = domain.is_a_share_trading_hours
-_evaluate_holding_status = domain.evaluate_holding_status
-SCHEMA_MIGRATIONS = schema.SCHEMA_MIGRATIONS
-apply_column_migration = schema.apply_column_migration
-_backfill_holding_metadata = schema.backfill_holding_metadata
-_backfill_legacy_alerts = schema.backfill_legacy_alerts
-_bootstrap_database_schema = schema.bootstrap_database_schema
 get_db = db.get_db
 db_session = db.db_session
-read_only_db_session = db.read_only_db_session
-validate_fundamentals_payload = store.validate_fundamentals_payload
-_safe_json_value = store.safe_json_value
-get_risk_gate = store.get_risk_gate
 record_quote_snapshot = store.record_quote_snapshot
 get_latest_quote_snapshot = store.get_latest_quote_snapshot
 set_market_indicator_snapshot = store.set_market_indicator_snapshot
 update_qualitative_only_security = store.update_qualitative_only_security
 get_market_indicator_snapshot = store.get_market_indicator_snapshot
-_add_market_indicators = store.add_market_indicators
 get_fundamentals = store.get_fundamentals
 set_fundamentals = store.set_fundamentals
-list_codes = store.list_codes
 QUOTE_SNAPSHOT_MAX_AGE = store.QUOTE_SNAPSHOT_MAX_AGE
 QUOTE_SNAPSHOT_RETENTION_PER_CODE = store.QUOTE_SNAPSHOT_RETENTION_PER_CODE
 MAX_SNAPSHOT_CLOCK_SKEW = store.MAX_SNAPSHOT_CLOCK_SKEW
-regulatory_gate = risk_gates.regulatory_gate
-roe_structural_gate = risk_gates.roe_structural_gate
-cash_flow_gate = risk_gates.cash_flow_gate
-liquidity_shock_gate = risk_gates.liquidity_shock_gate
 
 # Explicit command compatibility exports for supported direct callers.
 cmd_check = commands_analysis.cmd_check
@@ -116,7 +95,6 @@ cmd_checklist = commands_admin.cmd_checklist
 PriceQuote = commands_holdings.PriceQuote
 fetch_current_price = commands_holdings.fetch_current_price
 fetch_current_prices = commands_holdings.fetch_current_prices
-fetch_current_price_quote = commands_holdings.fetch_current_price_quote
 fetch_current_price_quotes = commands_holdings.fetch_current_price_quotes
 _sina_query_prefix = commands_holdings._sina_query_prefix
 _validate_buy_quantity = commands_holdings._validate_buy_quantity

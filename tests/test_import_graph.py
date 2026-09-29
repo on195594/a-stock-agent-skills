@@ -94,3 +94,16 @@ def test_commands_monitor_observes_holdings_owner_patches(monkeypatch) -> None:
     monkeypatch.setattr(commands_holdings, "_single_open_holding", patched_holding)
     with pytest.raises(RuntimeError, match="holding owner patch observed"):
         commands_monitor.cmd_l3_add(["000001", "original", "condition"])
+
+
+def test_unused_cache_facade_does_not_return() -> None:
+    from a_stock_agent_runtime import cache, db, domain, risk_gates, store
+
+    for owner, name in (
+        (db, "read_only_db_session"),
+        (domain, "parse_timestamp_utc"),
+        (risk_gates, "regulatory_gate"),
+        (store, "get_risk_gate"),
+    ):
+        assert callable(getattr(owner, name))
+        assert not hasattr(cache, name)

@@ -110,7 +110,7 @@ are per-segment references, not execution or causal AI attribution. File-only
 R0 dispatch precedes database-path handling; optional ledger reads never imply
 account mapping/reconciliation was completed. Nothing writes to decision-v1,
 monitor-v1 or account facts. See [operations](../operations.md) for input/exit
-semantics and [the S2/S3 ledger](../plans/2026-09-17-s2-s3-implementation.md) for
+semantics and the [Git-archived S2/S3 ledger](../README.md#历史只从-git-追溯) for
 fixture evidence and unfinished reconciliation/evaluation boundaries.
 
 ## Independent version dimensions
