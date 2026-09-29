@@ -10,13 +10,23 @@ production database copies, WAL/SHM files or runtime logs.
 - [`source-mapping.md`](source-mapping.md) — source-to-canonical mapping.
 - [`excluded-files.md`](excluded-files.md) — mutable and host-owned material intentionally excluded.
 - [`baseline-tests.md`](baseline-tests.md) — pre-migration test and host observations.
-- [`client-shadow-invocation.md`](client-shadow-invocation.md) — isolated discovery recipes for all three clients.
 - [`production-cutover/20260809-115052/`](production-cutover/20260809-115052/) — M7 DB, installer, cron, Hermes and notification evidence.
 
 The per-milestone review packets live in the external Git repository
 `/home/lin/a-stock-agent-evidence`. The repository-local
 [`docs/reviews/README.md`](../reviews/README.md) records its verified commit,
 manifest and recovery command.
+
+The 2026-08-08 client-version-specific shadow recipes and the migration-only
+`scripts/compare_shadow_results.py` are retired. Recover them from source commit
+`5b576517ba0607d97ecd41458d668c014e91be32`, for example:
+
+```bash
+git show 5b57651:docs/migration/client-shadow-invocation.md
+git show 5b57651:scripts/compare_shadow_results.py
+```
+
+Current behavior validation is documented in [development](../development.md).
 
 ## Migration snapshot
 

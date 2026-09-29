@@ -1,8 +1,7 @@
 # Runtime contracts
 
-Repository contract and deployment alignment as of 2026-09-18. Deployment facts are
-summarized here; the [operations record](../operations.md#current-deployment-record)
-is authoritative for cutover and rollback details.
+Current source contracts. Active release identity, client verification and rollback
+belong in the [operations record](../operations.md#current-deployment-record).
 
 ## Ownership
 
@@ -15,6 +14,15 @@ is authoritative for cutover and rollback details.
 
 `checklist.py` retains checklist presentation metadata. Runtime routing does not
 depend on importing that registry.
+
+The A-framework checklist debt exception automatically recognizes only cached
+industry labels `汽车整车`, `整车`, and `重型设备`. Broader or unknown labels require
+manual verification under the existing A-framework rule; the checklist retains
+the ordinary threshold until eligibility is established. The TuShare debt ratio
+requires all four collected debt components to be present, numeric, finite and
+nonnegative, and total liabilities to be finite and positive. Missing components
+remain missing, rather than becoming zero, without blocking other financial
+fields.
 
 ## Versioned wire contracts
 
@@ -73,29 +81,17 @@ Release identity is the source commit plus package/source-archive and Skill
 SHA-256 values, not the unchanged development package version alone. Package
 the matching runtime, validator, CLI adapter and all Skill files as one release
 set; archive/build hashes belong in the external release manifest. Inventory
-known consumers before rollout. Since the 2026-09-18 cutover, local Claude,
-Codex (`.agents`) and Hermes Skill entries and the three stable CLIs share one
-atomic versioned-release pointer, not the mutable checkout. It now selects the
-0.1.13 paired set after separately authorized migration 035 on 2026-09-18 09:36 CST.
-The nullable `analysis_results.decision_json` column and ledger entry committed
-together after backup; original rows and old ledger records were preserved. No independent
-external consumer requiring mixed versions was found in repository call sites;
-uninspected installations remain unverified. Any independently upgradeable consumer requirement blocks this v1
-rollout pending an explicit compatibility decision.
+known consumers before rollout. Any independently upgradeable consumer requirement
+blocks this v1 rollout pending an explicit compatibility decision.
 
 Current-budget deterministic routing tests are separate from immutable model
 captures. Current-client fake-tool budget evidence remains the normal activation
-requirement. For the 2026-09-18 release, Hermes/Codex passed bounded injected-result
-replays; the user explicitly waived Claude authentication/verification and requested
-its cutover. Claude remains DEPLOYED_NOT_VERIFIED, not a passed client. The initial
-schema-gated rollback is historical; the subsequent migration and final coordinated
-activation are recorded in operations. This waiver is not a general exemption for
-future changes. No production legacy-permissive parsing
-switch exists. See the [deployment record](../operations.md#current-deployment-record).
+requirement. Historical client-verification waivers in the deployment record do
+not exempt future releases. No production legacy-permissive parsing switch exists.
 
-## S3 application-layer additions (runtime deployed after authorized migration 035)
+## Risk policy and performance
 
-`risk_policy.py` now resolves the shared effective parameters before either risk
+`risk_policy.py` resolves the shared effective parameters before either risk
 handler runs. A selected invalid policy fails closed even with numeric overrides;
 file identity, confirmation, scope, timezone and field sources are explicit. No
 policy is written or adopted by the model. Denominator as-of/scope gaps remain

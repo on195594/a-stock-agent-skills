@@ -76,14 +76,6 @@ def cache_db_path() -> Path:
     return Path(_setting("CACHE_DB_PATH", state_dir() / "cache.db")).expanduser()
 
 
-def log_dir() -> Path:
-    return Path(_setting("A_STOCK_LOG_DIR", state_dir() / "logs")).expanduser()
-
-
-def lock_dir() -> Path:
-    return Path(_setting("A_STOCK_LOCK_DIR", state_dir() / "locks")).expanduser()
-
-
 def artifact_dir() -> Path:
     return Path(
         _setting("A_STOCK_ARTIFACT_DIR", state_dir() / "artifacts")

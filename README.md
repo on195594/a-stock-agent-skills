@@ -101,19 +101,6 @@ Run the automated test and validation gates with one command:
 bash scripts/check.sh
 ```
 
-It runs the individual checks below. The frozen lock includes the immutable
-`a-stock-lib` Release wheel and hash.
-
-```bash
-uv sync --frozen
-uv run pytest -q
-uv run ruff check .
-uv run python scripts/validate.py
-uv run python scripts/check_regulatory_freshness.py
-python3 -I tests/qa/standalone_smoke.py
-A_STOCK_NOTIFY_MODE=disabled bash tests/test_check_holdings_cron.sh
-```
-
 Before committing, also run `git diff --check` and review the final diff.
 
 Use fixture state and `A_STOCK_NOTIFY_MODE=disabled` for local or shadow

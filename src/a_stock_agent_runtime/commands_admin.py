@@ -435,9 +435,7 @@ def cmd_checklist(args: list[str]) -> None:
         sys.exit(1)
 
     code, framework = args[0], args[1]
-    from a_stock_agent_runtime import (
-        checklist,
-    )  # 延迟导入：checklist.py 反向依赖 cache，避免模块级循环导入
+    from a_stock_agent_runtime import checklist
 
     try:
         items = checklist.build_checklist(code, framework)
