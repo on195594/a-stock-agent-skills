@@ -32,10 +32,9 @@ and `a-stock-fetch`, rather than wrapping the workflow in `execute_code` (its
 300-second cell timeout discards kernel state). This host-specific mapping is
 maintained here, not injected into the shared Skill payload.
 
-The currently deployed Monitor still contains the older local execution note.
-At the next explicitly authorized Skill publication, use the canonical Monitor
-body with this host-neutral requirement; do not carry the old extra line into
-another release. Keep the immutable active release untouched until that cutover.
+The 2026-09-29 Skill publication replaced the older local execution note with
+the canonical host-neutral requirement. Publish canonical Skill files in new
+immutable releases; do not reintroduce the old extra line.
 
 ### Commands
 
@@ -231,6 +230,33 @@ unsafe clean behavior is not made safe by this staging exercise.
 
 ## Current deployment record
 
+### Skill contract alignment and slimming — 2026-09-29
+
+After explicit user authorization, `226bf9c` was committed, pushed and published.
+`current` now selects
+`~/.local/share/a-stock-agent/deployment-candidates/20260929-226bf9c-skills/release-view`.
+All 26 Skill files exactly match that commit. QA fail-closed wording, Research
+cache reuse/routing and Monitor references were aligned; the historical changelog
+and duplicate QA README were removed. The old local Monitor execution note was
+replaced by the canonical host-neutral text.
+
+The full repository gate passed: 1329 tests passed, two optional tests skipped;
+Ruff, Skill validation, regulatory freshness and standalone/cron smokes passed.
+The candidate Skill payload validated before activation. All nine client Skill
+links resolve to the new payload; all three CLI links retain the exact existing
+`e66832f` runtime, with identical help output before activation and successful
+stable-entry help checks afterward. Runtime and dependency sources are unchanged.
+
+All twelve entry link texts, DB/WAL fingerprints and crontab hash remained
+unchanged. No schema migration, production data write or service restart occurred.
+No new native-client model qualification is claimed; existing conversations may
+retain old Skill context and should reload the Skill or start a new session.
+`ACTIVE_RELEASE.json`, exact Skill hashes and `rollback.json` are retained in the
+candidate directory. Rollback atomically restores the previous
+`20260929-e66832f-debt-cleanup/release-view` pointer without restoring a database.
+
+## Previous deployment records
+
 ### Debt exception repair and repository cleanup — 2026-09-29
 
 After explicit user authorization, repair `a2b16f8` and cleanup `e66832f` were
@@ -256,8 +282,6 @@ source/wheel hashes, logs, `ACTIVE_RELEASE.json` and `rollback.json`. Rollback
 atomically restores the retained `20260929-adeb02f-compat/release-view` pointer;
 it does not restore a database. Later documentation commits do not change the
 deployed runtime source identity.
-
-## Previous deployment records
 
 ### Runtime compatibility cleanup — 2026-09-29
 
