@@ -756,12 +756,13 @@ def _make_fin_df(rows: int = 5) -> "pd.DataFrame":
         "营业总收入同比增长率": [f"{12 + i:.2f}" for i in range(rows)],
         "流动比率": [f"{2.5:.2f}" for _ in range(rows)],
         "每股经营现金流": [f"{3.2 + i * 0.1:.2f}" for i in range(rows)],
+        "有息负债率": [f"{20.0:.2f}" for _ in range(rows)],
     }
     return pd.DataFrame(data)
 
 
 def test_extract_fin_fields_returns_all_keys():
-    """_extract_fin_fields 返回 9 个预期字段（含 bps）"""
+    """_extract_fin_fields 返回 10 个预期字段（含 bps 和 interest_bearing_to_total_debt）"""
     fin_df = _make_fin_df()
     result = fetcher._extract_fin_fields(fin_df)
 
@@ -775,11 +776,18 @@ def test_extract_fin_fields_returns_all_keys():
         "revenue_growth_3y",
         "current_ratio",
         "operating_cf_per_share",
+        "interest_bearing_to_total_debt",
     }
     assert set(result.keys()) == expected_keys
     # 所有值在正常 DataFrame 下均不应为 None
     for k, v in result.items():
         assert v is not None, f"字段 {k} 不应为 None"
+
+
+def test_extract_fin_fields_interest_bearing_to_total_debt():
+    fin_df = _make_fin_df()
+    result = fetcher._extract_fin_fields(fin_df)
+    assert result["interest_bearing_to_total_debt"] == 20.0
 
 
 def test_extract_fin_fields_gross_margin():

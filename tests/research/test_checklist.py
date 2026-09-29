@@ -135,6 +135,26 @@ def test_a_framework_gross_margin_has_only_excellent_or_fail():
     assert item.data_status == "简化判定（不判断趋势/连续性）"
 
 
+def test_a_framework_capital_intensive_debt_exception():
+    """负债率在60%—75%且有息负债率<40%时，A通用框架整车/重型制造例外条款视同达格。"""
+    _set_a_fundamentals(debt_ratio=70.7, interest_bearing_to_total_debt=17.7)
+    items = checklist.build_checklist("600036", "A")
+    debt_item = _item_by_key(items, "debt_ratio")
+    assert debt_item.result == "达格"
+    assert "资本密集型制造例外适用" in (debt_item.note or "")
+
+    # 若有息负债率 >= 40% 或缺失，维持未达
+    _set_a_fundamentals(debt_ratio=70.7, interest_bearing_to_total_debt=45.0)
+    items = checklist.build_checklist("600036", "A")
+    debt_item = _item_by_key(items, "debt_ratio")
+    assert debt_item.result == "未达"
+
+    _set_a_fundamentals(debt_ratio=70.7, interest_bearing_to_total_debt=None)
+    items = checklist.build_checklist("600036", "A")
+    debt_item = _item_by_key(items, "debt_ratio")
+    assert debt_item.result == "未达"
+
+
 def test_unsupported_framework_raises_custom_error():
     _set_a_fundamentals()
 

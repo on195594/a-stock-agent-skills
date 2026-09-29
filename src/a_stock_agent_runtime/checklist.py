@@ -65,6 +65,7 @@ def _build_item(
     framework: str,
     definition: ChecklistDefinition,
     value: object,
+    fundamentals: dict | None = None,
 ) -> ChecklistItem:
     classification = framework_scoring.classify_framework_rule(
         framework,
@@ -79,6 +80,26 @@ def _build_item(
         if definition.trend_unverified
         else "完整"
     )
+    result = _RESULT_LABELS[classification.band.value]
+    note = definition.note
+
+    # A 通用框架重工/整车资本密集型制造负债率例外条款：
+    # 负债率在 60%—75% 之间且有息负债率 < 40% 时视同格档
+    if (
+        framework == "A"
+        and definition.key == "debt_ratio"
+        and classification.value is not None
+        and 60 <= classification.value <= 75
+        and fundamentals is not None
+    ):
+        interest_debt = fundamentals.get("interest_bearing_to_total_debt")
+        if isinstance(interest_debt, (int, float)) and interest_debt < 40:
+            result = "达格"
+            exception_note = (
+                f"资本密集型制造例外适用：负债率≤75%且有息负债率（{interest_debt:.1f}%）<40%"
+            )
+            note = f"{note}；{exception_note}" if note else exception_note
+
     return ChecklistItem(
         key=definition.key,
         label=definition.label,
@@ -87,9 +108,9 @@ def _build_item(
         direction=rule.direction.value,
         excellent_threshold=rule.excellent_threshold,
         pass_threshold=rule.pass_threshold,
-        result=_RESULT_LABELS[classification.band.value],
+        result=result,
         data_status=data_status,
-        note=definition.note,
+        note=note,
     )
 
 
@@ -298,7 +319,12 @@ def build_checklist(code: str, framework: str) -> list[ChecklistItem]:
         raise FundamentalsCacheMissingError(f"未找到 {code} 的有效基本面缓存")
 
     items = [
-        _build_item(normalized_framework, definition, fundamentals.get(definition.key))
+        _build_item(
+            normalized_framework,
+            definition,
+            fundamentals.get(definition.key),
+            fundamentals=fundamentals,
+        )
         for definition in metadata.checklist_definitions
     ]
     if metadata.custom_builder is not None:

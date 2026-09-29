@@ -71,6 +71,7 @@ FIELDS = {
     "roe_3y_avg": ("ROE近3年均值(%)", "structured"),
     "net_profit_growth": ("净利润增速近3年均值(%)", "structured"),
     "debt_ratio": ("资产负债率(%)", "structured"),
+    "interest_bearing_to_total_debt": ("有息负债占总负债比(%)", "structured"),
     "dividend_yield": ("股息率(%)", "structured"),
     "dps": ("每股分红(元)", "structured"),
     "dps_ttm": ("每股分红TTM(元)", "structured"),
@@ -868,9 +869,26 @@ def _fetch_financials_tushare(code: str) -> Any:
         and annual_balance is not None
         and not annual_balance.empty
     ):
+        debt_fields = [
+            f
+            for f in (
+                "st_borr",
+                "lt_borr",
+                "bond_payable",
+                "non_cur_liab_due_1y",
+                "total_liab",
+            )
+            if f in annual_balance.columns
+        ]
         fields = [
             field
-            for field in ("报告期", "total_cur_assets", "total_cur_liab", "total_share")
+            for field in (
+                "报告期",
+                "total_cur_assets",
+                "total_cur_liab",
+                "total_share",
+                *debt_fields,
+            )
             if field in annual_balance.columns
         ]
         if len(fields) > 1:
@@ -879,6 +897,20 @@ def _fetch_financials_tushare(code: str) -> Any:
                 assets = pd.to_numeric(annual["total_cur_assets"], errors="coerce")
                 liabilities = pd.to_numeric(annual["total_cur_liab"], errors="coerce")
                 annual["流动比率"] = assets.div(liabilities.where(liabilities != 0))
+            if "total_liab" in annual.columns:
+                st = pd.to_numeric(annual.get("st_borr", 0), errors="coerce").fillna(0)
+                lt = pd.to_numeric(annual.get("lt_borr", 0), errors="coerce").fillna(0)
+                bond = pd.to_numeric(
+                    annual.get("bond_payable", 0), errors="coerce"
+                ).fillna(0)
+                due1y = pd.to_numeric(
+                    annual.get("non_cur_liab_due_1y", 0), errors="coerce"
+                ).fillna(0)
+                tot_liab = pd.to_numeric(annual["total_liab"], errors="coerce")
+                interest_debt = st + lt + bond + due1y
+                annual["有息负债率"] = interest_debt.div(
+                    tot_liab.where(tot_liab != 0)
+                ) * 100
 
     annual_cashflow = annual_frame(cashflow)
     if (
@@ -1391,6 +1423,7 @@ def _extract_fin_fields(fin_df: Any) -> dict:
         "revenue_growth_3y": avg_of(col("营业总收入同比增长率"), 3),
         "current_ratio": col_last("流动比率"),
         "operating_cf_per_share": col_last("每股经营现金流"),
+        "interest_bearing_to_total_debt": col_last("有息负债率"),
     }
 
 
@@ -1404,6 +1437,7 @@ _FIN_FIELDS_KEYS = (
     "revenue_growth_3y",
     "current_ratio",
     "operating_cf_per_share",
+    "interest_bearing_to_total_debt",
 )
 
 
@@ -1613,6 +1647,8 @@ def _compute_ttm_valuation(results: dict, null_reasons: dict) -> None:
         and growth > 0
     ):
         results["peg_ttm"] = round(pe_ttm_true / growth, 2)
+    elif isinstance(growth, (int, float)) and growth <= 0:
+        null_reasons["peg_ttm"] = "净利润TTM增速非正，PEG不适用"
     else:
         null_reasons["peg_ttm"] = "真实TTM PE或正的TTM利润增速缺失"
 
