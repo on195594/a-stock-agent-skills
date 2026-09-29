@@ -216,6 +216,34 @@ unsafe clean behavior is not made safe by this staging exercise.
 
 ## Current deployment record
 
+### Runtime compatibility cleanup — 2026-09-29
+
+After explicit user authorization, source `adeb02f6555372d5bba6c6919091d26458ae63af` was committed,
+pushed and installed as a new 0.1.13 runtime. `current` now selects
+`~/.local/share/a-stock-agent/deployment-candidates/20260929-adeb02f-compat/release-view`.
+This removes Python compatibility exports, patch-detection branches and eager
+path constants; CLI commands, write gates, wire contracts and investment rules
+are unchanged. Python callers use the owning modules.
+
+All 25 installed modules match committed source; all 34 package versions and
+28 active Skill files match the prior release. The local Monitor execution note
+is preserved. Full source validation passed (1311 tests, two optional installer
+checks skipped), as did isolated installed-runtime checks before and after the
+atomic switch: all W1 commands reject missing confirmation, missing holdings
+fail closed, missing-state monitor output validates monitor-v1, and all three
+stable CLIs show help from an independent working directory.
+
+DB/WAL and crontab fingerprints and all twelve entry links stayed unchanged.
+No migration, production data write, service restart or new native-client model
+qualification was performed. Release hashes, smoke logs and `ACTIVE_RELEASE.json`
+are in the candidate directory. `rollback.json` points to the retained
+`20260929-cc0c1c3-cleanup/release-view`; rollback is an atomic pointer change,
+not a database restore. A build initially targeted the prior artifact directory;
+the old wheel was restored byte-for-byte to its recorded SHA-256 before cutover,
+and its installed runtime remained untouched.
+
+## Previous deployment records
+
 ### Runtime maintenance — 2026-09-29
 
 The user authorized commit, push and deployment of the repository cleanup.
@@ -242,8 +270,6 @@ cleanup is `58c7f6b6379ca00a1c9f69f7eba8222102ac9777`; it required no new wheel.
 
 Rollback is the retained September 28 release-view pointer recorded in
 `rollback.json`, not a database restore. The dated records below are historical.
-
-## Previous deployment records
 
 ### Description-only publication — 2026-09-28
 
