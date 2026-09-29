@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import importlib
-from contextlib import contextmanager
-from pathlib import Path
 import subprocess
 import sys
+from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
-
 
 MODULES = (
     "cache",
@@ -104,6 +103,11 @@ def test_unused_cache_facade_does_not_return() -> None:
         (domain, "parse_timestamp_utc"),
         (risk_gates, "regulatory_gate"),
         (store, "get_risk_gate"),
+        (db, "get_db"),
+        (domain, "cst_today"),
+        (store, "get_fundamentals"),
     ):
         assert callable(getattr(owner, name))
         assert not hasattr(cache, name)
+    for handler in cache.COMMANDS.values():
+        assert not hasattr(cache, handler.__name__)

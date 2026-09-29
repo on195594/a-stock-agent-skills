@@ -1,26 +1,27 @@
 """S1 current-contract fixture acceptance, not live-client qualification."""
 
-from contextlib import contextmanager
-from copy import deepcopy
 import json
-from pathlib import Path
 import socket
 import sqlite3
 import subprocess
 import types
+from contextlib import contextmanager
+from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
 from a_stock_agent_runtime import (
     cache,
-    commands_holdings,
     commands_monitor,
     db,
     domain,
+    market_quotes,
     monitor_contract,
     risk_budget,
     schema,
 )
+from tests.helpers import mock_price_quotes
 from tests.monitor.test_monitor_snapshot import _quotes, _run, _seed_holding
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -86,7 +87,7 @@ def test_budget_does_not_compare_rounded_percentages(isolated_cache_database):
 def test_unknown_inputs_never_mean_zero_risk(field, bad, isolated_cache_database):
     local, quotes = _inputs(isolated_cache_database)
     if field == "price":
-        quotes["600000"] = cache.PriceQuote(
+        quotes["600000"] = market_quotes.PriceQuote(
             bad, domain.cst_today(), "10:00:00", "fixture"
         )
     else:
@@ -139,7 +140,7 @@ def test_known_breach_survives_other_unknown_risk(state, isolated_cache_database
     elif state == "missing_quote":
         quotes["600001"] = None
     else:
-        quotes["600001"] = cache.PriceQuote(
+        quotes["600001"] = market_quotes.PriceQuote(
             100,
             "2000-01-01" if state == "stale" else domain.cst_today(),
             "25:00:00" if state == "invalid_timestamp" else "10:00:00",
@@ -208,7 +209,7 @@ def test_both_public_clis_consume_same_input_and_policy(
     max_position, max_portfolio, status, isolated_cache_database, monkeypatch, capsys
 ):
     _inputs(isolated_cache_database, shares=101)
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
     args = ["--portfolio-value", "100000"]
     if max_position is not None:
         args += [
@@ -249,7 +250,7 @@ def test_text_unknown_risk_never_prints_normal(
     _inputs(isolated_cache_database)
     with sqlite3.connect(isolated_cache_database) as conn:
         conn.execute(f"UPDATE holdings SET {field}=?", (bad,))
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
     assert result == 1
     assert payload["account"]["risk_budget_status"] is None
@@ -289,7 +290,7 @@ def test_text_and_json_share_quote_validation(
     quote = (
         None
         if state == "missing"
-        else cache.PriceQuote(
+        else market_quotes.PriceQuote(
             price,
             "2000-01-01" if state == "stale" else domain.cst_today(),
             None if state == "no_time" else "10:00:00",
@@ -297,11 +298,7 @@ def test_text_and_json_share_quote_validation(
             conflicted=state == "conflicted",
         )
     )
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
-        lambda codes: dict.fromkeys(codes, quote),
-    )
+    mock_price_quotes(monkeypatch, lambda codes: dict.fromkeys(codes, quote))
     _, payload = _run(capsys, ["--portfolio-value", "100000"])
     assert payload["account"]["risk_budget_status"] is None
     assert cache.main(["portfolio-risk", "--portfolio-value", "100000"]) == 0
@@ -316,7 +313,7 @@ def test_text_distinguishes_breach_and_unknown_and_broken_stop(
     with sqlite3.connect(isolated_cache_database) as conn:
         conn.execute("UPDATE holdings SET stop_loss_20=NULL WHERE code='600001'")
         conn.execute("UPDATE holdings SET stop_loss_20=110 WHERE code='600002'")
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
     _, payload = _run(capsys, ["--portfolio-value", "100000"])
     assert payload["holdings"][2]["stop_risk"] == 0
     assert any(item["reason_code"] == "price_stop_2" for item in payload["escalations"])
@@ -335,11 +332,7 @@ def test_text_missing_database_does_not_bootstrap(
     monkeypatch.setattr(
         schema, "bootstrap_database_schema", lambda *a: pytest.fail("migration")
     )
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
-        lambda *a: pytest.fail("network"),
-    )
+    mock_price_quotes(monkeypatch, lambda *a: pytest.fail("network"))
     assert cache.main(["portfolio-risk"]) == 1
     assert "不可用" in capsys.readouterr().err
     if not missing_schema:
@@ -388,7 +381,7 @@ def test_risk_commands_do_not_write_migrate_or_network(
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **k: pytest.fail("external command/notification")
     )
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
     assert _run(capsys, ["--portfolio-value", "100000"])[0] == 0
     assert cache.main(["portfolio-risk", "--portfolio-value", "100000"]) == 0
     assert sql and all(
@@ -403,7 +396,7 @@ def test_confirmed_executed_buy_is_not_blocked_by_budget(
     isolated_cache_database, monkeypatch, capsys
 ):
     _inputs(isolated_cache_database, shares=101)
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
     assert (
         _run(capsys, ["--portfolio-value", "100000"])[1]["account"][
             "risk_budget_status"

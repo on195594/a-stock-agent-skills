@@ -15,10 +15,11 @@ from a_stock_agent_runtime import (
     commands_monitor,
     db,
     domain,
+    market_quotes,
     monitor_contract,
     schema,
 )
-
+from tests.helpers import mock_price_quotes
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "monitor"
 
@@ -120,7 +121,7 @@ def _seed_holding(
 
 def _quotes(codes: list[str], *, price: float = 100) -> dict:
     return {
-        code: cache.PriceQuote(
+        code: market_quotes.PriceQuote(
             price,
             domain.cst_today(),
             "10:00:00",
@@ -181,8 +182,7 @@ def test_local_snapshot_keeps_one_wal_version(
         assert statements[0] == "BEGIN DEFERRED"
         assert statements[-1] == "COMMIT"
         assert all(
-            sql.lstrip().startswith(("SELECT", "BEGIN", "COMMIT"))
-            for sql in statements
+            sql.lstrip().startswith(("SELECT", "BEGIN", "COMMIT")) for sql in statements
         )
 
 
@@ -197,9 +197,17 @@ def test_local_snapshot_releases_transaction_and_connection(
     connections = []
 
     def authorize(action, table, _column, _database, _trigger):
-        if query_failure and action == sqlite3.SQLITE_READ and table == "holding_alerts":
+        if (
+            query_failure
+            and action == sqlite3.SQLITE_READ
+            and table == "holding_alerts"
+        ):
             return sqlite3.SQLITE_DENY
-        if action in {sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE}:
+        if action in {
+            sqlite3.SQLITE_INSERT,
+            sqlite3.SQLITE_UPDATE,
+            sqlite3.SQLITE_DELETE,
+        }:
             pytest.fail("snapshot attempted application DML")
         return sqlite3.SQLITE_OK
 
@@ -266,7 +274,7 @@ def test_clean_five_holding_fast_gate_uses_one_read_session_one_quote_batch_and_
         return _quotes(requested)
 
     monkeypatch.setattr(db, "read_only_db_session", counted_session)
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", fetch)
+    mock_price_quotes(monkeypatch, fetch)
 
     # Synthetic clean scenario: 62,000 risk on 1M stays inside both budgets.
     result, payload = _run(capsys, ["--portfolio-value", "1000000"])
@@ -291,11 +299,10 @@ def test_missing_industry_comparison_blocks_clean_fast_gate(
     isolated_cache_database, monkeypatch, capsys
 ) -> None:
     _seed_holding(isolated_cache_database)
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
+    mock_price_quotes(
+        monkeypatch,
         lambda codes: {
-            codes[0]: cache.PriceQuote(
+            codes[0]: market_quotes.PriceQuote(
                 100,
                 domain.cst_today(),
                 "10:00:00",
@@ -330,7 +337,7 @@ def test_expired_risk_gates_are_stale_and_block_clean_fast_gate(
                SET updated_at='2000-01-01T00:00:00+00:00', ttl_hours=1
                WHERE code='600036'"""
         )
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
 
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
@@ -359,7 +366,7 @@ def test_unavailable_risk_gates_block_clean_fast_gate(
             conn.execute(
                 "UPDATE stock_fundamentals SET data='{malformed' WHERE code='600036'"
             )
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
 
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
@@ -422,7 +429,7 @@ def test_escalation_paths_are_stable_and_fail_closed(
         quotes = _quotes(codes)
         quote = quotes["600036"]
         if case == "stop1":
-            quotes["600036"] = cache.PriceQuote(
+            quotes["600036"] = market_quotes.PriceQuote(
                 84,
                 domain.cst_today(),
                 "10:00:00",
@@ -431,7 +438,7 @@ def test_escalation_paths_are_stable_and_fail_closed(
                 industry_change_pct=0,
             )
         elif case == "stop2":
-            quotes["600036"] = cache.PriceQuote(
+            quotes["600036"] = market_quotes.PriceQuote(
                 79,
                 domain.cst_today(),
                 "10:00:00",
@@ -440,7 +447,7 @@ def test_escalation_paths_are_stable_and_fail_closed(
                 industry_change_pct=0,
             )
         elif case == "daily":
-            quotes["600036"] = cache.PriceQuote(
+            quotes["600036"] = market_quotes.PriceQuote(
                 96.9,
                 domain.cst_today(),
                 "10:00:00",
@@ -449,7 +456,7 @@ def test_escalation_paths_are_stable_and_fail_closed(
                 industry_change_pct=-3.1,
             )
         elif case == "relative":
-            quotes["600036"] = cache.PriceQuote(
+            quotes["600036"] = market_quotes.PriceQuote(
                 99,
                 domain.cst_today(),
                 "10:00:00",
@@ -463,7 +470,7 @@ def test_escalation_paths_are_stable_and_fail_closed(
             quotes["600036"] = quote
         return quotes
 
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", fetch)
+    mock_price_quotes(monkeypatch, fetch)
     argv = [] if case == "denominator" else ["--portfolio-value", "100000"]
     result, payload = _run(capsys, argv)
 
@@ -494,7 +501,7 @@ def test_partial_quotes_preserve_priced_position_lower_bound(
         quotes["600900"] = None
         return quotes
 
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", fetch)
+    mock_price_quotes(monkeypatch, fetch)
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
     assert result == 1
@@ -519,7 +526,7 @@ def test_unresolved_l3_never_clears(
             conn.execute("DELETE FROM holding_thesis_versions")
         elif l3_state == "invalid":
             conn.execute("UPDATE holding_l3_conditions SET temporary_exit_rule=NULL")
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
 
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
@@ -541,11 +548,10 @@ def test_legacy_l3_and_stale_quote_are_not_clean(
     with sqlite3.connect(isolated_cache_database) as conn:
         conn.execute("DELETE FROM holding_l3_conditions")
         conn.execute("DELETE FROM holding_thesis_versions")
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
+    mock_price_quotes(
+        monkeypatch,
         lambda codes: {
-            codes[0]: cache.PriceQuote(100, "2000-01-01", "15:00:00", "fixture")
+            codes[0]: market_quotes.PriceQuote(100, "2000-01-01", "15:00:00", "fixture")
         },
     )
 
@@ -563,7 +569,7 @@ def test_closed_history_is_excluded_and_reopened_lifecycle_is_current(
 ) -> None:
     _seed_holding(isolated_cache_database, holding_id=1, closed=True)
     _seed_holding(isolated_cache_database, holding_id=2)
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
 
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
@@ -648,7 +654,7 @@ def test_frozen_five_holding_replay_freezes_new_risk_without_trade_candidate(
         quote_calls.append(codes)
         return _quotes(codes)
 
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", fetch)
+    mock_price_quotes(monkeypatch, fetch)
 
     result, payload = _run(
         capsys, ["--portfolio-value", str(fixture["portfolio_value"])]
@@ -698,7 +704,9 @@ def test_production_adapter_derives_industry_change_in_the_same_batch(
             "600000": (100.0, domain.cst_today(), "10:00:00", 100.0),
         }
 
-    monkeypatch.setattr(commands_holdings, "_fetch_sina_batch_quotes", raw_batch)
+    monkeypatch.setattr(
+        commands_holdings.market_quotes, "fetch_sina_batch_quotes", raw_batch
+    )
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
     assert result == 0
@@ -715,7 +723,7 @@ def test_invalid_previous_close_fails_closed(
     isolated_cache_database, monkeypatch, capsys, previous_close
 ) -> None:
     _seed_holding(isolated_cache_database)
-    quote = cache.PriceQuote(
+    quote = market_quotes.PriceQuote(
         100,
         domain.cst_today(),
         "10:00:00",
@@ -723,11 +731,7 @@ def test_invalid_previous_close_fails_closed(
         previous_close=previous_close,
         industry_change_pct=0,
     )
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
-        lambda _codes: {"600036": quote},
-    )
+    mock_price_quotes(monkeypatch, lambda _codes: {"600036": quote})
 
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
@@ -746,11 +750,7 @@ def test_missing_stop_loss_makes_account_risk_budget_unknown(
     with sqlite3.connect(isolated_cache_database) as conn:
         conn.execute("UPDATE holdings SET stop_loss_20=NULL WHERE code='600036'")
         conn.commit()
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
-        lambda _codes: _quotes(["600036"]),
-    )
+    mock_price_quotes(monkeypatch, lambda _codes: _quotes(["600036"]))
 
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
@@ -814,7 +814,9 @@ def test_monitor_industry_unavailable_stays_within_one_bounded_request(
             for code in codes
         }
 
-    monkeypatch.setattr(commands_holdings, "_fetch_sina_batch_quotes", fetch)
+    monkeypatch.setattr(
+        commands_holdings.market_quotes, "fetch_sina_batch_quotes", fetch
+    )
     codes = ["600036", "600000"] if case == "holdings_cap" else ["600036"]
     quotes, industry_result = commands_holdings.fetch_monitor_price_quotes(codes)
 
@@ -935,7 +937,7 @@ def test_partial_account_stop_risk_is_never_reported_as_within_budget(
         quotes["600000"] = (
             None
             if value is None
-            else cache.PriceQuote(
+            else market_quotes.PriceQuote(
                 value,
                 domain.cst_today(),
                 "10:00:00",
@@ -993,11 +995,7 @@ def test_tier_review_price_entrances(
             (path, target),
         )
         before = conn.execute("SELECT * FROM holding_tier_state").fetchall()
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
-        lambda codes: _quotes(codes, price=price),
-    )
+    mock_price_quotes(monkeypatch, lambda codes: _quotes(codes, price=price))
 
     # Isolate Tier routing from the separately tested budget upgrade.
     result, payload = _run(capsys, ["--portfolio-value", "300000"])
@@ -1048,7 +1046,7 @@ def test_tier_missing_configuration_or_evidence_fails_closed(
             )
         elif case == "path_a":
             conn.execute("UPDATE holding_tier_state SET exit_path='A'")
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
 
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
 
@@ -1081,11 +1079,7 @@ def test_later_tier_pending_does_not_block_clean_gate_or_repeat_tier1(
             (status, tier2, tier3),
         )
         before = conn.execute("SELECT * FROM holding_tier_state").fetchall()
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
-        lambda codes: _quotes(codes, price=125),
-    )
+    mock_price_quotes(monkeypatch, lambda codes: _quotes(codes, price=125))
     result, payload = _run(capsys, ["--portfolio-value", "300000"])
     assert result == 0
     assert payload["data_status"] == "complete"
@@ -1123,11 +1117,7 @@ def test_stop_tiers_use_their_own_validated_fields(
         conn.execute(
             "UPDATE holdings SET stop_loss_15=?, stop_loss_20=?", (first, second)
         )
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quotes",
-        lambda codes: _quotes(codes, price=price),
-    )
+    mock_price_quotes(monkeypatch, lambda codes: _quotes(codes, price=price))
     result, payload = _run(capsys, ["--portfolio-value", "100000"])
     assert result == 1
     assert payload["data_status"] == "partial"
@@ -1165,7 +1155,9 @@ def test_invalid_holding_timestamp_blocks_monitor_with_sufficient_industry_cover
         calls.append(requested)
         return raw
 
-    monkeypatch.setattr(commands_holdings, "_fetch_sina_batch_quotes", fetch)
+    monkeypatch.setattr(
+        commands_holdings.market_quotes, "fetch_sina_batch_quotes", fetch
+    )
     quotes, industry_result = commands_holdings.fetch_monitor_price_quotes(["600036"])
     quote = quotes["600036"]
 

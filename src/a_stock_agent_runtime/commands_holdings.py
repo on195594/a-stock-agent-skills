@@ -11,7 +11,16 @@ from datetime import date, datetime
 from a_stock_lib.market_data import MarketDataResult
 from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
 
-from a_stock_agent_runtime import db, domain, market_quotes, risk_budget, risk_policy, store
+from a_stock_agent_runtime import (
+    db,
+    domain,
+    market_quotes,
+    risk_budget,
+    risk_gates,
+    risk_policy,
+    store,
+)
+from a_stock_agent_runtime.market_quotes import PriceQuote
 from a_stock_agent_runtime.position_ledger import (
     LifecycleReturn,
     calculate_lifecycle_return,
@@ -87,89 +96,7 @@ def _validate_event_date_not_before(
         sys.exit(1)
 
 
-_orig_fetch_current_price = market_quotes.fetch_current_price
-fetch_current_price = _orig_fetch_current_price
-_sina_query_prefix = market_quotes.sina_query_prefix
-_parse_sina_quote_line = market_quotes.parse_sina_quote_line
-_fetch_sina_batch_quotes = market_quotes.fetch_sina_batch_quotes
-
-
-def fetch_current_prices(codes: list[str]) -> dict[str, float | None]:
-    """批量实时查询多只股票当前价（价格-only，向后兼容既有调用方/测试）。"""
-    # 兼容已有的 mock_current_price 单元测试
-    if fetch_current_price is not _orig_fetch_current_price:
-        return {code: fetch_current_price(code) for code in codes}
-
-    if not codes:
-        return {}
-
-    raw = _fetch_sina_batch_quotes(codes)
-    return {code: (v[0] if v is not None else None) for code, v in raw.items()}
-
-
-PriceQuote = market_quotes.PriceQuote
 _MONITOR_BATCH_LIMIT = 800
-
-
-def _orig_fetch_current_price_quote(code: str) -> PriceQuote | None:
-    """真实查询单只股票行情（含日期/时间）的底层实现。"""
-    quotes = _fetch_sina_batch_quotes([code])
-    raw = quotes.get(code)
-    if raw is None:
-        return None
-    price, quote_date, quote_time, previous_close = raw
-    return PriceQuote(
-        price=price,
-        quote_date=quote_date,
-        quote_time=quote_time,
-        source="sina",
-        previous_close=previous_close,
-    )
-
-
-# 默认指向原始的单股查询函数（支持 monkeypatch，用于需要精确控制 quote_date 的测试）
-fetch_current_price_quote = _orig_fetch_current_price_quote
-
-
-def fetch_current_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]:
-    """批量查询多只股票行情（含日期/时间），供 check-holdings 等新鲜度校验场景使用。"""
-    if fetch_current_price_quote is not _orig_fetch_current_price_quote:
-        return {code: fetch_current_price_quote(code) for code in codes}
-
-    if fetch_current_price is not _orig_fetch_current_price:
-        # 只 mock 了价格、没有日期信息的既有测试路径：quote_date=None 会让
-        # 调用方落回"新鲜度未知"分支，保持这些测试改动前的行为不变。
-        result: dict[str, PriceQuote | None] = {}
-        for code in codes:
-            p = fetch_current_price(code)
-            result[code] = (
-                PriceQuote(price=p, quote_date=None, quote_time=None, source="sina")
-                if p is not None
-                else None
-            )
-        return result
-
-    if not codes:
-        return {}
-
-    raw = _fetch_sina_batch_quotes(codes)
-    return {
-        code: (
-            PriceQuote(
-                price=v[0],
-                quote_date=v[1],
-                quote_time=v[2],
-                source="sina",
-                previous_close=v[3],
-            )
-            if v is not None
-            else None
-        )
-        for code, v in raw.items()
-    }
-
-
-_default_fetch_current_price_quotes = fetch_current_price_quotes
 
 
 def _fresh_industry_map() -> MarketDataResult[dict[str, str]]:
@@ -183,8 +110,6 @@ def fetch_monitor_price_quotes(
     MarketDataResult[dict[str, str]] | None,
 ]:
     """Fetch holdings and same-industry constituents in one bounded quote request."""
-    if fetch_current_price_quotes is not _default_fetch_current_price_quotes:
-        return fetch_current_price_quotes(codes), None
     if not codes:
         return {}, None
     codes = sorted(set(codes))
@@ -212,7 +137,7 @@ def fetch_monitor_price_quotes(
         members = {}
         expanded_codes = codes
     request_codes = expanded_codes
-    raw = _fetch_sina_batch_quotes(request_codes)
+    raw = market_quotes.fetch_sina_batch_quotes(request_codes)
 
     today = domain.cst_today()
     changes: dict[str, list[float]] = {
@@ -1513,7 +1438,7 @@ def cmd_position_return(args: list[str]) -> None:
         sys.exit(1)
     remaining_shares = open_shares if exit_date is None else 0
     if remaining_shares and current_price is None:
-        current_price = fetch_current_price(code)
+        current_price = market_quotes.fetch_current_price(code)
     last_day = domain.cst_today() if remaining_shares else (exit_date or events[-1][1])
     try:
         lifecycle_return = calculate_lifecycle_return(
@@ -1545,9 +1470,13 @@ def calculate_position_risk(
 ) -> dict[str, float | None]:
     """Validate inputs once, preserving the existing second-stop risk formula."""
     shares = shares if risk_budget.valid_shares(shares) else None
-    current_price = current_price if risk_budget.positive_number(current_price) else None
+    current_price = (
+        current_price if risk_budget.positive_number(current_price) else None
+    )
     stop_loss_20 = stop_loss_20 if risk_budget.positive_number(stop_loss_20) else None
-    portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
+    portfolio_value = (
+        portfolio_value if risk_budget.positive_number(portfolio_value) else None
+    )
     market_value = (
         current_price * shares
         if current_price is not None and shares is not None
@@ -1614,7 +1543,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     print(f"{'─' * 104}")
 
     codes = [h[0] for h in holdings]
-    quotes = fetch_current_price_quotes(codes)
+    quotes = market_quotes.fetch_current_price_quotes(codes)
     today_str = domain.cst_today()
     valued_rows = []
     for (
@@ -1643,7 +1572,10 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         )
 
     risks = [
-        {"code": row[0], **calculate_position_risk(row[3], row[8], row[7], portfolio_value)}
+        {
+            "code": row[0],
+            **calculate_position_risk(row[3], row[8], row[7], portfolio_value),
+        }
         for row in valued_rows
     ]
     budget = risk_budget.assess(
@@ -1693,14 +1625,18 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         label = f"{name}({code})" if name else code
         pnl_str = (
             f"{(curr - cost) / cost * 100:+.1f}%"
-            if curr is not None and risk_budget.positive_number(cost) else "─"
+            if curr is not None and risk_budget.positive_number(cost)
+            else "─"
         )
         curr_str = f"{curr:.2f}" if curr else "─"
         shares_str = str(shares) if shares is not None else "─"
         if market_value is None:
             missing_status = (
-                "已破线/缺数据" if curr is not None and risk_budget.positive_number(sl20)
-                and curr <= sl20 else "缺数据"
+                "已破线/缺数据"
+                if curr is not None
+                and risk_budget.positive_number(sl20)
+                and curr <= sl20
+                else "缺数据"
             )
             print(
                 f"  {label:<16} {fw_display:>5} {shares_str:>6} {curr_str:>7} "
@@ -1746,7 +1682,9 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     if total is None:
         lower_bound = budget["known_stop_risk_lower_bound"]
         lower_text = f"{lower_bound:.2f}元" if lower_bound is not None else "不可用"
-        print(f"\n  {risk_summary} | 第二档止损总风险：不可完整判定；已知风险下限：{lower_text}")
+        print(
+            f"\n  {risk_summary} | 第二档止损总风险：不可完整判定；已知风险下限：{lower_text}"
+        )
     else:
         print(
             f"\n  {risk_summary} | 第二档止损总风险：{total:.2f}元 "
@@ -1758,8 +1696,11 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         f"组合风险预算上限：{limits['max_portfolio_risk_pct']:.2f}% | "
         f"policy_id={limits['policy_id']}; source={limits['source']}; "
         f"field_sources={limits['field_sources']}"
-        + ("（文件含确认元数据，不构成交易授权）" if limits["source"] == "policy_file"
-           else "（未确认个人风险预算；兼容默认/本次覆盖不等于个人政策）")
+        + (
+            "（文件含确认元数据，不构成交易授权）"
+            if limits["source"] == "policy_file"
+            else "（未确认个人风险预算；兼容默认/本次覆盖不等于个人政策）"
+        )
     )
     if not account_value_supplied:
         print("  未提供总资产：不判定预算超限；风险不可完整判定")
@@ -1805,7 +1746,7 @@ def cmd_check_holdings(args: list[str] | None = None) -> None:
     print(f"{'─' * 72}")
 
     codes = [h[1] for h in holdings]
-    quotes = fetch_current_price_quotes(codes)
+    quotes = market_quotes.fetch_current_price_quotes(codes)
     market_snapshot = market_quotes.fetch_market_limit_down_snapshot()
     existing_defers = {}
     for holding_id, evidence, review_due in defer_rows:
@@ -1854,7 +1795,7 @@ def cmd_check_holdings(args: list[str] | None = None) -> None:
             status += f" | 🔴 风险门冻结加仓({reasons})"
         quote = quotes.get(code)
         existing_defer = existing_defers.get(holding_id)
-        p3 = domain.evaluate_liquidity_shock(
+        p3 = risk_gates.liquidity_shock_gate(
             {
                 "stop_loss_triggered": bool(
                     existing_defer or is_alert and quote and quote.price <= sl20

@@ -13,7 +13,15 @@ from datetime import timedelta
 
 import pytest
 
-from a_stock_agent_runtime import cache, db, domain
+from a_stock_agent_runtime import (
+    cache,
+    commands_admin,
+    commands_holdings,
+    commands_monitor,
+    db,
+    domain,
+    store,
+)
 from tests.helpers import valid_fundamentals_payload
 
 
@@ -25,22 +33,22 @@ def isolated_db(tmp_path, monkeypatch):
 
 
 def test_quote_snapshot_max_age_exact_boundary(monkeypatch) -> None:
-    now = cache.utc_now()
+    now = domain.utc_now()
     monkeypatch.setattr(domain, "utc_now", lambda: now)
-    cache.record_quote_snapshot(
+    store.record_quote_snapshot(
         "BOUNDARY",
         10.0,
-        cache.cst_today(),
+        domain.cst_today(),
         "10:00:00",
         "sina",
         {"sina": {"price": 10.0}},
         False,
         fetched_at=(now - timedelta(minutes=30)).isoformat(),
     )
-    cache.record_quote_snapshot(
+    store.record_quote_snapshot(
         "TOO_OLD",
         10.0,
-        cache.cst_today(),
+        domain.cst_today(),
         "10:00:00",
         "sina",
         {"sina": {"price": 10.0}},
@@ -49,30 +57,30 @@ def test_quote_snapshot_max_age_exact_boundary(monkeypatch) -> None:
     )
 
     assert (
-        cache.get_latest_quote_snapshot(
-            "BOUNDARY", max_age=cache.QUOTE_SNAPSHOT_MAX_AGE
+        store.get_latest_quote_snapshot(
+            "BOUNDARY", max_age=store.QUOTE_SNAPSHOT_MAX_AGE
         )
         is not None
     )
     assert (
-        cache.get_latest_quote_snapshot("TOO_OLD", max_age=cache.QUOTE_SNAPSHOT_MAX_AGE)
+        store.get_latest_quote_snapshot("TOO_OLD", max_age=store.QUOTE_SNAPSHOT_MAX_AGE)
         is None
     )
 
 
 def test_qualitative_only_status_survives_unknown_then_clears_on_known_bank() -> None:
-    cache.update_qualitative_only_security("601318", "保险公司", "保险")
-    cache.update_qualitative_only_security("601318", "未知名称", "未知")
+    store.update_qualitative_only_security("601318", "保险公司", "保险")
+    store.update_qualitative_only_security("601318", "未知名称", "未知")
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         retained = conn.execute(
             "SELECT name, industry FROM qualitative_only_securities WHERE code=?",
             ("601318",),
         ).fetchone()
     assert retained == ("保险公司", "保险")
 
-    cache.update_qualitative_only_security("601318", "测试银行", "股份制银行")
-    with cache.db_session() as conn:
+    store.update_qualitative_only_security("601318", "测试银行", "股份制银行")
+    with db.db_session() as conn:
         cleared = conn.execute(
             "SELECT 1 FROM qualitative_only_securities WHERE code=?", ("601318",)
         ).fetchone()
@@ -82,13 +90,13 @@ def test_qualitative_only_status_survives_unknown_then_clears_on_known_bank() ->
 def test_cleanup_compare_and_delete_preserves_concurrently_refreshed_rows(
     monkeypatch,
 ) -> None:
-    now = cache.utc_now()
+    now = domain.utc_now()
     old = (now - timedelta(days=30)).isoformat()
     fresh = now.isoformat()
-    cache.set_fundamentals(
+    store.set_fundamentals(
         "600000", "测试公司", "制造", valid_fundamentals_payload({"roe": 10}), ttl=1
     )
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             "UPDATE stock_fundamentals SET updated_at=? WHERE code=?",
             (old, "600000"),
@@ -135,16 +143,16 @@ def test_cleanup_compare_and_delete_preserves_concurrently_refreshed_rows(
 
     @contextmanager
     def hooked_session(timeout: float = 30.0):
-        conn = cache.get_db(timeout)
+        conn = db.get_db(timeout)
         try:
             yield RefreshBeforeDeleteConnection(conn)
         finally:
             conn.close()
 
     monkeypatch.setattr(db, "db_session", hooked_session)
-    cache.cmd_cleanup()
+    commands_admin.cmd_cleanup()
 
-    with closing(cache.get_db()) as conn:
+    with closing(db.get_db()) as conn:
         fund = conn.execute(
             "SELECT updated_at FROM stock_fundamentals WHERE code=?", ("600000",)
         ).fetchone()
@@ -157,7 +165,7 @@ def test_cleanup_compare_and_delete_preserves_concurrently_refreshed_rows(
 
 
 def test_cleanup_retains_unparseable_legacy_analysis_timestamp(capsys) -> None:
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             """INSERT INTO analysis_results
                (code, date, result, created_at)
@@ -165,19 +173,19 @@ def test_cleanup_retains_unparseable_legacy_analysis_timestamp(capsys) -> None:
         )
         conn.commit()
 
-    cache.cmd_cleanup()
+    commands_admin.cmd_cleanup()
 
     assert "无需清理" in capsys.readouterr().out
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT result FROM analysis_results WHERE code='LEGACY'"
         ).fetchone() == ("legacy",)
 
 
 def test_cleanup_prunes_preexisting_quote_snapshot_overflow(capsys) -> None:
-    now = cache.utc_now()
-    overflow = cache.QUOTE_SNAPSHOT_RETENTION_PER_CODE + 9
-    with cache.db_session() as conn:
+    now = domain.utc_now()
+    overflow = store.QUOTE_SNAPSHOT_RETENTION_PER_CODE + 9
+    with db.db_session() as conn:
         conn.executemany(
             """INSERT INTO quote_snapshots
                (code, price, quote_date, quote_time, fetched_at, source,
@@ -185,7 +193,7 @@ def test_cleanup_prunes_preexisting_quote_snapshot_overflow(capsys) -> None:
                VALUES ('OVERFLOW',10.0,?,?,?,?,?,0,1)""",
             [
                 (
-                    cache.cst_today(),
+                    domain.cst_today(),
                     "10:00:00",
                     (now - timedelta(seconds=index)).isoformat(),
                     "sina",
@@ -196,21 +204,21 @@ def test_cleanup_prunes_preexisting_quote_snapshot_overflow(capsys) -> None:
         )
         conn.commit()
 
-    cache.cmd_cleanup()
+    commands_admin.cmd_cleanup()
 
     assert "超限行情快照" in capsys.readouterr().out
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert (
             conn.execute(
                 "SELECT COUNT(*) FROM quote_snapshots WHERE code='OVERFLOW'"
             ).fetchone()[0]
-            == cache.QUOTE_SNAPSHOT_RETENTION_PER_CODE
+            == store.QUOTE_SNAPSHOT_RETENTION_PER_CODE
         )
 
 
 def test_watchlist_tolerates_corrupt_legacy_json_fields() -> None:
-    now = cache.utc_now_iso()
-    with cache.db_session() as conn:
+    now = domain.utc_now_iso()
+    with db.db_session() as conn:
         conn.execute(
             """INSERT INTO stock_fundamentals
                (code, name, industry, data, updated_at, ttl_hours)
@@ -221,11 +229,11 @@ def test_watchlist_tolerates_corrupt_legacy_json_fields() -> None:
             """INSERT INTO analysis_results
                (code, date, result, created_at, flags, score_breakdown)
                VALUES ('CORRUPT',?,'legacy',?,'{bad-flags','[wrong-type]')""",
-            (cache.cst_today(), now),
+            (domain.cst_today(), now),
         )
         conn.commit()
 
-    rows = cache.get_watchlist_rows()
+    rows = commands_admin.get_watchlist_rows()
 
     assert len(rows) == 1
     assert rows[0]["code"] == "CORRUPT"
@@ -235,16 +243,16 @@ def test_watchlist_tolerates_corrupt_legacy_json_fields() -> None:
 
 
 def test_close_holding_rejects_invalid_date_without_mutation() -> None:
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             "INSERT INTO holdings (code, cost_price, buy_date) VALUES ('600519',100,'2026-01-01')"
         )
         conn.commit()
 
     with pytest.raises(SystemExit):
-        cache.cmd_close_holding(["600519", "120", "2026-02-30"])
+        commands_holdings.cmd_close_holding(["600519", "120", "2026-02-30"])
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             "SELECT exit_price, exit_date FROM holdings WHERE code='600519'"
         ).fetchone()
@@ -252,8 +260,8 @@ def test_close_holding_rejects_invalid_date_without_mutation() -> None:
 
 
 def test_concurrent_quote_snapshot_writes_are_lossless_and_latest_wins() -> None:
-    cache.get_db().close()
-    now = cache.utc_now()
+    db.get_db().close()
+    now = domain.utc_now()
     worker_count = 8
     barrier = threading.Barrier(worker_count)
     errors: list[BaseException] = []
@@ -261,10 +269,10 @@ def test_concurrent_quote_snapshot_writes_are_lossless_and_latest_wins() -> None
     def write_snapshot(index: int) -> None:
         try:
             barrier.wait(timeout=5)
-            cache.record_quote_snapshot(
+            store.record_quote_snapshot(
                 "600000",
                 100.0 + index,
-                cache.cst_today(),
+                domain.cst_today(),
                 "10:00:00",
                 "sina",
                 {"sina": {"price": 100.0 + index}},
@@ -285,21 +293,21 @@ def test_concurrent_quote_snapshot_writes_are_lossless_and_latest_wins() -> None
 
     assert not errors
     assert all(not thread.is_alive() for thread in threads)
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         count = conn.execute(
             "SELECT COUNT(*) FROM quote_snapshots WHERE code='600000'"
         ).fetchone()[0]
     assert count == worker_count
-    assert cache.get_latest_quote_snapshot("600000")["price"] == 107.0
+    assert store.get_latest_quote_snapshot("600000")["price"] == 107.0
 
 
 def test_concurrent_flag_appends_are_lossless_under_contention() -> None:
-    now = cache.utc_now_iso()
-    with cache.db_session() as conn:
+    now = domain.utc_now_iso()
+    with db.db_session() as conn:
         conn.execute(
             """INSERT INTO analysis_results (code, date, result, created_at)
                VALUES ('600036',?,'report',?)""",
-            (cache.cst_today(), now),
+            (domain.cst_today(), now),
         )
         conn.commit()
     worker_count = 8
@@ -309,7 +317,7 @@ def test_concurrent_flag_appends_are_lossless_under_contention() -> None:
     def append_flag(index: int) -> None:
         try:
             barrier.wait(timeout=5)
-            cache.cmd_set_flag(["600036", "yellow", f"flag-{index}"])
+            commands_monitor.cmd_set_flag(["600036", "yellow", f"flag-{index}"])
         except BaseException as exc:
             errors.append(exc)
 
@@ -324,7 +332,7 @@ def test_concurrent_flag_appends_are_lossless_under_contention() -> None:
 
     assert not errors
     assert all(not thread.is_alive() for thread in threads)
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         raw = conn.execute(
             "SELECT flags FROM analysis_results WHERE code='600036'"
         ).fetchone()[0]
@@ -337,7 +345,7 @@ def test_concurrent_flag_appends_are_lossless_under_contention() -> None:
 
 def test_many_concurrent_close_requests_consume_distinct_lots() -> None:
     worker_count = 8
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.executemany(
             """INSERT INTO holdings (code, cost_price, buy_date)
                VALUES ('600519', ?, ?)""",
@@ -353,7 +361,7 @@ def test_many_concurrent_close_requests_consume_distinct_lots() -> None:
     def close_lot(index: int) -> None:
         try:
             barrier.wait(timeout=5)
-            cache.cmd_close_holding(["600519", str(120.0 + index)])
+            commands_holdings.cmd_close_holding(["600519", str(120.0 + index)])
         except BaseException as exc:
             errors.append(exc)
 
@@ -368,7 +376,7 @@ def test_many_concurrent_close_requests_consume_distinct_lots() -> None:
 
     assert not errors
     assert all(not thread.is_alive() for thread in threads)
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         rows = conn.execute(
             """SELECT exit_price, exit_date FROM holdings
                WHERE code='600519' ORDER BY id"""
@@ -402,7 +410,7 @@ def test_schema_migration_is_safe_across_processes(tmp_path) -> None:
     command = [
         sys.executable,
         "-c",
-        "from a_stock_agent_runtime import cache; connection = cache.get_db(); connection.close()",
+        "from a_stock_agent_runtime import db; connection = db.get_db(); connection.close()",
     ]
     processes = [
         subprocess.Popen(

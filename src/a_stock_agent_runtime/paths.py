@@ -95,12 +95,3 @@ def ensure_db_parent(path: str | Path) -> None:
     parent = Path(path).expanduser().resolve().parent
     parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     parent.chmod(0o700)
-
-
-# Kept as computed compatibility constants for callers that only need a path.
-# They point to external XDG state, never to the repository or an old client.
-DEFAULT_STATE_DIR = state_dir()
-DEFAULT_CACHE_DB_PATH = cache_db_path()
-DEFAULT_LOG_DIR = log_dir()
-DEFAULT_LOCK_DIR = lock_dir()
-DEFAULT_ARTIFACT_DIR = artifact_dir()

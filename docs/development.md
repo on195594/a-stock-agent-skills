@@ -92,6 +92,14 @@ Goal or a passing test does not grant that permission.
 
 ## Documentation and evidence
 
+`cache.py` owns CLI parsing, command dispatch and the write gate; Python callers
+and tests import domain/store/db/command functions from their actual modules.
+Quote I/O lives in `market_quotes.py`; monitoring's industry aggregation remains
+in `commands_holdings.fetch_monitor_price_quotes`. Tests inject these boundaries
+explicitly, without production branches that detect patched functions.
+Paths are resolved through functions at call time; importing `paths` does not
+read configuration. Risk adapters call `risk_gates` directly.
+
 Update the current owner document for the behavior being changed; do not create
 another plan/spec/review for ordinary maintenance. Read historical specifications
 only when tracing or changing their rules. Migration and review evidence may contain command output and hashes but

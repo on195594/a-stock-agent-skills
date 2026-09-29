@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import requests
-
 
 logger = logging.getLogger(__name__)
 
@@ -142,15 +141,19 @@ def fetch_current_price(code: str) -> float | None:
         return None
 
 
-def fetch_current_price_quote(code: str) -> PriceQuote | None:
-    """Fetch one quote with its source timestamp."""
-    raw = fetch_sina_batch_quotes([code]).get(code)
-    if raw is None:
-        return None
-    return PriceQuote(
-        price=raw[0],
-        quote_date=raw[1],
-        quote_time=raw[2],
-        source="sina",
-        previous_close=raw[3],
-    )
+def fetch_current_price_quotes(codes: list[str]) -> dict[str, PriceQuote | None]:
+    """Fetch a batch of quotes with source timestamps and previous closes."""
+    return {
+        code: (
+            PriceQuote(
+                price=raw[0],
+                quote_date=raw[1],
+                quote_time=raw[2],
+                source="sina",
+                previous_close=raw[3],
+            )
+            if raw is not None
+            else None
+        )
+        for code, raw in fetch_sina_batch_quotes(codes).items()
+    }

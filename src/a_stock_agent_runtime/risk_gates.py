@@ -78,11 +78,17 @@ P1_STATUSES = {"clear", "blocked", "incomplete"}
 P2_STATUSES = {"clear", "blocked", "incomplete", "review_required", "not_applicable"}
 P3_STATUSES = {"not_applicable", "clear", "deferred", "untradeable", "incomplete"}
 GATE_NAMES = ("regulatory_gate", "roe_structural_gate", "cash_flow_gate")
-def evaluate_rule_freshness(
-    rule: Mapping[str, Any], today: date
-) -> str:
+
+
+def evaluate_rule_freshness(rule: Mapping[str, Any], today: date) -> str:
     """Return current, review_due, or invalid_metadata for one rule."""
-    required = ("effective_from", "verified_at", "review_after", "official_url", "source_hash")
+    required = (
+        "effective_from",
+        "verified_at",
+        "review_after",
+        "official_url",
+        "source_hash",
+    )
     if type(today) is not date or any(
         not isinstance(rule.get(field), str) or not rule[field].strip()
         for field in required
@@ -138,9 +144,7 @@ def _sources(value: Any) -> list[str]:
     return []
 
 
-def _official(
-    sources: list[str], *, allow_statement_mirror: bool = False
-) -> bool:
+def _official(sources: list[str], *, allow_statement_mirror: bool = False) -> bool:
     if not sources:
         return False
     lowered = " ".join(sources).lower()
@@ -1200,12 +1204,3 @@ def liquidity_shock_gate(
         "price": price,
         "stop_loss_20": line,
     }
-
-
-# Descriptive aliases keep adapter/test call sites readable without adding another rule implementation.
-evaluate_regulatory_gate = regulatory_gate
-evaluate_roe_gate = roe_structural_gate
-evaluate_cash_flow_gate = cash_flow_gate
-evaluate_liquidity_shock = liquidity_shock_gate
-REGULATORY_RULE_MAP = REGULATORY_RULES
-validate_market_snapshot = market_snapshot_status

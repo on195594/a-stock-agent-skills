@@ -17,13 +17,23 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from a_stock_agent_runtime import cache, commands_holdings, domain
+from a_stock_agent_runtime import (
+    commands_admin,
+    commands_analysis,
+    commands_holdings,
+    commands_monitor,
+    db,
+    domain,
+    fetcher,
+    market_quotes,
+    store,
+)
 from tests.helpers import (
+    mock_price_quotes,
     record_valid_quote,
     set_valid_fundamentals,
     valid_fundamentals_payload,
 )
-from a_stock_agent_runtime import fetcher
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +48,7 @@ def isolated_db(tmp_path, monkeypatch):
 
 def _insert_analysis(code: str, result: str = "结论", score: int | None = None):
     today = datetime.now().strftime("%Y-%m-%d")
-    conn = cache.get_db()
+    conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results (code, date, result, created_at, score) VALUES (?,?,?,?,?)",
         (code, today, result, datetime.now().isoformat(), score),
@@ -57,10 +67,10 @@ class TestCmdSetAndGet:
         payload = json.dumps(
             valid_fundamentals_payload({"pe": 5.2, "pb": 0.6}), ensure_ascii=False
         )
-        cache.cmd_set(["600000", "浦发银行", "国有大行", payload])
+        commands_analysis.cmd_set(["600000", "浦发银行", "国有大行", payload])
         capsys.readouterr()  # discard set output
 
-        cache.cmd_get(["600000"])
+        commands_analysis.cmd_get(["600000"])
         out = capsys.readouterr().out
         data = json.loads(out)
         assert data["pe"] == 5.2
@@ -69,28 +79,28 @@ class TestCmdSetAndGet:
 
     def test_cmd_set_confirms_industry_ttl(self, capsys):
         payload = json.dumps(valid_fundamentals_payload({}), ensure_ascii=False)
-        cache.cmd_set(["601318", "中国平安", "保险", payload])
+        commands_analysis.cmd_set(["601318", "中国平安", "保险", payload])
         out = capsys.readouterr().out
         assert "TTL:72h" in out
 
     def test_cmd_set_explicit_ttl_overrides_industry(self, capsys):
         payload = json.dumps(valid_fundamentals_payload({}), ensure_ascii=False)
-        cache.cmd_set(["000858", "五粮液", "白酒", payload, "48"])
+        commands_analysis.cmd_set(["000858", "五粮液", "白酒", payload, "48"])
         out = capsys.readouterr().out
         assert "TTL:48h" in out
 
     def test_cmd_set_invalid_json_exits(self):
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set(["600000", "名称", "行业", "{invalid json}"])
+            commands_analysis.cmd_set(["600000", "名称", "行业", "{invalid json}"])
         assert exc.value.code == 1
 
     def test_cmd_set_missing_args_exits(self):
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set(["600000", "名称"])
+            commands_analysis.cmd_set(["600000", "名称"])
         assert exc.value.code == 1
 
     def test_cmd_get_miss(self, capsys):
-        cache.cmd_get(["999999"])
+        commands_analysis.cmd_get(["999999"])
         out = capsys.readouterr().out
         assert out.strip() == "CACHE_MISS"
 
@@ -98,15 +108,15 @@ class TestCmdSetAndGet:
         payload = json.dumps(
             valid_fundamentals_payload({"roe": 15}), ensure_ascii=False
         )
-        cache.cmd_set(["600036", "招商银行", "银行", payload])
+        commands_analysis.cmd_set(["600036", "招商银行", "银行", payload])
         capsys.readouterr()
         monkeypatch.setattr(domain, "is_expired", lambda *_: True)
-        cache.cmd_get(["600036"])
+        commands_analysis.cmd_get(["600036"])
         out = capsys.readouterr().out
         assert out.strip() == "CACHE_MISS"
 
     def test_cmd_get_no_args_returns_cache_miss(self, capsys):
-        cache.cmd_get([])
+        commands_analysis.cmd_get([])
         out = capsys.readouterr().out
         assert out.strip() == "CACHE_MISS"
 
@@ -119,18 +129,18 @@ class TestCmdSetAndGet:
 class TestCmdGetAnalysis:
     def test_legacy_row_is_human_only(self, capsys):
         _insert_analysis("600036", "招行分析：买入")
-        cache.cmd_get_analysis(["600036"])
+        commands_analysis.cmd_get_analysis(["600036"])
         out = capsys.readouterr().out
         assert "招行分析：买入" in out
         assert "LEGACY_ANALYSIS_HUMAN_ONLY" in out
         assert "缓存命中" not in out
 
     def test_miss_returns_cache_miss(self, capsys):
-        cache.cmd_get_analysis(["999999"])
+        commands_analysis.cmd_get_analysis(["999999"])
         assert capsys.readouterr().out.strip() == "CACHE_MISS"
 
     def test_no_args_returns_cache_miss(self, capsys):
-        cache.cmd_get_analysis([])
+        commands_analysis.cmd_get_analysis([])
         assert capsys.readouterr().out.strip() == "CACHE_MISS"
 
 
@@ -147,13 +157,13 @@ class TestCmdSetScoreBreakdown:
             "timing": {"valuation_axis": 13, "subtotal": 17},
             "total": 61,
         }
-        cache.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
+        commands_analysis.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
         out = capsys.readouterr().out
         assert "分项得分已记录" in out
 
         # Verify it's actually in the database
         today = datetime.now().strftime("%Y-%m-%d")
-        conn = cache.get_db()
+        conn = db.get_db()
         row = conn.execute(
             "SELECT score_breakdown FROM analysis_results WHERE code=? AND date=?",
             ("600036", today),
@@ -165,20 +175,22 @@ class TestCmdSetScoreBreakdown:
     def test_no_analysis_record_exits(self):
         breakdown = {"fundamentals": {"subtotal": 1}, "timing": {"subtotal": 1}}
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score_breakdown(["888888", json.dumps(breakdown)])
+            commands_analysis.cmd_set_score_breakdown(["888888", json.dumps(breakdown)])
         assert exc.value.code == 1
 
     def test_invalid_json_exits(self):
         _insert_analysis("600036")
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score_breakdown(["600036", "{bad json}"])
+            commands_analysis.cmd_set_score_breakdown(["600036", "{bad json}"])
         assert exc.value.code == 1
 
     def test_legacy_flat_schema_rejected(self, capsys):
         """旧平铺 schema（无 fundamentals/timing）写入应被拒绝（TL-3 写入校验）"""
         _insert_analysis("600036")
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score_breakdown(["600036", '{"roe": 8, "volume": 7}'])
+            commands_analysis.cmd_set_score_breakdown(
+                ["600036", '{"roe": 8, "volume": 7}']
+            )
         assert exc.value.code == 1
         assert "fundamentals" in capsys.readouterr().err
 
@@ -188,7 +200,7 @@ class TestCmdSetScoreBreakdown:
     def test_non_dict_top_level_json_rejected(self, json_string, capsys):
         _insert_analysis("600036")
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score_breakdown(["600036", json_string])
+            commands_analysis.cmd_set_score_breakdown(["600036", json_string])
         assert exc.value.code == 1
         assert "dict" in capsys.readouterr().err
 
@@ -196,7 +208,7 @@ class TestCmdSetScoreBreakdown:
         _insert_analysis("600036")
         breakdown = {"fundamentals": {"roe_3y": 10}, "timing": {"subtotal": 17}}
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
+            commands_analysis.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
         assert exc.value.code == 1
 
     @pytest.mark.parametrize("bad_subtotal", [True, [1, 2]])
@@ -207,7 +219,7 @@ class TestCmdSetScoreBreakdown:
             "timing": {"subtotal": 1},
         }
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
+            commands_analysis.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
         assert exc.value.code == 1
         assert "subtotal" in capsys.readouterr().err
 
@@ -226,7 +238,7 @@ class TestCmdSetScoreBreakdown:
     def test_breakdown_rejects_invalid_bounds_total_and_nan(self, breakdown):
         _insert_analysis("600036")
         with pytest.raises(SystemExit):
-            cache.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
+            commands_analysis.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
 
     def test_breakdown_must_match_persisted_score(self):
         _insert_analysis("600036", score=60)
@@ -236,7 +248,7 @@ class TestCmdSetScoreBreakdown:
             "total": 61,
         }
         with pytest.raises(SystemExit):
-            cache.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
+            commands_analysis.cmd_set_score_breakdown(["600036", json.dumps(breakdown)])
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -247,37 +259,37 @@ class TestCmdSetScoreBreakdown:
 class TestSetAndClearFlag:
     def test_set_red_flag_stored(self, capsys):
         _insert_analysis("000001")
-        cache.cmd_set_flag(["000001", "red", "大股东减持超5%"])
+        commands_monitor.cmd_set_flag(["000001", "red", "大股东减持超5%"])
         out = capsys.readouterr().out
         assert "🔴" in out
         assert "大股东减持超5%" in out
 
     def test_set_yellow_flag_stored(self, capsys):
         _insert_analysis("000001")
-        cache.cmd_set_flag(["000001", "yellow", "短期涨幅过大"])
+        commands_monitor.cmd_set_flag(["000001", "yellow", "短期涨幅过大"])
         out = capsys.readouterr().out
         assert "⚠️" in out
 
     def test_invalid_level_exits(self):
         _insert_analysis("000001")
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_flag(["000001", "green", "理由"])
+            commands_monitor.cmd_set_flag(["000001", "green", "理由"])
         assert exc.value.code == 1
 
     def test_no_analysis_record_exits(self):
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_flag(["999999", "red", "理由"])
+            commands_monitor.cmd_set_flag(["999999", "red", "理由"])
         assert exc.value.code == 1
 
     def test_multiple_flags_accumulate(self, capsys):
         """set-flag must append, not overwrite — two calls yield two entries."""
         _insert_analysis("600036")
-        cache.cmd_set_flag(["600036", "yellow", "第一条"])
-        cache.cmd_set_flag(["600036", "red", "第二条"])
+        commands_monitor.cmd_set_flag(["600036", "yellow", "第一条"])
+        commands_monitor.cmd_set_flag(["600036", "red", "第二条"])
         capsys.readouterr()
 
         today = datetime.now().strftime("%Y-%m-%d")
-        conn = cache.get_db()
+        conn = db.get_db()
         row = conn.execute(
             "SELECT flags FROM analysis_results WHERE code=? AND date=?",
             ("600036", today),
@@ -290,12 +302,12 @@ class TestSetAndClearFlag:
 
     def test_clear_flag_removes_all(self, capsys):
         _insert_analysis("600036")
-        cache.cmd_set_flag(["600036", "red", "某原因"])
+        commands_monitor.cmd_set_flag(["600036", "red", "某原因"])
         capsys.readouterr()
 
-        cache.cmd_clear_flag(["600036"])
+        commands_monitor.cmd_clear_flag(["600036"])
         today = datetime.now().strftime("%Y-%m-%d")
-        conn = cache.get_db()
+        conn = db.get_db()
         row = conn.execute(
             "SELECT flags FROM analysis_results WHERE code=? AND date=?",
             ("600036", today),
@@ -311,13 +323,13 @@ class TestSetAndClearFlag:
 
 class TestRemoveHolding:
     def test_removes_existing_holding(self, capsys):
-        cache.cmd_add_holding(["600519", "1800"])
+        commands_holdings.cmd_add_holding(["600519", "1800"])
         capsys.readouterr()
-        cache.cmd_remove_holding(["600519"])
+        commands_holdings.cmd_remove_holding(["600519"])
         out = capsys.readouterr().out
         assert "600519" in out
 
-        conn = cache.get_db()
+        conn = db.get_db()
         cnt = conn.execute(
             "SELECT COUNT(*) FROM holdings WHERE code='600519'"
         ).fetchone()[0]
@@ -326,7 +338,7 @@ class TestRemoveHolding:
 
     def test_nonexistent_holding_exits(self):
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_remove_holding(["999888"])
+            commands_holdings.cmd_remove_holding(["999888"])
         assert exc.value.code == 1
 
 
@@ -339,11 +351,11 @@ class TestCleanupAndClear:
     def test_cleanup_removes_expired_fundamentals(self, capsys, monkeypatch):
         set_valid_fundamentals("600000", "浦发银行", "银行", {"pe": 5})
         monkeypatch.setattr(domain, "is_expired", lambda *_: True)
-        cache.cmd_cleanup()
+        commands_admin.cmd_cleanup()
         out = capsys.readouterr().out
         assert "浦发银行" in out
 
-        conn = cache.get_db()
+        conn = db.get_db()
         row = conn.execute(
             "SELECT code FROM stock_fundamentals WHERE code='600000'"
         ).fetchone()
@@ -353,9 +365,9 @@ class TestCleanupAndClear:
     def test_cleanup_retains_scheduler_window_and_removes_only_older_analysis(
         self, capsys, monkeypatch
     ):
-        now = cache.utc_now()
+        now = domain.utc_now()
         monkeypatch.setattr(domain, "utc_now", lambda: now)
-        conn = cache.get_db()
+        conn = db.get_db()
         conn.executemany(
             "INSERT INTO analysis_results (code, date, result, created_at) VALUES (?,?,?,?)",
             [
@@ -382,10 +394,10 @@ class TestCleanupAndClear:
         conn.commit()
         conn.close()
 
-        cache.cmd_cleanup()
+        commands_admin.cmd_cleanup()
         out = capsys.readouterr().out
         assert "1 条历史分析结论" in out
-        conn = cache.get_db()
+        conn = db.get_db()
         remaining = {
             row[0] for row in conn.execute("SELECT code FROM analysis_results")
         }
@@ -394,7 +406,7 @@ class TestCleanupAndClear:
 
     def test_cleanup_no_expired_reports_clean(self, capsys):
         set_valid_fundamentals("000001", "平安银行", "银行", {"pb": 0.7})
-        cache.cmd_cleanup()
+        commands_admin.cmd_cleanup()
         out = capsys.readouterr().out
         assert "无过期" in out
 
@@ -402,12 +414,12 @@ class TestCleanupAndClear:
         set_valid_fundamentals("600036", "招商银行", "银行", {"roe": 15})
         _insert_analysis("600036")
         record_valid_quote("600036")
-        cache.set_market_indicator_snapshot("bond_yield_10y", 1.7, "2026-07-14", "test")
-        cache.update_qualitative_only_security("601318", "中国平安", "保险")
-        cache.cmd_clear([])
+        store.set_market_indicator_snapshot("bond_yield_10y", 1.7, "2026-07-14", "test")
+        store.update_qualitative_only_security("601318", "中国平安", "保险")
+        commands_admin.cmd_clear([])
         capsys.readouterr()
 
-        conn = cache.get_db()
+        conn = db.get_db()
         f = conn.execute("SELECT COUNT(*) FROM stock_fundamentals").fetchone()[0]
         a = conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone()[0]
         q = conn.execute("SELECT COUNT(*) FROM quote_snapshots").fetchone()[0]
@@ -429,12 +441,12 @@ class TestCleanupAndClear:
         set_valid_fundamentals("601318", "中国平安", "保险", {"pb": 1.2})
         record_valid_quote("600036")
         record_valid_quote("601318")
-        cache.update_qualitative_only_security("600036", "招商银行", "证券")
-        cache.update_qualitative_only_security("601318", "中国平安", "保险")
-        cache.cmd_clear(["600036"])
+        store.update_qualitative_only_security("600036", "招商银行", "证券")
+        store.update_qualitative_only_security("601318", "中国平安", "保险")
+        commands_admin.cmd_clear(["600036"])
         capsys.readouterr()
 
-        conn = cache.get_db()
+        conn = db.get_db()
         cnt = conn.execute("SELECT COUNT(*) FROM stock_fundamentals").fetchone()[0]
         row = conn.execute(
             "SELECT code FROM stock_fundamentals WHERE code='601318'"
@@ -461,17 +473,19 @@ class TestCheckHoldingsBoundary:
 
     def _add_holding_cost40(self):
         # cost=40 → sl15=34.000, sl20=32.000
-        cache.cmd_add_holding(["600036", "40.0", "100", "--notes", "测试"])
+        commands_holdings.cmd_add_holding(["600036", "40.0", "100", "--notes", "测试"])
 
     def test_price_exactly_at_15pct_stop_triggers_yellow(self, capsys, monkeypatch):
         self._add_holding_cost40()
         monkeypatch.setattr(domain, "is_a_share_trading_hours", lambda _now: False)
-        monkeypatch.setattr(
-            commands_holdings,
-            "fetch_current_price_quote",
-            lambda code: cache.PriceQuote(34.0, cache.cst_today(), "15:00:00"),
+        mock_price_quotes(
+            monkeypatch,
+            lambda codes: {
+                code: (market_quotes.PriceQuote(34.0, domain.cst_today(), "15:00:00"))
+                for code in codes
+            },
         )
-        cache.cmd_check_holdings()
+        commands_holdings.cmd_check_holdings()
         out = capsys.readouterr().out
         assert "⚠️ 已跌破15%止损线" in out
         assert "共 1 项预警" in out
@@ -479,12 +493,14 @@ class TestCheckHoldingsBoundary:
     def test_price_exactly_at_20pct_stop_triggers_red(self, capsys, monkeypatch):
         self._add_holding_cost40()
         monkeypatch.setattr(domain, "is_a_share_trading_hours", lambda _now: False)
-        monkeypatch.setattr(
-            commands_holdings,
-            "fetch_current_price_quote",
-            lambda code: cache.PriceQuote(32.0, cache.cst_today(), "15:00:00"),
+        mock_price_quotes(
+            monkeypatch,
+            lambda codes: {
+                code: (market_quotes.PriceQuote(32.0, domain.cst_today(), "15:00:00"))
+                for code in codes
+            },
         )
-        cache.cmd_check_holdings()
+        commands_holdings.cmd_check_holdings()
         out = capsys.readouterr().out
         assert "🔴 已跌破20%止损线" in out
         assert "P3:incomplete(market_snapshot_incomplete)" in out
@@ -493,12 +509,14 @@ class TestCheckHoldingsBoundary:
     def test_price_one_cent_above_15pct_stop_is_normal(self, capsys, monkeypatch):
         """34.001 > sl15=34.000，不应触发预警"""
         self._add_holding_cost40()
-        monkeypatch.setattr(
-            commands_holdings,
-            "fetch_current_price_quote",
-            lambda code: cache.PriceQuote(34.001, cache.cst_today(), "15:00:00"),
+        mock_price_quotes(
+            monkeypatch,
+            lambda codes: {
+                code: (market_quotes.PriceQuote(34.001, domain.cst_today(), "15:00:00"))
+                for code in codes
+            },
         )
-        cache.cmd_check_holdings()
+        commands_holdings.cmd_check_holdings()
         out = capsys.readouterr().out
         assert "✅ 正常" in out
         assert "无预警" in out
@@ -513,7 +531,7 @@ class TestWatchlistRows:
     def test_needs_refresh_false_when_analysed_today(self, capsys):
         set_valid_fundamentals("600036", "招商银行", "银行", {"pe_ttm": 5.5})
         _insert_analysis("600036", score=62)
-        cache.cmd_watchlist(["--json"])
+        commands_admin.cmd_watchlist(["--json"])
         rows = json.loads(capsys.readouterr().out)
         assert rows[0]["code"] == "600036"
         assert rows[0]["needs_refresh"] is False
@@ -525,7 +543,7 @@ class TestWatchlistRows:
         record_valid_quote("000001")
         _insert_analysis("600036", score=55)  # only 600036 has analysis today
 
-        cache.cmd_watchlist(["--json"])
+        commands_admin.cmd_watchlist(["--json"])
         rows = json.loads(capsys.readouterr().out)
         codes = [r["code"] for r in rows]
         assert codes.index("000001") < codes.index("600036")
@@ -533,16 +551,16 @@ class TestWatchlistRows:
     def test_expired_stocks_excluded(self, capsys, monkeypatch):
         set_valid_fundamentals("600036", "招商银行", "银行", {})
         monkeypatch.setattr(domain, "is_expired", lambda *_: True)
-        cache.cmd_watchlist(["--json"])
+        commands_admin.cmd_watchlist(["--json"])
         rows = json.loads(capsys.readouterr().out)
         assert rows == []
 
     def test_watchlist_flags_shown_in_json(self, capsys):
         set_valid_fundamentals("600036", "招商银行", "银行", {})
         _insert_analysis("600036")
-        cache.cmd_set_flag(["600036", "red", "大股东减持"])
+        commands_monitor.cmd_set_flag(["600036", "red", "大股东减持"])
         capsys.readouterr()
-        cache.cmd_watchlist(["--json"])
+        commands_admin.cmd_watchlist(["--json"])
         rows = json.loads(capsys.readouterr().out)
         assert rows[0]["flags"][0]["level"] == "red"
 
@@ -566,7 +584,7 @@ class TestFetchCurrentPrice:
             r.text = f'var hq_str_x="{price_field}"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
 
     def test_sh_prefix_for_6xx_codes(self, monkeypatch):
         captured = {}
@@ -578,8 +596,8 @@ class TestFetchCurrentPrice:
             r.text = 'var x="招商银行,40.0,40.1,41.50,42.0,39.8"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        price = cache.fetch_current_price("600036")
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        price = market_quotes.fetch_current_price("600036")
         assert "sh600036" in captured["url"]
         assert price == 41.50
 
@@ -593,8 +611,8 @@ class TestFetchCurrentPrice:
             r.text = 'var x="平安银行,10.0,10.1,10.20,10.5,9.9"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        cache.fetch_current_price("000001")
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        market_quotes.fetch_current_price("000001")
         assert "sz000001" in captured["url"]
 
     def test_bj_prefix_for_4xx_codes(self, monkeypatch):
@@ -607,8 +625,8 @@ class TestFetchCurrentPrice:
             r.text = 'var x="某北交所,5.0,5.1,5.20,5.5,4.9"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        cache.fetch_current_price("430570")
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        market_quotes.fetch_current_price("430570")
         assert "bj430570" in captured["url"]
 
     def test_bj_prefix_for_8xx_codes(self, monkeypatch):
@@ -621,8 +639,8 @@ class TestFetchCurrentPrice:
             r.text = 'var x="某北交所,1.0,1.0,1.10,1.2,0.9"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        cache.fetch_current_price("872925")
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        market_quotes.fetch_current_price("872925")
         assert "bj872925" in captured["url"]
 
     def test_malformed_response_returns_none(self, monkeypatch):
@@ -634,8 +652,8 @@ class TestFetchCurrentPrice:
             r.text = 'var x="only,three"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        assert cache.fetch_current_price("600036") is None
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        assert market_quotes.fetch_current_price("600036") is None
 
     def test_empty_quotes_returns_none(self, monkeypatch):
         def mock_get(url, **kwargs):
@@ -644,8 +662,8 @@ class TestFetchCurrentPrice:
             r.text = 'var x=""'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        assert cache.fetch_current_price("600036") is None
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        assert market_quotes.fetch_current_price("600036") is None
 
     def test_request_exception_returns_none(self, monkeypatch):
         import requests as req
@@ -653,10 +671,10 @@ class TestFetchCurrentPrice:
         def mock_get(url, **kwargs):
             raise req.RequestException("network error")
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        assert cache.fetch_current_price("600036") is None
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        assert market_quotes.fetch_current_price("600036") is None
 
-    def test_fetch_current_prices_batch_success(self, monkeypatch):
+    def test_fetch_current_price_quotes_batch_success(self, monkeypatch):
         captured = {}
 
         def mock_get(url, **kwargs):
@@ -670,11 +688,11 @@ class TestFetchCurrentPrice:
             )
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        res = cache.fetch_current_prices(["600036", "000001"])
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        res = market_quotes.fetch_current_price_quotes(["600036", "000001"])
         assert "sh600036,sz000001" in captured["url"]
-        assert res["600036"] == 41.50
-        assert res["000001"] == 10.20
+        assert res["600036"].price == 41.50
+        assert res["000001"].price == 10.20
 
     def test_fetch_current_price_quotes_parses_date_and_time(self, monkeypatch):
         """真实新浪返回32字段（含日期/时间）时，fetch_current_price_quotes 能正确提取 quote_date/quote_time（BUG-006）"""
@@ -701,8 +719,8 @@ class TestFetchCurrentPrice:
             r.text = f'var hq_str_sh600036="{",".join(fields)}"\n'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        res = cache.fetch_current_price_quotes(["600036"])
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        res = market_quotes.fetch_current_price_quotes(["600036"])
         quote = res["600036"]
         assert quote.price == 41.50
         assert quote.quote_date == "2026-07-02"
@@ -718,23 +736,35 @@ class TestFetchCurrentPrice:
             r.text = 'var hq_str_sh600036="招商银行,40.0,40.1,41.50,42.0,39.8"\n'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        res = cache.fetch_current_price_quotes(["600036"])
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        res = market_quotes.fetch_current_price_quotes(["600036"])
         quote = res["600036"]
         assert quote.price == 41.50
         assert quote.quote_date is None
         assert quote.quote_time is None
 
-    def test_fetch_current_prices_empty(self):
-        res = cache.fetch_current_prices([])
+    def test_fetch_current_price_quotes_empty(self, monkeypatch):
+        request = MagicMock(side_effect=AssertionError("empty batch must not fetch"))
+        monkeypatch.setattr(market_quotes.requests, "get", request)
+        res = market_quotes.fetch_current_price_quotes([])
         assert res == {}
+        request.assert_not_called()
 
-    def test_fetch_current_prices_mock_compat(self, monkeypatch):
-        # When fetch_current_price is mocked, fetch_current_prices delegates to it
-        monkeypatch.setattr(commands_holdings, "fetch_current_price", lambda code: 99.9)
-        res = cache.fetch_current_prices(["600036", "000001"])
-        assert res["600036"] == 99.9
-        assert res["000001"] == 99.9
+    def test_batch_quotes_preserve_missing_symbols_and_network_failures(
+        self, monkeypatch
+    ):
+        request = MagicMock(
+            return_value=MagicMock(text='var hq_str_sh600036="fixture,40,40.1,41.5";')
+        )
+        monkeypatch.setattr(market_quotes.requests, "get", request)
+        codes = ["600036", "000001"]
+        quotes = market_quotes.fetch_current_price_quotes(codes)
+        assert quotes["600036"].price == 41.5
+        assert quotes["600036"].previous_close == 40.1
+        assert quotes["000001"] is None
+        assert request.call_count == 1
+        request.side_effect = market_quotes.requests.RequestException("fixture")
+        assert market_quotes.fetch_current_price_quotes(codes) == dict.fromkeys(codes)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -746,13 +776,13 @@ class TestSetAnalysisBoundary:
     def test_empty_stdin_exits(self, monkeypatch):
         monkeypatch.setattr("sys.stdin", StringIO(""))
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_analysis(["600036"])
+            commands_analysis.cmd_set_analysis(["600036"])
         assert exc.value.code == 1
 
     def test_whitespace_only_stdin_exits(self, monkeypatch):
         monkeypatch.setattr("sys.stdin", StringIO("   \n  "))
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_analysis(["600036"])
+            commands_analysis.cmd_set_analysis(["600036"])
         assert exc.value.code == 1
 
 
@@ -763,12 +793,14 @@ class TestSetAnalysisBoundary:
 
 class TestCloseHoldingCustomDate:
     def test_custom_exit_date_stored(self, capsys):
-        cache.cmd_add_holding(["000001", "10.0", "100", "--date", "2025-12-01"])
+        commands_holdings.cmd_add_holding(
+            ["000001", "10.0", "100", "--date", "2025-12-01"]
+        )
         capsys.readouterr()
-        cache.cmd_close_holding(["000001", "12.0", "2025-12-31"])
+        commands_holdings.cmd_close_holding(["000001", "12.0", "2025-12-31"])
         capsys.readouterr()
 
-        conn = cache.get_db()
+        conn = db.get_db()
         row = conn.execute(
             "SELECT exit_date FROM holdings WHERE code='000001'"
         ).fetchone()
@@ -812,7 +844,7 @@ def test_get_db_concurrent_migration_preserves_data(tmp_path, monkeypatch):
     def run():
         try:
             barrier.wait()  # both threads enter get_db at roughly the same time
-            c = cache.get_db()
+            c = db.get_db()
             c.close()
         except Exception as e:
             errors.append(e)

@@ -13,18 +13,24 @@ Coverage gaps addressed:
                concurrent cmd_add_holding
 """
 
+import datetime as dt
 import hashlib
 import json
 import threading
-import datetime as dt
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache
-from a_stock_agent_runtime import fetcher
+from a_stock_agent_runtime import (
+    commands_analysis,
+    commands_holdings,
+    commands_monitor,
+    db,
+    fetcher,
+    market_quotes,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +42,7 @@ def isolated_db(tmp_path, monkeypatch):
 
 def _insert_analysis(code: str, result: str = "test_result", score: int | None = None):
     today = datetime.now().strftime("%Y-%m-%d")
-    conn = cache.get_db()
+    conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results (code, date, result, created_at, score) VALUES (?,?,?,?,?)",
         (code, today, result, datetime.now().isoformat(), score),
@@ -54,14 +60,14 @@ class TestAddHoldingArgParsing:
     def test_nonnumeric_cost_price_exits(self, capsys):
         """Non-numeric cost price 'abc' → sys.exit(1) with error message."""
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_add_holding(["600519", "abc"])
+            commands_holdings.cmd_add_holding(["600519", "abc"])
         err = capsys.readouterr().err
         assert exc.value.code == 1
         assert "成本价必须为数字" in err
 
     def test_notes_require_explicit_option(self):
-        cache.cmd_add_holding(["600519", "100", "--notes", "备注文字"])
-        conn = cache.get_db()
+        commands_holdings.cmd_add_holding(["600519", "100", "--notes", "备注文字"])
+        conn = db.get_db()
         row = conn.execute(
             "SELECT shares, notes FROM holdings WHERE code='600519'"
         ).fetchone()
@@ -71,14 +77,14 @@ class TestAddHoldingArgParsing:
 
     def test_text_as_third_arg_is_rejected(self, capsys):
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_add_holding(["600519", "100", "备注文字"])
+            commands_holdings.cmd_add_holding(["600519", "100", "备注文字"])
         assert exc.value.code == 1
         assert "--notes" in capsys.readouterr().err
 
     def test_digit_as_third_arg_becomes_shares(self):
         """add-holding <code> <cost> <digit> — digit 3rd arg goes to shares."""
-        cache.cmd_add_holding(["000001", "10.0", "500"])
-        conn = cache.get_db()
+        commands_holdings.cmd_add_holding(["000001", "10.0", "500"])
+        conn = db.get_db()
         row = conn.execute(
             "SELECT shares, notes FROM holdings WHERE code='000001'"
         ).fetchone()
@@ -90,8 +96,8 @@ class TestAddHoldingArgParsing:
         """add-holding copies buy_score from the most recent analysis record."""
         _insert_analysis("600036", score=68)
         capsys.readouterr()
-        cache.cmd_add_holding(["600036", "45.0"])
-        conn = cache.get_db()
+        commands_holdings.cmd_add_holding(["600036", "45.0"])
+        conn = db.get_db()
         row = conn.execute(
             "SELECT buy_score FROM holdings WHERE code='600036'"
         ).fetchone()
@@ -100,8 +106,8 @@ class TestAddHoldingArgParsing:
 
     def test_stop_loss_prices_computed_to_3dp(self):
         """Stop-loss = cost × 0.85 / 0.80, rounded to 3 decimal places."""
-        cache.cmd_add_holding(["000001", "10.0"])
-        conn = cache.get_db()
+        commands_holdings.cmd_add_holding(["000001", "10.0"])
+        conn = db.get_db()
         row = conn.execute(
             "SELECT stop_loss_15, stop_loss_20 FROM holdings WHERE code='000001'"
         ).fetchone()
@@ -111,8 +117,8 @@ class TestAddHoldingArgParsing:
 
     def test_stop_loss_precision_on_fractional_cost(self):
         """cost=47.33 → stop-loss values rounded correctly to 3 d.p."""
-        cache.cmd_add_holding(["601318", "47.33"])
-        conn = cache.get_db()
+        commands_holdings.cmd_add_holding(["601318", "47.33"])
+        conn = db.get_db()
         row = conn.execute(
             "SELECT stop_loss_15, stop_loss_20 FROM holdings WHERE code='601318'"
         ).fetchone()
@@ -129,17 +135,17 @@ class TestAddHoldingArgParsing:
 class TestHoldingsDisplay:
     def test_empty_holdings_prints_no_record_message(self, capsys):
         """No holdings → prints '暂无持仓记录', no crash."""
-        cache.get_db().close()
-        cache.cmd_holdings()
+        db.get_db().close()
+        commands_holdings.cmd_holdings()
         out = capsys.readouterr().out
         assert "暂无持仓记录" in out
 
     def test_closed_position_shows_pnl_and_stats(self, capsys):
         """Closed position history shows P&L % and statistics (胜率/平均盈亏)."""
-        cache.cmd_add_holding(["600519", "100.0", "100"])
-        cache.cmd_close_holding(["600519", "120.0"])
+        commands_holdings.cmd_add_holding(["600519", "100.0", "100"])
+        commands_holdings.cmd_close_holding(["600519", "120.0"])
         capsys.readouterr()
-        cache.cmd_holdings()
+        commands_holdings.cmd_holdings()
         out = capsys.readouterr().out
         assert "已平仓历史" in out
         assert "+20.0%" in out
@@ -148,30 +154,34 @@ class TestHoldingsDisplay:
 
     def test_loss_position_shows_negative_pnl(self, capsys):
         """Loss position shows negative P&L percentage."""
-        cache.cmd_add_holding(["000001", "10.0", "100"])
-        cache.cmd_close_holding(["000001", "8.0"])
+        commands_holdings.cmd_add_holding(["000001", "10.0", "100"])
+        commands_holdings.cmd_close_holding(["000001", "8.0"])
         capsys.readouterr()
-        cache.cmd_holdings()
+        commands_holdings.cmd_holdings()
         out = capsys.readouterr().out
         assert "-20.0%" in out
 
     def test_win_rate_calculation_all_winners(self, capsys):
         """All profitable positions → 胜率 100%."""
-        cache.cmd_add_holding(["600519", "100.0", "100"])
-        cache.cmd_add_holding(["000001", "10.0", "100"])
-        cache.cmd_close_holding(["600519", "110.0"])
-        cache.cmd_close_holding(["000001", "11.0"])
+        commands_holdings.cmd_add_holding(["600519", "100.0", "100"])
+        commands_holdings.cmd_add_holding(["000001", "10.0", "100"])
+        commands_holdings.cmd_close_holding(["600519", "110.0"])
+        commands_holdings.cmd_close_holding(["000001", "11.0"])
         capsys.readouterr()
-        cache.cmd_holdings()
+        commands_holdings.cmd_holdings()
         out = capsys.readouterr().out
         assert "胜率 100%" in out
 
     def test_code_filter_does_not_leak_other_holdings(self, capsys):
-        cache.cmd_add_holding(["603606", "34.24", "500", "--notes", "east-only"])
-        cache.cmd_add_holding(["600036", "39.58", "500", "--notes", "bank-secret"])
+        commands_holdings.cmd_add_holding(
+            ["603606", "34.24", "500", "--notes", "east-only"]
+        )
+        commands_holdings.cmd_add_holding(
+            ["600036", "39.58", "500", "--notes", "bank-secret"]
+        )
         capsys.readouterr()
 
-        cache.cmd_holdings(["603606"])
+        commands_holdings.cmd_holdings(["603606"])
 
         out = capsys.readouterr().out
         assert "603606" in out
@@ -180,15 +190,15 @@ class TestHoldingsDisplay:
         assert "bank-secret" not in out
 
     def test_missing_code_has_stable_not_held_result(self, capsys):
-        cache.get_db().close()
+        db.get_db().close()
 
-        cache.cmd_holdings(["603606"])
+        commands_holdings.cmd_holdings(["603606"])
 
         assert capsys.readouterr().out.strip() == "NOT_HELD 603606"
 
     def test_holdings_handler_is_physically_read_only(self, isolated_db, capsys):
-        cache.cmd_add_holding(["603606", "34.24", "500"])
-        conn = cache.get_db()
+        commands_holdings.cmd_add_holding(["603606", "34.24", "500"])
+        conn = db.get_db()
         conn.execute("DELETE FROM holding_events")
         conn.execute(
             """UPDATE holdings
@@ -202,11 +212,11 @@ class TestHoldingsDisplay:
         path = Path(isolated_db)
         before = hashlib.sha256(path.read_bytes()).hexdigest()
 
-        cache.cmd_holdings(["603606"])
+        commands_holdings.cmd_holdings(["603606"])
 
         after = hashlib.sha256(path.read_bytes()).hexdigest()
         assert after == before
-        conn = cache.get_db()
+        conn = db.get_db()
         row = conn.execute(
             "SELECT initial_shares, reference_cost FROM holdings WHERE code='603606'"
         ).fetchone()
@@ -218,16 +228,16 @@ class TestHoldingsDisplay:
     @pytest.mark.parametrize(
         "command,args",
         [
-            (cache.cmd_retro_pending, []),
-            (cache.cmd_retro_outliers, []),
+            (commands_holdings.cmd_retro_pending, []),
+            (commands_holdings.cmd_retro_outliers, []),
         ],
     )
     def test_retro_read_commands_are_physically_read_only(
         self, isolated_db, capsys, command, args
     ):
-        cache.cmd_add_holding(["603606", "34.24", "500"])
-        cache.cmd_close_holding(["603606", "35.00"])
-        conn = cache.get_db()
+        commands_holdings.cmd_add_holding(["603606", "34.24", "500"])
+        commands_holdings.cmd_close_holding(["603606", "35.00"])
+        conn = db.get_db()
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.close()
         capsys.readouterr()
@@ -248,25 +258,25 @@ class TestHoldingsDisplay:
 class TestCloseHoldingDefense:
     def test_second_close_on_same_stock_fails_when_no_open_lot_remains(self, capsys):
         """Closing after all lots are closed → sys.exit(1)."""
-        cache.cmd_add_holding(["600519", "100.0"])
-        cache.cmd_close_holding(["600519", "120.0"])
+        commands_holdings.cmd_add_holding(["600519", "100.0"])
+        commands_holdings.cmd_close_holding(["600519", "120.0"])
         capsys.readouterr()
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_close_holding(["600519", "130.0"])
+            commands_holdings.cmd_close_holding(["600519", "130.0"])
         assert exc.value.code == 1
 
     def test_close_holding_exit_price_zero_is_rejected(self):
         """exit_price=0 is rejected by positive-price validation."""
-        cache.cmd_add_holding(["000001", "10.0"])
+        commands_holdings.cmd_add_holding(["000001", "10.0"])
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_close_holding(["000001", "0.0"])
+            commands_holdings.cmd_close_holding(["000001", "0.0"])
         assert exc.value.code == 1
 
     def test_negative_exit_price_should_be_rejected(self, capsys):
         """Negative exit price should be rejected."""
-        cache.cmd_add_holding(["000001", "10.0"])
+        commands_holdings.cmd_add_holding(["000001", "10.0"])
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_close_holding(["000001", "-5.0"])
+            commands_holdings.cmd_close_holding(["000001", "-5.0"])
         assert exc.value.code == 1
 
 
@@ -280,21 +290,21 @@ class TestSetScoreValidation:
         """String 'abc' → ValueError → sys.exit(1)."""
         _insert_analysis("600036")
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score(["600036", "abc"])
+            commands_analysis.cmd_set_score(["600036", "abc"])
         assert exc.value.code == 1
 
     def test_float_string_score_exits(self):
         """'12.5' cannot be converted by int() → sys.exit(1). Prevents silent float acceptance."""
         _insert_analysis("600036")
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_set_score(["600036", "12.5"])
+            commands_analysis.cmd_set_score(["600036", "12.5"])
         assert exc.value.code == 1
 
     def test_negative_integer_score_rejected(self, capsys):
         """Scores outside the 0—80 contract are rejected."""
         _insert_analysis("600036")
         with pytest.raises(SystemExit):
-            cache.cmd_set_score(["600036", "-3"])
+            commands_analysis.cmd_set_score(["600036", "-3"])
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -312,7 +322,7 @@ class TestSetAnalysisNegativeScore:
             ),
         )
         with pytest.raises(SystemExit):
-            cache.cmd_set_analysis(["600036", "A", "-5"])
+            commands_analysis.cmd_set_analysis(["600036", "A", "-5"])
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -331,7 +341,7 @@ class TestFetchCurrentPriceMarketPrefix:
             r.text = f'var x="{fields}"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
 
     def test_sz_prefix_for_3xx_chinext_codes(self, monkeypatch):
         """ChiNext (创业板) 300xxx → 'sz' prefix, not 'bj'."""
@@ -339,7 +349,7 @@ class TestFetchCurrentPriceMarketPrefix:
         self._mock_get(
             monkeypatch, captured, "宁德时代", "宁德时代,200.0,200.1,205.50,210.0,199.0"
         )
-        cache.fetch_current_price("300750")
+        market_quotes.fetch_current_price("300750")
         assert "sz300750" in captured["url"]
 
     def test_field_index_3_is_current_price_not_open(self, monkeypatch):
@@ -349,7 +359,7 @@ class TestFetchCurrentPriceMarketPrefix:
         self._mock_get(
             monkeypatch, captured, "招商银行", "招商银行,40.00,40.10,41.50,42.00,39.80"
         )
-        price = cache.fetch_current_price("600036")
+        price = market_quotes.fetch_current_price("600036")
         assert price == 41.50, "field[3] must be current price, not open (40.10)"
 
     def test_response_with_exactly_4_fields_is_valid(self, monkeypatch):
@@ -362,8 +372,8 @@ class TestFetchCurrentPriceMarketPrefix:
             r.text = 'var x="name,10.0,10.1,10.5"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        price = cache.fetch_current_price("000001")
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        price = market_quotes.fetch_current_price("000001")
         assert price == 10.5
 
     def test_response_with_3_fields_returns_none(self, monkeypatch):
@@ -376,8 +386,8 @@ class TestFetchCurrentPriceMarketPrefix:
             r.text = 'var x="name,10.0,10.1"'
             return r
 
-        monkeypatch.setattr(cache.requests, "get", mock_get)
-        assert cache.fetch_current_price("000001") is None
+        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
+        assert market_quotes.fetch_current_price("000001") is None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -389,12 +399,12 @@ class TestClearFlagEdgeCases:
     def test_no_args_exits(self):
         """No arguments → sys.exit(1)."""
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_clear_flag([])
+            commands_monitor.cmd_clear_flag([])
         assert exc.value.code == 1
 
     def test_nonexistent_code_succeeds_silently(self, capsys):
         """clear_flag on a code with no analysis record succeeds silently (UPDATE 0 rows)."""
-        cache.cmd_clear_flag(["999999"])
+        commands_monitor.cmd_clear_flag(["999999"])
         out = capsys.readouterr().out
         assert "999999" in out
 
@@ -661,7 +671,7 @@ class TestRaceConditions:
         def add():
             try:
                 barrier.wait()
-                cache.cmd_add_holding(["600519", "100.0"])
+                commands_holdings.cmd_add_holding(["600519", "100.0"])
             except _sqlite3.OperationalError as e:
                 if "database is locked" in str(e):
                     lock_errors.append(str(e))
@@ -684,7 +694,7 @@ class TestRaceConditions:
         assert not unexpected_errors, f"unexpected exceptions: {unexpected_errors}"
         assert all(not thread.is_alive() for thread in threads)
 
-        conn = cache.get_db()
+        conn = db.get_db()
         cnt = conn.execute(
             "SELECT COUNT(*) FROM holdings WHERE code='600519'"
         ).fetchone()[0]
@@ -695,7 +705,7 @@ class TestRaceConditions:
 
     def test_sequential_close_holding_fifo_each_lot_closed_once(self, capsys):
         """Two sequential closes → FIFO order, each lot closed exactly once."""
-        conn = cache.get_db()
+        conn = db.get_db()
         conn.execute(
             "INSERT INTO holdings (code, cost_price, buy_date) VALUES ('600519', 100.0, '2024-01-01')"
         )
@@ -706,10 +716,10 @@ class TestRaceConditions:
         conn.close()
         capsys.readouterr()
 
-        cache.cmd_close_holding(["600519", "120.0"])
-        cache.cmd_close_holding(["600519", "125.0"])
+        commands_holdings.cmd_close_holding(["600519", "120.0"])
+        commands_holdings.cmd_close_holding(["600519", "125.0"])
 
-        conn = cache.get_db()
+        conn = db.get_db()
         rows = conn.execute(
             "SELECT cost_price, exit_price FROM holdings WHERE code='600519' ORDER BY buy_date"
         ).fetchall()
@@ -732,7 +742,7 @@ class TestRaceConditions:
         def set_flag(level: str, reason: str):
             try:
                 barrier.wait()
-                cache.cmd_set_flag(["600036", level, reason])
+                commands_monitor.cmd_set_flag(["600036", level, reason])
             except Exception as e:
                 errors.append(e)
 
@@ -748,7 +758,7 @@ class TestRaceConditions:
         assert not errors, f"thread exceptions: {errors}"
 
         today = datetime.now().strftime("%Y-%m-%d")
-        conn = cache.get_db()
+        conn = db.get_db()
         row = conn.execute(
             "SELECT flags FROM analysis_results WHERE code=? AND date=?",
             ("600036", today),
@@ -761,7 +771,7 @@ class TestRaceConditions:
 
     def test_concurrent_close_same_stock_closes_each_lot_once(self, capsys):
         """Two concurrent close requests must consume two distinct FIFO lots."""
-        conn = cache.get_db()
+        conn = db.get_db()
         conn.execute(
             "INSERT INTO holdings (code, cost_price, buy_date) VALUES ('600519', 100.0, '2024-01-01')"
         )
@@ -778,7 +788,7 @@ class TestRaceConditions:
         def close_one():
             try:
                 barrier.wait()
-                cache.cmd_close_holding(["600519", "120.0"])
+                commands_holdings.cmd_close_holding(["600519", "120.0"])
             except SystemExit as exc:
                 errors.append(exc)
             except Exception as e:
@@ -793,7 +803,7 @@ class TestRaceConditions:
         assert not errors, f"unexpected thread exceptions: {errors}"
         assert all(not thread.is_alive() for thread in threads)
 
-        conn = cache.get_db()
+        conn = db.get_db()
         closed_count = conn.execute(
             "SELECT COUNT(*) FROM holdings WHERE code='600519' AND exit_date IS NOT NULL"
         ).fetchone()[0]
@@ -834,7 +844,7 @@ def _insert_closed_holding_with_events(
 
 class TestRetroAdd:
     def test_retro_add_happy_path(self, capsys):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             _insert_closed_holding_with_events(
                 conn,
                 code="600036",
@@ -845,11 +855,11 @@ class TestRetroAdd:
                 exit_price=42.0,
             )
             conn.commit()
-        cache.cmd_retro_add(["600036", "ROE高估"])
+        commands_holdings.cmd_retro_add(["600036", "ROE高估"])
         out = capsys.readouterr().out
         assert "600036" in out
         assert "ROE高估" in out
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             row = conn.execute(
                 "SELECT error_tags, actual_return_pct FROM retro_notes WHERE code='600036'"
             ).fetchone()
@@ -859,11 +869,11 @@ class TestRetroAdd:
 
     def test_retro_add_no_closed_holding_exits(self, capsys):
         with pytest.raises(SystemExit) as exc:
-            cache.cmd_retro_add(["999999", "无错误"])
+            commands_holdings.cmd_retro_add(["999999", "无错误"])
         assert exc.value.code == 1
 
     def test_retro_add_optional_flags(self):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             _insert_closed_holding_with_events(
                 conn,
                 code="000001",
@@ -874,7 +884,7 @@ class TestRetroAdd:
                 exit_price=9.0,
             )
             conn.commit()
-        cache.cmd_retro_add(
+        commands_holdings.cmd_retro_add(
             [
                 "000001",
                 "周期顶部",
@@ -886,7 +896,7 @@ class TestRetroAdd:
                 "B框架NIM阈值",
             ]
         )
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             row = conn.execute(
                 "SELECT retro_text, thesis_notes, framework_gap FROM retro_notes WHERE code='000001'"
             ).fetchone()
@@ -897,18 +907,18 @@ class TestRetroAdd:
 
 class TestRetroPending:
     def test_retro_pending_shows_closed_without_retro(self, capsys):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             conn.execute(
                 "INSERT INTO holdings (code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
                 "VALUES ('600519', '贵州茅台', 1500.0, 10, '2026-01-01', 75, 1600.0, '2026-04-01', '2026-04-01')"
             )
             conn.commit()
-        cache.cmd_retro_pending()
+        commands_holdings.cmd_retro_pending()
         out = capsys.readouterr().out
         assert "600519" in out
 
     def test_retro_pending_empty_when_all_have_retro(self, capsys):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             conn.execute(
                 "INSERT INTO holdings (id, code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
                 "VALUES (1, '600519', '贵州茅台', 1500.0, 10, '2026-01-01', 75, 1600.0, '2026-04-01', '2026-04-01')"
@@ -917,7 +927,7 @@ class TestRetroPending:
                 "INSERT INTO retro_notes (holding_id, code, error_tags, created_at) VALUES (1, '600519', '无错误', '2026-04-02')"
             )
             conn.commit()
-        cache.cmd_retro_pending()
+        commands_holdings.cmd_retro_pending()
         out = capsys.readouterr().out
         assert "600519" not in out
         assert "无待复盘" in out
@@ -925,19 +935,19 @@ class TestRetroPending:
 
 class TestRetroStats:
     def test_retro_stats_no_records(self, capsys):
-        cache.cmd_retro_stats([])
+        commands_holdings.cmd_retro_stats([])
         out = capsys.readouterr().out
         assert "暂无复盘记录" in out
 
     def test_retro_stats_tag_frequency(self, capsys):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             for i in range(3):
                 conn.execute(
                     "INSERT INTO retro_notes (holding_id, code, error_tags, actual_return_pct, created_at) "
                     f"VALUES ({i + 1}, '60000{i}', 'ROE高估', -5.0, '2026-0{i + 1}-01')"
                 )
             conn.commit()
-        cache.cmd_retro_stats([])
+        commands_holdings.cmd_retro_stats([])
         out = capsys.readouterr().out
         assert "ROE高估" in out
         assert "★" in out
@@ -945,7 +955,7 @@ class TestRetroStats:
 
 class TestRetroOutliers:
     def test_retro_outliers_finds_large_loss(self, capsys):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             _insert_closed_holding_with_events(
                 conn,
                 code="601088",
@@ -956,12 +966,12 @@ class TestRetroOutliers:
                 exit_price=25.0,
             )
             conn.commit()
-        cache.cmd_retro_outliers(["--loss", "-10"])
+        commands_holdings.cmd_retro_outliers(["--loss", "-10"])
         out = capsys.readouterr().out
         assert "601088" in out
 
     def test_retro_outliers_positive_loss_param(self, capsys):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             _insert_closed_holding_with_events(
                 conn,
                 code="601088",
@@ -981,13 +991,13 @@ class TestRetroOutliers:
                 exit_price=38.0,
             )
             conn.commit()
-        cache.cmd_retro_outliers(["--loss", "10"])
+        commands_holdings.cmd_retro_outliers(["--loss", "10"])
         out = capsys.readouterr().out
         assert "601088" in out
         assert "600036" not in out
 
     def test_retro_outliers_excludes_already_reviewed(self, capsys):
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             conn.execute(
                 "INSERT INTO holdings (id, code, name, cost_price, shares, buy_date, buy_score, exit_price, exit_date, updated_at) "
                 "VALUES (1, '601088', '神华', 30.0, 100, '2026-01-01', 55, 25.0, '2026-06-01', '2026-06-01')"
@@ -996,6 +1006,6 @@ class TestRetroOutliers:
                 "INSERT INTO retro_notes (holding_id, code, error_tags, created_at) VALUES (1, '601088', '周期顶部', '2026-06-02')"
             )
             conn.commit()
-        cache.cmd_retro_outliers(["--loss", "-10"])
+        commands_holdings.cmd_retro_outliers(["--loss", "-10"])
         out = capsys.readouterr().out
         assert "601088" not in out

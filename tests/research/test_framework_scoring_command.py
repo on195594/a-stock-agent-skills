@@ -4,9 +4,8 @@ import json
 
 import pytest
 
-from a_stock_agent_runtime import cache, commands_analysis, risk_gates
+from a_stock_agent_runtime import cache, commands_analysis, risk_gates, store
 from tests.helpers import set_valid_fundamentals, valid_fundamentals_payload
-
 
 ASSESSMENTS = [
     {
@@ -188,7 +187,7 @@ def test_p1_only_blocks_timing_not_fundamental_subtotal(capsys, monkeypatch) -> 
     )
     data["field_provenance"]["roe_structural_gate"]["status"] = "missing"
     data["null_reasons"]["roe_structural_gate"] = p1["reason_code"]
-    cache.set_fundamentals("600036", "测试公司", "制造业", data)
+    store.set_fundamentals("600036", "测试公司", "制造业", data)
     commands_analysis.cmd_score_fundamentals(
         ["600036", "A", scoring_input({"gross_margin_stable": True})]
     )

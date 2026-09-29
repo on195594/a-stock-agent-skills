@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache, decision_contract, domain
+from a_stock_agent_runtime import commands_analysis, decision_contract, domain, store
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 REQUIRED_FIELDS = {
@@ -125,7 +125,7 @@ def test_set_analysis_persists_json_as_authority_and_renders_markdown(
 ) -> None:
     payload = fixture("decision_v1_complete.json")
     now = domain.utc_now_iso()
-    cache.record_quote_snapshot(
+    store.record_quote_snapshot(
         payload["stock_code"],
         100.0,
         domain.cst_today(),
@@ -137,7 +137,7 @@ def test_set_analysis_persists_json_as_authority_and_renders_markdown(
     )
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(payload, ensure_ascii=False)))
 
-    cache.cmd_set_analysis([])
+    commands_analysis.cmd_set_analysis([])
 
     with sqlite3.connect(isolated_cache_database) as conn:
         decision_json, result, score, framework, scoring_status = conn.execute(
@@ -161,7 +161,7 @@ def test_invalid_decision_fails_before_write(
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(payload, ensure_ascii=False)))
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis([])
+        commands_analysis.cmd_set_analysis([])
 
     assert not isolated_cache_database.exists()
 

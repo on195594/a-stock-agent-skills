@@ -7,16 +7,22 @@ from io import StringIO
 
 import pytest
 
-from a_stock_agent_runtime import cache, db
+from a_stock_agent_runtime import (
+    cache,
+    commands_admin,
+    commands_holdings,
+    commands_monitor,
+    db,
+)
 
 
 def _add_holding_with_l3(
     code: str, conditions: tuple[str, ...] = ("旧条件",)
 ) -> list[int]:
-    cache.cmd_add_holding([code, "10", "800", "--date", "2026-01-02"])
+    commands_holdings.cmd_add_holding([code, "10", "800", "--date", "2026-01-02"])
     for condition in conditions:
-        cache.cmd_l3_add([code, "original", condition, "触发后清仓"])
-    with cache.db_session() as conn:
+        commands_monitor.cmd_l3_add([code, "original", condition, "触发后清仓"])
+    with db.db_session() as conn:
         return [
             row[0]
             for row in conn.execute(
@@ -50,13 +56,13 @@ def _payload(
 
 def _rewrite(monkeypatch: pytest.MonkeyPatch, code: str, payload: dict) -> None:
     monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(payload, ensure_ascii=False)))
-    cache.cmd_thesis_rewrite([code])
+    commands_monitor.cmd_thesis_rewrite([code])
 
 
 def test_schema_migration_is_idempotent_for_empty_fixture(monkeypatch) -> None:
     for _ in range(2):
         monkeypatch.setattr(db, "_SCHEMA_INITIALIZED", False)
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             assert conn.execute("PRAGMA integrity_check").fetchone() == ("ok",)
             assert conn.execute(
                 "SELECT COUNT(*) FROM holding_thesis_versions"
@@ -104,7 +110,7 @@ def test_schema_migration_is_idempotent_for_legacy_fixture(
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED", False)
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED_PATH", "")
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         columns = {
             row[1]: row
             for row in conn.execute("PRAGMA table_info(holding_l3_conditions)")
@@ -118,13 +124,13 @@ def test_schema_migration_is_idempotent_for_legacy_fixture(
         ).fetchone() == ("holding_thesis_versions",)
 
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED", False)
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute("PRAGMA integrity_check").fetchone() == ("ok",)
 
 
 def test_partial_unique_index_allows_only_one_active_thesis() -> None:
-    cache.cmd_add_holding(["000963", "30", "800"])
-    with cache.db_session() as conn:
+    commands_holdings.cmd_add_holding(["000963", "30", "800"])
+    with db.db_session() as conn:
         holding_id = conn.execute("SELECT id FROM holdings").fetchone()[0]
         values = (holding_id, 1, "L1", "L2", "reason", "active", "now")
         conn.execute(
@@ -146,7 +152,7 @@ def test_thesis_rewrite_retires_old_l3_without_touching_position_ledger(
     monkeypatch, capsys
 ) -> None:
     old_ids = _add_holding_with_l3("000963", ("旧医美条件", "旧现金流条件"))
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         holding_before = conn.execute(
             """SELECT shares, cost_price, buy_date, reference_cost
                FROM holdings WHERE code='000963'"""
@@ -172,7 +178,7 @@ def test_thesis_rewrite_retires_old_l3_without_touching_position_ledger(
     }
     _rewrite(monkeypatch, "000963", payload)
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT version, status FROM holding_thesis_versions"
         ).fetchall() == [(1, "active")]
@@ -198,13 +204,13 @@ def test_thesis_rewrite_retires_old_l3_without_touching_position_ledger(
         )
 
     capsys.readouterr()
-    cache.cmd_l3_list(["000963"])
+    commands_monitor.cmd_l3_list(["000963"])
     active_output = capsys.readouterr().out
     assert "旧医美条件" not in active_output
     assert "thesis:v1 active" in active_output
     assert "L1:工业与创新商业化是主要利润引擎" in active_output
     assert "L2:创新替代速度决定当前赔率" in active_output
-    cache.cmd_l3_list(["000963", "--all"])
+    commands_monitor.cmd_l3_list(["000963", "--all"])
     all_output = capsys.readouterr().out
     assert "旧医美条件" in all_output
     assert "retired" in all_output
@@ -220,10 +226,10 @@ def test_thesis_rewrite_cli_gate_precedes_database_and_confirmed_dispatch(
     assert cache.main(["thesis-rewrite", "000963"]) == 3
     assert not isolated_cache_database.exists()
 
-    cache.cmd_add_holding(["000963", "30", "800"])
+    commands_holdings.cmd_add_holding(["000963", "30", "800"])
     monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(payload)))
     assert cache.main(["--confirm-write", "thesis-rewrite", "000963"]) == 0
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT version, status FROM holding_thesis_versions"
         ).fetchone() == (1, "active")
@@ -236,8 +242,8 @@ def test_thesis_rewrite_rejects_invalid_stdin_without_mutation(
     _add_holding_with_l3("000963")
     monkeypatch.setattr(sys, "stdin", StringIO(bad_payload))
     with pytest.raises(SystemExit):
-        cache.cmd_thesis_rewrite(["000963"])
-    with cache.db_session() as conn:
+        commands_monitor.cmd_thesis_rewrite(["000963"])
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT COUNT(*) FROM holding_thesis_versions"
         ).fetchone() == (0,)
@@ -255,7 +261,7 @@ def test_thesis_rewrite_rejects_cross_holding_and_incomplete_retirement(
     for ids in ([first[0], other[0]], [first[0]]):
         with pytest.raises(SystemExit):
             _rewrite(monkeypatch, "000963", _payload(ids))
-        with cache.db_session() as conn:
+        with db.db_session() as conn:
             assert conn.execute(
                 "SELECT COUNT(*) FROM holding_thesis_versions"
             ).fetchone() == (0,)
@@ -271,7 +277,7 @@ def test_non_core_cannot_authorize_reduce_or_exit(monkeypatch, action) -> None:
         _rewrite(
             monkeypatch, "000963", _payload(old_ids, scope="non_core", action=action)
         )
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT COUNT(*) FROM holding_thesis_versions"
         ).fetchone() == (0,)
@@ -279,7 +285,7 @@ def test_non_core_cannot_authorize_reduce_or_exit(monkeypatch, action) -> None:
 
 def test_any_write_failure_rolls_back_entire_rewrite(monkeypatch) -> None:
     old_ids = _add_holding_with_l3("000963")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             """CREATE TRIGGER fail_new_l3 BEFORE INSERT ON holding_l3_conditions
                WHEN NEW.thesis_version_id IS NOT NULL
@@ -289,7 +295,7 @@ def test_any_write_failure_rolls_back_entire_rewrite(monkeypatch) -> None:
 
     with pytest.raises(sqlite3.IntegrityError):
         _rewrite(monkeypatch, "000963", _payload(old_ids))
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT COUNT(*) FROM holding_thesis_versions"
         ).fetchone() == (0,)
@@ -302,7 +308,9 @@ def test_l3_update_rejects_retired_row(monkeypatch) -> None:
     old_ids = _add_holding_with_l3("000963")
     _rewrite(monkeypatch, "000963", _payload(old_ids))
     with pytest.raises(SystemExit):
-        cache.cmd_l3_update([str(old_ids[0]), "triggered", "2026-08-27", "旧证据"])
+        commands_monitor.cmd_l3_update(
+            [str(old_ids[0]), "triggered", "2026-08-27", "旧证据"]
+        )
 
 
 @pytest.mark.parametrize(
@@ -312,28 +320,30 @@ def test_l3_update_rejects_retired_row(monkeypatch) -> None:
 def test_l3_update_rejects_empty_evidence_contract(as_of, evidence) -> None:
     condition_id = _add_holding_with_l3("000963")[0]
     with pytest.raises(SystemExit):
-        cache.cmd_l3_update([str(condition_id), "triggered", as_of, evidence])
+        commands_monitor.cmd_l3_update(
+            [str(condition_id), "triggered", as_of, evidence]
+        )
 
 
 def test_l3_list_rejects_duplicate_open_holdings(capsys) -> None:
     _add_holding_with_l3("000963")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             """INSERT INTO holdings (code, cost_price, shares, buy_date, initial_shares)
                VALUES ('000963', 11, 100, '2026-02-02', 100)"""
         )
         conn.commit()
     with pytest.raises(SystemExit):
-        cache.cmd_l3_list(["000963"])
+        commands_monitor.cmd_l3_list(["000963"])
     assert "有2条在仓记录" in capsys.readouterr().err
 
 
 def test_l3_list_freezes_incomplete_thesis_schema(capsys) -> None:
     _add_holding_with_l3("000963")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute("DROP TABLE holding_thesis_versions")
         conn.commit()
-    cache.cmd_l3_list(["000963"])
+    commands_monitor.cmd_l3_list(["000963"])
     output = capsys.readouterr().out
     assert "论文版本迁移不完整" in output
     assert "冻结交易" in output
@@ -341,10 +351,10 @@ def test_l3_list_freezes_incomplete_thesis_schema(capsys) -> None:
 
 def test_l3_list_freezes_without_active_thesis_unique_index(capsys) -> None:
     _add_holding_with_l3("000963")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute("DROP INDEX idx_thesis_one_active_per_holding")
         conn.commit()
-    cache.cmd_l3_list(["000963"])
+    commands_monitor.cmd_l3_list(["000963"])
     output = capsys.readouterr().out
     assert "论文版本迁移不完整" in output
     assert "冻结交易" in output
@@ -353,13 +363,13 @@ def test_l3_list_freezes_without_active_thesis_unique_index(capsys) -> None:
 def test_l3_list_freezes_trigger_without_evidence(capsys, monkeypatch) -> None:
     old_ids = _add_holding_with_l3("000963")
     _rewrite(monkeypatch, "000963", _payload(old_ids))
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             """UPDATE holding_l3_conditions
                SET status='triggered', as_of=NULL, evidence=NULL WHERE is_active=1"""
         )
         conn.commit()
-    cache.cmd_l3_list(["000963"])
+    commands_monitor.cmd_l3_list(["000963"])
     output = capsys.readouterr().out
     assert "交易契约无效" in output
     assert "连续两个完整披露期核心利润恶化" not in output
@@ -370,7 +380,7 @@ def test_second_rewrite_supersedes_prior_version_and_l3_add_is_blocked(
 ) -> None:
     old_ids = _add_holding_with_l3("000963")
     _rewrite(monkeypatch, "000963", _payload(old_ids))
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         replacement_ids = [
             row[0]
             for row in conn.execute(
@@ -378,10 +388,10 @@ def test_second_rewrite_supersedes_prior_version_and_l3_add_is_blocked(
             )
         ]
     with pytest.raises(SystemExit):
-        cache.cmd_l3_add(["000963", "new_monitoring", "旁路条件"])
+        commands_monitor.cmd_l3_add(["000963", "new_monitoring", "旁路条件"])
 
     _rewrite(monkeypatch, "000963", _payload(replacement_ids))
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT version, status FROM holding_thesis_versions ORDER BY version"
         ).fetchall() == [(1, "superseded"), (2, "active")]
@@ -392,8 +402,8 @@ def test_second_rewrite_supersedes_prior_version_and_l3_add_is_blocked(
 
 def test_legacy_holding_keeps_old_behavior_with_warning(capsys) -> None:
     old_ids = _add_holding_with_l3("000963")
-    cache.cmd_l3_update([str(old_ids[0]), "triggered", "2026-08-27", "证据"])
-    cache.cmd_l3_list(["000963"])
+    commands_monitor.cmd_l3_update([str(old_ids[0]), "triggered", "2026-08-27", "证据"])
+    commands_monitor.cmd_l3_list(["000963"])
     output = capsys.readouterr().out
     assert "legacy contract" in output
     assert "triggered" in output
@@ -401,8 +411,8 @@ def test_legacy_holding_keeps_old_behavior_with_warning(capsys) -> None:
 
 
 def test_rewritten_holding_filters_active_legacy_unclassified(capsys) -> None:
-    cache.cmd_add_holding(["000963", "30", "800"])
-    with cache.db_session() as conn:
+    commands_holdings.cmd_add_holding(["000963", "30", "800"])
+    with db.db_session() as conn:
         holding_id = conn.execute("SELECT id FROM holdings").fetchone()[0]
         thesis_id = conn.execute(
             """INSERT INTO holding_thesis_versions
@@ -418,7 +428,7 @@ def test_rewritten_holding_filters_active_legacy_unclassified(capsys) -> None:
             (holding_id, thesis_id),
         )
         conn.commit()
-    cache.cmd_l3_list(["000963"])
+    commands_monitor.cmd_l3_list(["000963"])
     output = capsys.readouterr().out
     assert "非法旧条件" not in output
     assert "交易契约无效" in output
@@ -427,7 +437,7 @@ def test_rewritten_holding_filters_active_legacy_unclassified(capsys) -> None:
 
 def test_remove_holding_and_cleanup_cover_thesis_versions(capsys) -> None:
     _add_holding_with_l3("000963")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         holding_id = conn.execute("SELECT id FROM holdings").fetchone()[0]
         conn.execute(
             """INSERT INTO holding_thesis_versions
@@ -436,14 +446,14 @@ def test_remove_holding_and_cleanup_cover_thesis_versions(capsys) -> None:
             (holding_id,),
         )
         conn.commit()
-    cache.cmd_remove_holding(["000963"])
-    with cache.db_session() as conn:
+    commands_holdings.cmd_remove_holding(["000963"])
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT COUNT(*) FROM holding_thesis_versions"
         ).fetchone() == (0,)
 
     orphan_ids = _add_holding_with_l3("600036")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         holding_id = conn.execute(
             "SELECT id FROM holdings WHERE code='600036'"
         ).fetchone()[0]
@@ -457,9 +467,9 @@ def test_remove_holding_and_cleanup_cover_thesis_versions(capsys) -> None:
         conn.execute("DELETE FROM holding_events WHERE holding_id=?", (holding_id,))
         conn.execute("DELETE FROM holdings WHERE id=?", (holding_id,))
         conn.commit()
-    cache.cmd_cleanup([])
+    commands_admin.cmd_cleanup([])
     assert "孤儿持仓关联记录" in capsys.readouterr().out
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT COUNT(*) FROM holding_thesis_versions"
         ).fetchone() == (0,)

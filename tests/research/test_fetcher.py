@@ -10,12 +10,12 @@ from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from types import ModuleType, SimpleNamespace
 
-import pytest
 import pandas as pd
-
-from a_stock_agent_runtime import cache, fetcher, store
-from a_stock_lib.providers import QuoteObservation
+import pytest
 from a_stock_lib.fetcher_utils import detect_split_ratio
+from a_stock_lib.providers import QuoteObservation
+
+from a_stock_agent_runtime import db, domain, fetcher, store
 from tests.helpers import set_valid_fundamentals
 
 
@@ -235,7 +235,7 @@ def test_valuation_compatibility_round_trips_in_existing_json_payload():
         {"pb": 3.48, "valuation_compatibility": compatibility},
     )
 
-    stored = cache.get_fundamentals("002594")
+    stored = store.get_fundamentals("002594")
 
     assert stored is not None
     assert stored["valuation_compatibility"] == compatibility
@@ -255,7 +255,7 @@ def test_build_cache_payload_persists_valuation_compatibility_provenance():
     fetcher._build_cache_payload(
         "002594", "比亚迪", "汽车整车", results, {}, "2025年报"
     )
-    stored = cache.get_fundamentals("002594")
+    stored = store.get_fundamentals("002594")
 
     assert stored is not None
     assert stored["valuation_compatibility"] == compatibility
@@ -269,8 +269,8 @@ def test_build_cache_payload_persists_valuation_compatibility_provenance():
 def test_legacy_payload_remains_absent_without_read_time_backfill():
     set_valid_fundamentals("600000", "旧缓存", "制造", {"pb": 1.2})
 
-    first_read = cache.get_fundamentals("600000")
-    second_read = cache.get_fundamentals("600000")
+    first_read = store.get_fundamentals("600000")
+    second_read = store.get_fundamentals("600000")
 
     assert first_read is not None and second_read is not None
     assert "valuation_compatibility" not in first_read
@@ -731,7 +731,7 @@ def test_fetch_spot_data_persists_qualitative_only_routing_before_fundamentals(
 
     fetcher._fetch_spot_data("601318", {}, {})
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         status = conn.execute(
             "SELECT name, industry FROM qualitative_only_securities WHERE code=?",
             ("601318",),
@@ -804,13 +804,15 @@ def test_extract_fin_fields_revenue_growth_3y():
 
 def test_fetch_bond_yield_fallback(monkeypatch, isolated_db):
     """API failure may reuse a source-complete market snapshot under 24h."""
-    cache.set_market_indicator_snapshot(
+    store.set_market_indicator_snapshot(
         "bond_yield_10y",
         2.15,
         "2026-07-14",
         "fixture-source",
         fetched_at=(
-            cache.utc_now() - fetcher.BOND_YIELD_REFRESH_INTERVAL - timedelta(seconds=1)
+            domain.utc_now()
+            - fetcher.BOND_YIELD_REFRESH_INTERVAL
+            - timedelta(seconds=1)
         ).isoformat(),
     )
 
@@ -830,7 +832,7 @@ def test_fetch_bond_yield_without_recent_snapshot_is_missing(monkeypatch, isolat
     import sqlite3
 
     # 初始化 DB 以确保表结构存在
-    cache.get_db().close()
+    db.get_db().close()
     # 保证 DB 里没有任何股票的缓存
     with closing(sqlite3.connect(isolated_db)) as conn:
         conn.execute("DELETE FROM stock_fundamentals")
@@ -846,7 +848,7 @@ def test_fetch_bond_yield_without_recent_snapshot_is_missing(monkeypatch, isolat
 
 
 def test_fetch_bond_yield_reuses_one_hour_snapshot_without_api(monkeypatch):
-    cache.set_market_indicator_snapshot(
+    store.set_market_indicator_snapshot(
         "bond_yield_10y", 2.15, "2026-07-14", "fixture-source"
     )
     monkeypatch.setattr(
@@ -1264,9 +1266,7 @@ def test_bank_cash_flow_gate_is_not_applicable_during_fetch() -> None:
             "cash_flow_gate": {
                 "ttm_cfo": -1,
                 "ttm_capex": 0,
-                "sources": [
-                    "tushare.cashflow (company-filed statement mirror)"
-                ],
+                "sources": ["tushare.cashflow (company-filed statement mirror)"],
                 "as_of": "2026-09-09",
             }
         }

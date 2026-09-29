@@ -6,8 +6,7 @@ import json
 from io import StringIO
 from typing import Any
 
-from a_stock_agent_runtime import cache
-
+from a_stock_agent_runtime import commands_analysis, domain, store
 
 FRAMEWORK_NAMES = {
     "A": "A通用",
@@ -55,17 +54,17 @@ def set_valid_fundamentals(
     ttl: int | None = None,
 ) -> str:
     """Call production set_fundamentals with a valid fixture envelope."""
-    return cache.set_fundamentals(
+    return store.set_fundamentals(
         code, name, industry, valid_fundamentals_payload(data), ttl
     )
 
 
 def record_valid_quote(code: str, price: float = 10.0) -> None:
     """Write a recent validated quote snapshot for set-analysis tests."""
-    cache.record_quote_snapshot(
+    store.record_quote_snapshot(
         code,
         price,
-        cache.cst_today(),
+        domain.cst_today(),
         "10:00:00",
         "sina",
         {"sina": {"price": price}},
@@ -103,7 +102,7 @@ def valid_decision_payload(
         "blocked": blocked,
         "block_reason": reasons,
         "source_provenance": {"fixture": "tests.helpers"},
-        "freshness": {"as_of": f"{cache.cst_today()}T10:00:00+08:00"},
+        "freshness": {"as_of": f"{domain.cst_today()}T10:00:00+08:00"},
         "narrative": narrative,
     }
     if conflict:
@@ -123,5 +122,17 @@ def set_valid_analysis(monkeypatch, **kwargs: Any) -> dict[str, Any]:
     """Write a decision-v1 fixture through the production stdin command."""
     payload = valid_decision_payload(**kwargs)
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(payload, ensure_ascii=False)))
-    cache.cmd_set_analysis([])
+    commands_analysis.cmd_set_analysis([])
     return payload
+
+
+def mock_price_quotes(monkeypatch, fetch):
+    """Supply fixture quotes to both risk views without an industry provider."""
+    from a_stock_agent_runtime import commands_holdings, market_quotes
+
+    monkeypatch.setattr(market_quotes, "fetch_current_price_quotes", fetch)
+    monkeypatch.setattr(
+        commands_holdings,
+        "fetch_monitor_price_quotes",
+        lambda codes: (fetch(codes), None),
+    )

@@ -1,10 +1,10 @@
 """S3a/P13/P22: synthetic policy sources, not confirmed personal settings."""
 
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
 import socket
+from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +16,7 @@ from a_stock_agent_runtime import (
     risk_budget,
     risk_policy,
 )
+from tests.helpers import mock_price_quotes
 from tests.monitor.test_monitor_snapshot import _quotes, _seed_holding
 
 NOW = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
@@ -285,7 +286,7 @@ def test_both_public_clis_use_identical_effective_policy_and_denominator(
     override, tmp_path, isolated_cache_database, monkeypatch, capsys
 ):
     _seed_holding(isolated_cache_database, "600000")
-    monkeypatch.setattr(commands_holdings, "fetch_current_price_quotes", _quotes)
+    mock_price_quotes(monkeypatch, _quotes)
     path = _file(tmp_path / "policy.json")
     args = [
         "--portfolio-value",

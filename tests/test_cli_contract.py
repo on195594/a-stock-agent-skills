@@ -4,7 +4,6 @@ import sqlite3
 
 from a_stock_agent_runtime import cache, fetcher
 
-
 CLI_ARGUMENT_CASES = {
     "check": ([], ["600000"]),
     "get": ([], ["600000"]),
@@ -312,7 +311,7 @@ def test_phase4_structured_command_help_and_schema(capsys) -> None:
 
 
 def test_sina_parser_preserves_price_when_previous_close_is_malformed() -> None:
-    from a_stock_agent_runtime import commands_holdings, market_quotes
+    from a_stock_agent_runtime import market_quotes
 
     for previous_close, expected in (("bad", None), ("", None), ("99", 99.0)):
         fields = ["fixture", "100", previous_close, "101"] + [""] * 26
@@ -320,9 +319,6 @@ def test_sina_parser_preserves_price_when_previous_close_is_malformed() -> None:
         line = 'var hq_str_sh600036="' + ",".join(fields) + '";'
         expected_quote = ("600036", 101.0, "2026-09-08", "10:00:00", expected)
         assert market_quotes.parse_sina_quote_line(line, {"600036"}) == expected_quote
-        assert (
-            commands_holdings._parse_sina_quote_line(line, {"600036"}) == expected_quote
-        )
         fields[3] = "bad"
         line = 'var hq_str_sh600036="' + ",".join(fields) + '";'
         assert market_quotes.parse_sina_quote_line(line, {"600036"}) is None

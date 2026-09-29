@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from a_stock_agent_runtime import cache, commands_holdings, domain, risk_gates
+from a_stock_agent_runtime import commands_holdings, db, domain, risk_gates
+from tests.helpers import mock_price_quotes
 
 CST = timezone(timedelta(hours=8))
 
@@ -134,8 +135,8 @@ def test_untradeable_never_becomes_a_sell_quantity():
 
 def test_check_holdings_reuses_active_persisted_defer(capsys, monkeypatch):
     started = datetime(2026, 9, 7, 10, 0, tzinfo=CST)
-    cache.cmd_add_holding(["600036", "40", "100", "--notes", "P3测试"])
-    with cache.db_session() as conn:
+    commands_holdings.cmd_add_holding(["600036", "40", "100", "--notes", "P3测试"])
+    with db.db_session() as conn:
         holding_id = conn.execute(
             "SELECT id FROM holdings WHERE code='600036' AND exit_date IS NULL"
         ).fetchone()[0]
@@ -164,7 +165,7 @@ def test_check_holdings_reuses_active_persisted_defer(capsys, monkeypatch):
         conn.commit()
     now = started + timedelta(hours=1)
     captured = []
-    real_evaluate = domain.evaluate_liquidity_shock
+    real_evaluate = risk_gates.liquidity_shock_gate
 
     def capture(payload):
         result = real_evaluate(payload)
@@ -172,13 +173,23 @@ def test_check_holdings_reuses_active_persisted_defer(capsys, monkeypatch):
         return result
 
     monkeypatch.setattr(domain, "cst_now", lambda: now)
-    monkeypatch.setattr(domain, "evaluate_liquidity_shock", capture)
-    monkeypatch.setattr(
-        commands_holdings,
-        "fetch_current_price_quote",
-        lambda _code: commands_holdings.PriceQuote(
-            31, now.date().isoformat(), "11:00:00", "sina", False, False, "trading"
-        ),
+    monkeypatch.setattr(risk_gates, "liquidity_shock_gate", capture)
+    mock_price_quotes(
+        monkeypatch,
+        lambda codes: {
+            _code: (
+                commands_holdings.PriceQuote(
+                    31,
+                    now.date().isoformat(),
+                    "11:00:00",
+                    "sina",
+                    False,
+                    False,
+                    "trading",
+                )
+            )
+            for _code in codes
+        },
     )
     monkeypatch.setattr(
         commands_holdings.market_quotes,

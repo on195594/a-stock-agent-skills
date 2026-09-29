@@ -8,145 +8,62 @@ R0 只读；R1 可读取外部数据并刷新缓存，但不授权投资状态�
 import argparse
 import sqlite3
 import sys
-import requests  # noqa: F401 - 兼容外部调用方对 cache.requests 的 monkeypatch
+
 from a_stock_agent_runtime import (
     commands_admin,
     commands_analysis,
     commands_holdings,
     commands_monitor,
     db,
-    domain,
-    store,
+    paths,
+    performance,
 )
-from a_stock_agent_runtime import paths
-from a_stock_agent_runtime import performance
-
-# Explicit compatibility exports; production code calls domain.* so owner patches
-# remain observable after this module split.
-utc_now = domain.utc_now
-utc_now_iso = domain.utc_now_iso
-cst_today = domain.cst_today
-is_expired = domain.is_expired
-get_industry_ttl = domain.get_industry_ttl
-infer_framework = domain.infer_framework
-get_stop_loss_pct = domain.get_stop_loss_pct
-_is_a_share_trading_hours = domain.is_a_share_trading_hours
-get_db = db.get_db
-db_session = db.db_session
-record_quote_snapshot = store.record_quote_snapshot
-get_latest_quote_snapshot = store.get_latest_quote_snapshot
-set_market_indicator_snapshot = store.set_market_indicator_snapshot
-update_qualitative_only_security = store.update_qualitative_only_security
-get_market_indicator_snapshot = store.get_market_indicator_snapshot
-get_fundamentals = store.get_fundamentals
-set_fundamentals = store.set_fundamentals
-QUOTE_SNAPSHOT_MAX_AGE = store.QUOTE_SNAPSHOT_MAX_AGE
-QUOTE_SNAPSHOT_RETENTION_PER_CODE = store.QUOTE_SNAPSHOT_RETENTION_PER_CODE
-MAX_SNAPSHOT_CLOCK_SKEW = store.MAX_SNAPSHOT_CLOCK_SKEW
-
-# Explicit command compatibility exports for supported direct callers.
-cmd_check = commands_analysis.cmd_check
-cmd_get = commands_analysis.cmd_get
-cmd_set = commands_analysis.cmd_set
-cmd_get_analysis = commands_analysis.cmd_get_analysis
-cmd_set_analysis = commands_analysis.cmd_set_analysis
-cmd_set_score = commands_analysis.cmd_set_score
-cmd_set_score_breakdown = commands_analysis.cmd_set_score_breakdown
-cmd_score_fundamentals = commands_analysis.cmd_score_fundamentals
-
-cmd_add_holding = commands_holdings.cmd_add_holding
-cmd_holdings = commands_holdings.cmd_holdings
-cmd_buy_holding = commands_holdings.cmd_buy_holding
-cmd_sell_holding = commands_holdings.cmd_sell_holding
-cmd_record_dividend = commands_holdings.cmd_record_dividend
-cmd_corporate_action = commands_holdings.cmd_corporate_action
-cmd_close_holding = commands_holdings.cmd_close_holding
-cmd_retro_add = commands_holdings.cmd_retro_add
-cmd_retro_pending = commands_holdings.cmd_retro_pending
-cmd_retro_stats = commands_holdings.cmd_retro_stats
-cmd_retro_outliers = commands_holdings.cmd_retro_outliers
-cmd_remove_holding = commands_holdings.cmd_remove_holding
-cmd_update_return = commands_holdings.cmd_update_return
-cmd_position_return = commands_holdings.cmd_position_return
-cmd_portfolio_risk = commands_holdings.cmd_portfolio_risk
-cmd_check_holdings = commands_holdings.cmd_check_holdings
-
-cmd_l3_add = commands_monitor.cmd_l3_add
-cmd_l3_update = commands_monitor.cmd_l3_update
-cmd_l3_list = commands_monitor.cmd_l3_list
-cmd_thesis_rewrite = commands_monitor.cmd_thesis_rewrite
-cmd_tier_config = commands_monitor.cmd_tier_config
-cmd_holding_framework = commands_monitor.cmd_holding_framework
-cmd_tier_update = commands_monitor.cmd_tier_update
-cmd_alert_open = commands_monitor.cmd_alert_open
-cmd_alert_resolve = commands_monitor.cmd_alert_resolve
-cmd_alert_pending = commands_monitor.cmd_alert_pending
-cmd_alerts = commands_monitor.cmd_alerts
-cmd_set_flag = commands_monitor.cmd_set_flag
-cmd_clear_flag = commands_monitor.cmd_clear_flag
-cmd_monitor_snapshot = commands_monitor.cmd_monitor_snapshot
-
-cmd_watchlist = commands_admin.cmd_watchlist
-cmd_list = commands_admin.cmd_list
-cmd_cleanup = commands_admin.cmd_cleanup
-cmd_clear = commands_admin.cmd_clear
-cmd_checklist = commands_admin.cmd_checklist
-
-PriceQuote = commands_holdings.PriceQuote
-fetch_current_price = commands_holdings.fetch_current_price
-fetch_current_prices = commands_holdings.fetch_current_prices
-fetch_current_price_quotes = commands_holdings.fetch_current_price_quotes
-_sina_query_prefix = commands_holdings._sina_query_prefix
-_validate_buy_quantity = commands_holdings._validate_buy_quantity
-_validate_sell_quantity = commands_holdings._validate_sell_quantity
-get_watchlist_rows = commands_admin.get_watchlist_rows
-check = cmd_check
 
 COMMANDS = {
-    "check": cmd_check,
-    "get": cmd_get,
-    "set": cmd_set,
-    "get-analysis": cmd_get_analysis,
-    "set-analysis": cmd_set_analysis,
-    "set-score": cmd_set_score,
-    "set-score-breakdown": cmd_set_score_breakdown,
-    "score-fundamentals": cmd_score_fundamentals,
+    "check": commands_analysis.cmd_check,
+    "get": commands_analysis.cmd_get,
+    "set": commands_analysis.cmd_set,
+    "get-analysis": commands_analysis.cmd_get_analysis,
+    "set-analysis": commands_analysis.cmd_set_analysis,
+    "set-score": commands_analysis.cmd_set_score,
+    "set-score-breakdown": commands_analysis.cmd_set_score_breakdown,
+    "score-fundamentals": commands_analysis.cmd_score_fundamentals,
     "performance-report": performance.cmd_performance_report,
-    "set-flag": cmd_set_flag,
-    "clear-flag": cmd_clear_flag,
-    "alert-open": cmd_alert_open,
-    "alert-pending": cmd_alert_pending,
-    "alert-resolve": cmd_alert_resolve,
-    "alerts": cmd_alerts,
-    "l3-add": cmd_l3_add,
-    "l3-update": cmd_l3_update,
-    "l3-list": cmd_l3_list,
-    "thesis-rewrite": cmd_thesis_rewrite,
-    "tier-config": cmd_tier_config,
-    "tier-update": cmd_tier_update,
-    "holding-framework": cmd_holding_framework,
-    "add-holding": cmd_add_holding,
-    "buy-holding": cmd_buy_holding,
-    "sell-holding": cmd_sell_holding,
-    "record-dividend": cmd_record_dividend,
-    "corporate-action": cmd_corporate_action,
-    "close-holding": cmd_close_holding,
-    "retro-add": cmd_retro_add,
-    "retro-pending": cmd_retro_pending,
-    "retro-stats": cmd_retro_stats,
-    "retro-outliers": cmd_retro_outliers,
-    "holdings": cmd_holdings,
-    "remove-holding": cmd_remove_holding,
-    "update-return": cmd_update_return,
-    "position-return": cmd_position_return,
-    "portfolio-risk": cmd_portfolio_risk,
-    "check-holdings": cmd_check_holdings,
-    "monitor-snapshot": cmd_monitor_snapshot,
-    "watchlist": cmd_watchlist,
-    "list": cmd_list,
-    "cleanup": cmd_cleanup,
-    "clear": cmd_clear,
-    "checklist": cmd_checklist,
+    "set-flag": commands_monitor.cmd_set_flag,
+    "clear-flag": commands_monitor.cmd_clear_flag,
+    "alert-open": commands_monitor.cmd_alert_open,
+    "alert-pending": commands_monitor.cmd_alert_pending,
+    "alert-resolve": commands_monitor.cmd_alert_resolve,
+    "alerts": commands_monitor.cmd_alerts,
+    "l3-add": commands_monitor.cmd_l3_add,
+    "l3-update": commands_monitor.cmd_l3_update,
+    "l3-list": commands_monitor.cmd_l3_list,
+    "thesis-rewrite": commands_monitor.cmd_thesis_rewrite,
+    "tier-config": commands_monitor.cmd_tier_config,
+    "tier-update": commands_monitor.cmd_tier_update,
+    "holding-framework": commands_monitor.cmd_holding_framework,
+    "add-holding": commands_holdings.cmd_add_holding,
+    "buy-holding": commands_holdings.cmd_buy_holding,
+    "sell-holding": commands_holdings.cmd_sell_holding,
+    "record-dividend": commands_holdings.cmd_record_dividend,
+    "corporate-action": commands_holdings.cmd_corporate_action,
+    "close-holding": commands_holdings.cmd_close_holding,
+    "retro-add": commands_holdings.cmd_retro_add,
+    "retro-pending": commands_holdings.cmd_retro_pending,
+    "retro-stats": commands_holdings.cmd_retro_stats,
+    "retro-outliers": commands_holdings.cmd_retro_outliers,
+    "holdings": commands_holdings.cmd_holdings,
+    "remove-holding": commands_holdings.cmd_remove_holding,
+    "update-return": commands_holdings.cmd_update_return,
+    "position-return": commands_holdings.cmd_position_return,
+    "portfolio-risk": commands_holdings.cmd_portfolio_risk,
+    "check-holdings": commands_holdings.cmd_check_holdings,
+    "monitor-snapshot": commands_monitor.cmd_monitor_snapshot,
+    "watchlist": commands_admin.cmd_watchlist,
+    "list": commands_admin.cmd_list,
+    "cleanup": commands_admin.cmd_cleanup,
+    "clear": commands_admin.cmd_clear,
+    "checklist": commands_admin.cmd_checklist,
 }
 
 # One source of truth for the side-effect boundary.  R0 is local read-only,

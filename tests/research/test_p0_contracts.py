@@ -11,14 +11,21 @@ from pathlib import Path
 
 import pytest
 
-from a_stock_agent_runtime import cache, db, domain, schema
-from a_stock_agent_runtime import fetcher
+from a_stock_agent_runtime import (
+    cache,
+    commands_admin,
+    commands_analysis,
+    db,
+    domain,
+    fetcher,
+    schema,
+    store,
+)
 from tests.helpers import (
     set_valid_analysis,
     valid_decision_payload,
     valid_fundamentals_payload,
 )
-
 
 SUBJECTIVE_CATEGORIES = {
     "A": ("护城河", "行业地位"),
@@ -43,7 +50,7 @@ def isolated_db(tmp_path, monkeypatch):
 def record_quote(
     code: str, price: float = 100.0, fetched_at: str | None = None
 ) -> None:
-    cache.record_quote_snapshot(
+    store.record_quote_snapshot(
         code,
         price,
         "2026-07-14",
@@ -91,7 +98,7 @@ def run_set_analysis(
 
 
 def test_schema_migration_adds_quote_tables_and_analysis_columns() -> None:
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         analysis_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(analysis_results)")
         }
@@ -117,7 +124,7 @@ def test_schema_migration_ledger_skips_done_work_but_applies_new_item(
     monkeypatch,
 ) -> None:
     """Later releases run newly added migrations without reopening old work."""
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         migration_ids = {
             row[0] for row in conn.execute("SELECT migration_id FROM schema_migrations")
         }
@@ -130,7 +137,7 @@ def test_schema_migration_ledger_skips_done_work_but_applies_new_item(
         "_create_core_tables",
         lambda _conn: pytest.fail("durable migration ledger should skip bootstrap"),
     )
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute("SELECT 1").fetchone() == (1,)
 
     monkeypatch.setattr(
@@ -146,7 +153,7 @@ def test_schema_migration_ledger_skips_done_work_but_applies_new_item(
     )
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED", False)
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED_PATH", "")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         columns = {
             row[1] for row in conn.execute("PRAGMA table_info(stock_fundamentals)")
         }
@@ -168,7 +175,7 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
     not atomicity -- it is `apply_column_migration` swallowing `duplicate column
     name` when the ledger replays that item on the next run.
     """
-    with cache.db_session():  # bring the fixture database to the current release
+    with db.db_session():  # bring the fixture database to the current release
         pass
 
     released = list(schema.SCHEMA_MIGRATIONS)
@@ -185,7 +192,7 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED", False)
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED_PATH", "")
     with pytest.raises(sqlite3.OperationalError):
-        with cache.db_session():
+        with db.db_session():
             pass
 
     probe = sqlite3.connect(cache.paths.cache_db_path())
@@ -207,7 +214,7 @@ def test_interrupted_migration_batch_is_recovered_by_replay(monkeypatch) -> None
     monkeypatch.setattr(schema, "SCHEMA_MIGRATIONS", [*released, good])
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED", False)
     monkeypatch.setattr(db, "_SCHEMA_INITIALIZED_PATH", "")
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert conn.execute(
             "SELECT 1 FROM schema_migrations WHERE migration_id=?", (good[0],)
         ).fetchone() == (1,)
@@ -250,7 +257,7 @@ def test_set_analysis_uses_latest_snapshot_without_requesting_another_quote(
 ) -> None:
     run_set_analysis(monkeypatch, "600000", "A", score=60)
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         analysis = conn.execute(
             "SELECT quote_price, quote_as_of, quote_source FROM analysis_results WHERE code=?",
             ("600000",),
@@ -269,11 +276,11 @@ def test_set_analysis_uses_latest_snapshot_without_requesting_another_quote(
     "period", ["2025年报", "2026半年报", "2026Q1", "2026Q2", "2026Q3"]
 )
 def test_fundamentals_accepts_supported_data_periods(period: str) -> None:
-    cache.set_fundamentals(
+    store.set_fundamentals(
         "600000", "测试", "制造", valid_fundamentals_payload({"roe": 12.0}, period)
     )
 
-    assert cache.get_fundamentals("600000")["data_period"] == period
+    assert store.get_fundamentals("600000")["data_period"] == period
 
 
 @pytest.mark.parametrize("period", [None, "", "2026", "2026Q4", "2026年中报"])
@@ -282,7 +289,7 @@ def test_fundamentals_rejects_missing_or_invalid_data_period(period) -> None:
     payload["data_period"] = period
 
     with pytest.raises(ValueError, match="data_period"):
-        cache.set_fundamentals("600000", "测试", "制造", payload)
+        store.set_fundamentals("600000", "测试", "制造", payload)
 
 
 def test_fundamentals_requires_provenance_and_null_reason_for_every_field() -> None:
@@ -292,9 +299,9 @@ def test_fundamentals_requires_provenance_and_null_reason_for_every_field() -> N
     missing_reason["null_reasons"].clear()
 
     with pytest.raises(ValueError, match="field_provenance"):
-        cache.set_fundamentals("1", "测试", "制造", missing_provenance)
+        store.set_fundamentals("1", "测试", "制造", missing_provenance)
     with pytest.raises(ValueError, match="null_reasons"):
-        cache.set_fundamentals("2", "测试", "制造", missing_reason)
+        store.set_fundamentals("2", "测试", "制造", missing_reason)
 
 
 def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -> None:
@@ -328,7 +335,7 @@ def test_fetcher_payload_writes_complete_provenance_and_excludes_global_bond() -
     }
     fetcher._build_cache_payload("600000", "测试", "制造", results, {}, "2025年报")
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         stored = json.loads(
             conn.execute(
                 "SELECT data FROM stock_fundamentals WHERE code=?", ("600000",)
@@ -398,7 +405,7 @@ def test_fetcher_refuses_fundamentals_write_when_report_period_unknown() -> None
     with pytest.raises(SystemExit):
         fetcher._build_cache_payload("600000", "测试", "制造", {}, {}, None)
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         assert (
             conn.execute("SELECT COUNT(*) FROM stock_fundamentals").fetchone()[0] == 0
         )
@@ -409,12 +416,12 @@ def test_legacy_naive_timestamp_is_interpreted_as_asia_shanghai(monkeypatch) -> 
         domain, "utc_now", lambda: datetime(2026, 7, 14, 2, 0, tzinfo=timezone.utc)
     )
 
-    assert cache.is_expired("2026-07-14T09:00:00", 2) is False
-    assert cache.is_expired("2026-07-14T07:59:59", 2) is True
+    assert domain.is_expired("2026-07-14T09:00:00", 2) is False
+    assert domain.is_expired("2026-07-14T07:59:59", 2) is True
 
 
 def test_market_indicator_24_hour_boundary(monkeypatch) -> None:
-    cache.set_market_indicator_snapshot(
+    store.set_market_indicator_snapshot(
         "bond_yield_10y",
         1.8,
         "2026-07-13",
@@ -422,14 +429,14 @@ def test_market_indicator_24_hour_boundary(monkeypatch) -> None:
         fetched_at=(NOW - timedelta(hours=24)).isoformat(),
     )
     assert (
-        cache.get_market_indicator_snapshot(
+        store.get_market_indicator_snapshot(
             "bond_yield_10y", max_age=timedelta(hours=24)
         )
         is not None
     )
     monkeypatch.setattr(domain, "utc_now", lambda: NOW + timedelta(microseconds=1))
     assert (
-        cache.get_market_indicator_snapshot(
+        store.get_market_indicator_snapshot(
             "bond_yield_10y", max_age=timedelta(hours=24)
         )
         is None
@@ -437,14 +444,14 @@ def test_market_indicator_24_hour_boundary(monkeypatch) -> None:
 
 
 def test_older_market_indicator_write_cannot_replace_newer_snapshot() -> None:
-    cache.set_market_indicator_snapshot(
+    store.set_market_indicator_snapshot(
         "bond_yield_10y",
         1.7,
         "2026-07-14",
         "new-source",
         fetched_at=NOW.isoformat(),
     )
-    cache.set_market_indicator_snapshot(
+    store.set_market_indicator_snapshot(
         "bond_yield_10y",
         9.9,
         "2026-07-13",
@@ -452,7 +459,7 @@ def test_older_market_indicator_write_cannot_replace_newer_snapshot() -> None:
         fetched_at=(NOW - timedelta(hours=1)).isoformat(),
     )
 
-    snapshot = cache.get_market_indicator_snapshot("bond_yield_10y")
+    snapshot = store.get_market_indicator_snapshot("bond_yield_10y")
 
     assert snapshot["value"] == 1.7
     assert snapshot["source"] == "new-source"
@@ -460,22 +467,22 @@ def test_older_market_indicator_write_cannot_replace_newer_snapshot() -> None:
 
 def test_future_market_and_quote_snapshots_cannot_replace_current_data() -> None:
     future = (
-        NOW + cache.MAX_SNAPSHOT_CLOCK_SKEW + timedelta(microseconds=1)
+        NOW + store.MAX_SNAPSHOT_CLOCK_SKEW + timedelta(microseconds=1)
     ).isoformat()
-    cache.set_market_indicator_snapshot(
+    store.set_market_indicator_snapshot(
         "bond_yield_10y", 1.7, "2026-07-14", "fixture", fetched_at=NOW.isoformat()
     )
     record_quote("FUTURE", fetched_at=NOW.isoformat())
 
     with pytest.raises(ValueError, match="future"):
-        cache.set_market_indicator_snapshot(
+        store.set_market_indicator_snapshot(
             "bond_yield_10y", 9.9, "2026-07-15", "bad-clock", fetched_at=future
         )
     with pytest.raises(ValueError, match="future"):
         record_quote("FUTURE", 999.0, fetched_at=future)
 
-    assert cache.get_market_indicator_snapshot("bond_yield_10y")["value"] == 1.7
-    assert cache.get_latest_quote_snapshot("FUTURE")["price"] == 100.0
+    assert store.get_market_indicator_snapshot("bond_yield_10y")["value"] == 1.7
+    assert store.get_latest_quote_snapshot("FUTURE")["price"] == 100.0
 
 
 @pytest.mark.parametrize(
@@ -487,19 +494,19 @@ def test_quote_snapshot_rejects_non_positive_or_non_finite_prices(price) -> None
 
 
 def test_quote_snapshot_retention_is_bounded_per_code() -> None:
-    for index in range(cache.QUOTE_SNAPSHOT_RETENTION_PER_CODE + 7):
+    for index in range(store.QUOTE_SNAPSHOT_RETENTION_PER_CODE + 7):
         record_quote(
             "BOUNDED",
             100.0 + index,
             fetched_at=(NOW - timedelta(seconds=index)).isoformat(),
         )
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         count = conn.execute(
             "SELECT COUNT(*) FROM quote_snapshots WHERE code='BOUNDED'"
         ).fetchone()[0]
 
-    assert count == cache.QUOTE_SNAPSHOT_RETENTION_PER_CODE
+    assert count == store.QUOTE_SNAPSHOT_RETENTION_PER_CODE
 
 
 @pytest.mark.parametrize(
@@ -518,7 +525,7 @@ def test_set_analysis_accepts_all_framework_aliases(
 ) -> None:
     run_set_analysis(monkeypatch, str(ord(token)).zfill(6), token)
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         stored = conn.execute("SELECT framework FROM analysis_results").fetchone()[0]
     assert stored == expected
 
@@ -542,8 +549,8 @@ def test_set_analysis_rejects_invalid_decision_without_analysis_write(
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(decision)))
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis([])
-    with cache.db_session() as conn:
+        commands_analysis.cmd_set_analysis([])
+    with db.db_session() as conn:
         assert conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone()[0] == 0
 
 
@@ -552,10 +559,10 @@ def test_each_framework_requires_its_normalized_subjective_categories(
     capsys, framework: str
 ) -> None:
     code = str(ord(framework)).zfill(6)
-    cache.set_fundamentals(code, "fixture", "fixture", valid_fundamentals_payload({}))
+    store.set_fundamentals(code, "fixture", "fixture", valid_fundamentals_payload({}))
     scoring = scoring_input(framework)
 
-    cache.cmd_score_fundamentals([code, framework, json.dumps(scoring)])
+    commands_analysis.cmd_score_fundamentals([code, framework, json.dumps(scoring)])
     complete = json.loads(capsys.readouterr().out)
     assert not any(
         item.startswith("subjective:") for item in complete["missing_inputs"]
@@ -563,7 +570,7 @@ def test_each_framework_requires_its_normalized_subjective_categories(
 
     missing_category = SUBJECTIVE_CATEGORIES[framework][0]
     scoring["subjective_assessments"] = scoring["subjective_assessments"][1:]
-    cache.cmd_score_fundamentals([code, framework, json.dumps(scoring)])
+    commands_analysis.cmd_score_fundamentals([code, framework, json.dumps(scoring)])
     incomplete = json.loads(capsys.readouterr().out)
     assert f"subjective:{missing_category}" in incomplete["missing_inputs"]
 
@@ -573,9 +580,9 @@ def test_cycle_frameworks_fail_closed_without_structured_cycle_stage(
     capsys, framework: str
 ) -> None:
     code = str(ord(framework)).zfill(6)
-    cache.set_fundamentals(code, "fixture", "fixture", valid_fundamentals_payload({}))
+    store.set_fundamentals(code, "fixture", "fixture", valid_fundamentals_payload({}))
 
-    cache.cmd_score_fundamentals(
+    commands_analysis.cmd_score_fundamentals(
         [code, framework, json.dumps(scoring_input(framework, cycle=False))]
     )
     result = json.loads(capsys.readouterr().out)
@@ -595,8 +602,8 @@ def test_c_valuation_conflict_is_incomplete_and_rejects_a_total_score(
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(invalid)))
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis([])
-    with cache.db_session() as conn:
+        commands_analysis.cmd_set_analysis([])
+    with db.db_session() as conn:
         assert (
             conn.execute(
                 "SELECT COUNT(*) FROM analysis_results WHERE code=?", ("601899",)
@@ -605,9 +612,9 @@ def test_c_valuation_conflict_is_incomplete_and_rejects_a_total_score(
         )
 
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(conflict)))
-    cache.cmd_set_analysis([])
+    commands_analysis.cmd_set_analysis([])
     with pytest.raises(SystemExit):
-        cache.cmd_set_score_breakdown(
+        commands_analysis.cmd_set_score_breakdown(
             [
                 "601899",
                 json.dumps(
@@ -624,8 +631,10 @@ def test_c_valuation_conflict_is_incomplete_and_rejects_a_total_score(
         "timing": {"subtotal": None},
         "total": None,
     }
-    cache.cmd_set_score_breakdown(["601899", json.dumps(incomplete_breakdown)])
-    with cache.db_session() as conn:
+    commands_analysis.cmd_set_score_breakdown(
+        ["601899", json.dumps(incomplete_breakdown)]
+    )
+    with db.db_session() as conn:
         stored = conn.execute(
             "SELECT score, scoring_status, score_breakdown FROM analysis_results WHERE code=?",
             ("601899",),
@@ -641,15 +650,15 @@ def test_d_without_bond_snapshot_is_incomplete_and_accepts_null_timing(
     decision = valid_decision_payload("600900", "D", score=None, cycle=True)
     decision["block_reason"] = ["bond_yield_missing"]
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(decision)))
-    cache.cmd_set_analysis([])
+    commands_analysis.cmd_set_analysis([])
     breakdown = {
         "fundamentals": {"subtotal": 45},
         "timing": {"subtotal": None},
         "total": None,
     }
-    cache.cmd_set_score_breakdown(["600900", json.dumps(breakdown)])
+    commands_analysis.cmd_set_score_breakdown(["600900", json.dumps(breakdown)])
 
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         row = conn.execute(
             "SELECT score, scoring_status, score_breakdown FROM analysis_results WHERE code=?",
             ("600900",),
@@ -667,8 +676,8 @@ def test_d_without_bond_snapshot_rejects_complete_score(monkeypatch) -> None:
     monkeypatch.setattr("sys.stdin", StringIO(json.dumps(decision)))
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_analysis([])
-    with cache.db_session() as conn:
+        commands_analysis.cmd_set_analysis([])
+    with db.db_session() as conn:
         assert conn.execute("SELECT COUNT(*) FROM analysis_results").fetchone()[0] == 0
 
 
@@ -681,7 +690,7 @@ def test_non_d_or_complete_analysis_rejects_null_timing(monkeypatch) -> None:
     }
 
     with pytest.raises(SystemExit):
-        cache.cmd_set_score_breakdown(["600000", json.dumps(breakdown)])
+        commands_analysis.cmd_set_score_breakdown(["600000", json.dumps(breakdown)])
 
 
 @pytest.mark.parametrize(
@@ -696,7 +705,7 @@ def test_analysis_price_invalidation_three_percent_boundary(
         "600000", new_price, fetched_at=(NOW + timedelta(seconds=1)).isoformat()
     )
 
-    cache.cmd_check(["600000"])
+    commands_analysis.cmd_check(["600000"])
     output = capsys.readouterr().out
     assert ("ANALYSIS_HIT" in output) is hit
     assert ("ANALYSIS_PRICE_STALE" in output) is (not hit)
@@ -706,7 +715,7 @@ def test_analysis_hit_reports_signed_price_decline(monkeypatch, capsys) -> None:
     run_set_analysis(monkeypatch, "600000", "A", score=60)
     record_quote("600000", 98.0, fetched_at=(NOW + timedelta(seconds=1)).isoformat())
 
-    cache.cmd_check(["600000"])
+    commands_analysis.cmd_check(["600000"])
     output = capsys.readouterr().out
 
     assert "ANALYSIS_HIT" in output
@@ -715,11 +724,11 @@ def test_analysis_hit_reports_signed_price_decline(monkeypatch, capsys) -> None:
 
 def test_analysis_without_fresh_quote_cannot_hit(monkeypatch, capsys) -> None:
     run_set_analysis(monkeypatch, "600000", "A", score=60)
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute("DELETE FROM quote_snapshots WHERE code='600000'")
         conn.commit()
 
-    cache.cmd_check(["600000"])
+    commands_analysis.cmd_check(["600000"])
     output = capsys.readouterr().out
 
     assert "ANALYSIS_HIT" not in output
@@ -729,9 +738,9 @@ def test_analysis_without_fresh_quote_cannot_hit(monkeypatch, capsys) -> None:
 
 def test_unsupported_financial_watchlist_rows_are_terminal_qualitative_only() -> None:
     for code, industry in [("HOLDINS", "保险"), ("PENDBRK", "证券公司")]:
-        cache.update_qualitative_only_security(code, "金融公司", industry)
+        store.update_qualitative_only_security(code, "金融公司", industry)
         record_quote(code)
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             """INSERT INTO holdings
                (code, name, cost_price, buy_date, updated_at, exit_date)
@@ -740,7 +749,7 @@ def test_unsupported_financial_watchlist_rows_are_terminal_qualitative_only() ->
         )
         conn.commit()
 
-    rows = {row["code"]: row for row in cache.get_watchlist_rows()}
+    rows = {row["code"]: row for row in commands_admin.get_watchlist_rows()}
 
     assert {"HOLDINS", "PENDBRK"} <= set(rows)
     for code in ("HOLDINS", "PENDBRK"):
@@ -752,10 +761,10 @@ def test_unsupported_financial_watchlist_rows_are_terminal_qualitative_only() ->
 
 
 def test_human_facing_fundamentals_timestamp_is_converted_to_cst(capsys) -> None:
-    cache.set_fundamentals(
+    store.set_fundamentals(
         "600000", "测试", "制造", valid_fundamentals_payload({"roe": 12.0})
     )
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             "UPDATE stock_fundamentals SET updated_at='2026-07-13T04:09:00+00:00' "
             "WHERE code='600000'"
@@ -763,10 +772,10 @@ def test_human_facing_fundamentals_timestamp_is_converted_to_cst(capsys) -> None
         conn.commit()
 
     assert (
-        cache.get_fundamentals("600000")["_cache_meta"]["updated_at"]
+        store.get_fundamentals("600000")["_cache_meta"]["updated_at"]
         == "2026-07-13 12:09"
     )
-    cache.cmd_check(["600000"])
+    commands_analysis.cmd_check(["600000"])
     output = capsys.readouterr().out
     assert "更新:2026-07-13 12:09" in output
     assert '"updated_at": "2026-07-13 12:09"' in output
@@ -775,7 +784,7 @@ def test_human_facing_fundamentals_timestamp_is_converted_to_cst(capsys) -> None
 def insert_analysis(
     code: str, created_at: datetime, *, date_value: str = "2026-07-01"
 ) -> None:
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             """INSERT INTO analysis_results
                (code, date, result, created_at, framework, scoring_status)
@@ -786,7 +795,7 @@ def insert_analysis(
 
 
 def test_watchlist_candidate_boundaries_and_expired_retention() -> None:
-    with cache.db_session() as conn:
+    with db.db_session() as conn:
         conn.execute(
             """INSERT INTO holdings
                (code, name, cost_price, buy_date, updated_at, exit_date)
@@ -799,8 +808,8 @@ def test_watchlist_candidate_boundaries_and_expired_retention() -> None:
     insert_analysis("TOO_OLD", NOW - timedelta(days=14, microseconds=1))
     insert_analysis("EXPIRED", NOW - timedelta(days=1))
     payload = valid_fundamentals_payload({"roe": 10})
-    cache.set_fundamentals("EXPIRED", "过期基本面", "制造", payload, ttl=1)
-    with cache.db_session() as conn:
+    store.set_fundamentals("EXPIRED", "过期基本面", "制造", payload, ttl=1)
+    with db.db_session() as conn:
         conn.execute(
             "UPDATE stock_fundamentals SET updated_at=? WHERE code=?",
             ((NOW - timedelta(hours=2)).isoformat(), "EXPIRED"),
@@ -811,7 +820,7 @@ def test_watchlist_candidate_boundaries_and_expired_retention() -> None:
         "TOO_LATE", fetched_at=(NOW - timedelta(hours=24, microseconds=1)).isoformat()
     )
 
-    rows = cache.get_watchlist_rows()
+    rows = commands_admin.get_watchlist_rows()
     by_code = {row["code"]: row for row in rows}
 
     assert set(by_code) == {"HOLD", "RECENT", "EXPIRED", "PENDING"}
