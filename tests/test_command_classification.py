@@ -11,15 +11,18 @@ def test_every_cache_command_has_one_classification() -> None:
     )
 
 
-def test_help_documents_every_command() -> None:
-    """`--help` prints this docstring, so it must not drift from the command table."""
-    assert cache.__doc__
-    assert [name for name in COMMANDS if name not in cache.__doc__] == []
+def test_help_documents_every_command(capsys) -> None:
+    """Check actual CLI help rather than a second, manually copied command list."""
+    assert cache.main(["--help"]) == 0
+    output = capsys.readouterr().out
+    assert all(name in output for name in COMMANDS)
 
 
-def test_help_states_the_write_gate_and_lists_every_w1_command() -> None:
-    """The confirmation gate is the only write protection; help must not omit it."""
-    gate_section, _, _ = cache.__doc__.partition("子命令：")
-    assert "--confirm-write" in gate_section
-    w1 = [name for name, level in COMMAND_CLASSIFICATION.items() if level == "W1"]
-    assert [name for name in w1 if name not in gate_section] == []
+def test_help_states_the_write_gate_and_lists_every_w1_command(capsys) -> None:
+    assert cache.main(["--help"]) == 0
+    output = capsys.readouterr().out
+    _, marker, gate_section = output.partition("W1（需 --confirm-write）：")
+    assert marker
+    assert {"".join(name.split()) for name in gate_section.split(",")} == {
+        name for name, level in COMMAND_CLASSIFICATION.items() if level == "W1"
+    }

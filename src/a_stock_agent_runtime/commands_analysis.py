@@ -562,7 +562,7 @@ def _cmd_set_analysis_decision() -> None:
 
 
 def cmd_set_analysis(args: list[str]) -> None:
-    """Read one decision JSON document from stdin and cache it for today."""
+    """Read one decision-v1 JSON document from stdin and cache it for today."""
     if args:
         print(
             "错误：set-analysis 不接受参数；从 stdin 读取 decision JSON",

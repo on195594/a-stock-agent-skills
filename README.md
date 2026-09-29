@@ -10,49 +10,30 @@ Research and monitor share one small Python runtime. QA deliberately has no
 runtime, market-data or credential dependency. Runtime state, databases,
 logs, locks, artifacts and credentials stay outside this repository.
 
-## Current status
+## Goal and ownership
 
-Production is `0.1.13` (source `4789fc9`) / lib 0.8.0, activated on 2026-09-18
-after separately authorized migration `035-analysis-decision-json`. The nullable
-column and migration entry committed without changing original business rows.
-The runtime and frozen lock use `a-stock-lib==0.8.0`
-GitHub Release wheel with SHA-256
-`a811945b23d97eb121ff82d54bc0ba0810000a5379a9e9786fdcdc9220b30310`.
-Architecture convergence Phases 1-6 are complete: A-F scoring and cache-only
-industry lookup have one typed owner; runtime decisions and monitor snapshots
-use the versioned decision-v1 and monitor-v1 contracts; framework routing has
-one explicit catalog; and the three Skills remain thin routers. Eight captured
-Hermes scenarios have deterministic offline checks. One fixed
-`openai-codex/gpt-5.6-sol` session also executes three critical routes directly
-against isolated in-process fake tools with source and isolation provenance.
-All nine client Skill entries and three CLI links now resolve through one atomic
-`~/.local/share/a-stock-agent/current` pointer to a versioned runtime/Skill set,
-not the mutable source checkout. S1/S3 runtime functionality is now deployed as
-one paired set. Hermes and Codex passed same-release budget replays (including
-Hermes's configured default model); Claude is **DEPLOYED_NOT_VERIFIED_USER_WAIVER**,
-not a passed client. Hermes gateway is running on the new release. No real-account
-performance or live notification test was performed.
-Historical captures retain their original scope. See the
-[deployment/rollback record](docs/operations.md#current-deployment-record) and
-[S1 ledger](docs/plans/2026-09-17-risk-closure-implementation.md).
-S2 Tracker e2 plus the reviewed rounding repair is deployed at `3040100` / lib
-0.8.0. The verified `d312c8995522b563` experiment manifest and sourced local
-calendar are active for the 2026-09-18 through 2026-11-17 enrollment range. The
-30/60/90-day windows remain immature, so investment evidence is still
-`INSUFFICIENT_EVIDENCE`. See the [S2/S3 ledger](docs/plans/2026-09-17-s2-s3-implementation.md).
+Help one user research new A-shares, review existing holdings and check report
+compliance, with traceable evidence and explicit authorization for state writes.
+Research, Monitor and QA stay separate routes; they are not separate code projects.
+QA checks report compliance, not factual truth or investment effectiveness.
 
-The original M7 production cutover completed on 2026-08-09; the 2026-08-11
-maintenance deployments upgraded `a-stock-lib` to 0.5.0 and then deployed the
-P2 structural refactor without changing the database schema, configuration or
-cron. The 2026-08-14 `v0.1.3` deployment likewise changed no database schema,
-configuration or cron. Hermes is the production entry. Claude, Codex and Hermes
-remain supported clients; M8 does not retire Claude.
+`a-stock-lib` owns shared deterministic calculations and Providers. This runtime
+owns holdings, risk and decision-v1/monitor-v1 application contracts. Tracker
+owns generic data collection and historical audit; **Framework A closed as
+`CLOSED_UNPROVEN` on 2026-09-21**, so S2 enrollment and maturation are not pending
+work. The separate `a-stock-screen` workbench owns peer discovery, personal notes
+and fact changes, not holdings or trading. Do not merge these state or permission
+boundaries, restore Tracker experiments, or add an LLM orchestration platform.
 
-Cutover evidence and the rollback manifest are indexed in
-[`docs/migration/`](docs/migration/README.md). The implementation plan remains
-the source of truth for the completed M0-M8 migration milestones; dated specs
-and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) govern post-cutover work:
-[`docs/plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md`](docs/plans/2026-08-08-portable-a-stock-agent-skills-implementation-plan.md).
+## Version and deployment records
+
+Source versions and dependency pins live in `pyproject.toml` and `uv.lock`.
+Actual activation, paired runtime/Skill identity, client verification limits and
+rollback belong in the [operations record](docs/operations.md#current-deployment-record),
+not a second deployment ledger here. Passing offline tests is not live-client or
+real-account validation.
+Historical migration and S1/S2/S3 ledgers remain available through the
+[documentation index](docs/README.md); completed milestones are not a new task queue.
 
 ## Install or update
 
@@ -146,5 +127,6 @@ docs/plans/                implementation plans and milestone ledgers
 docs/migration/            provenance and redacted execution evidence
 ```
 
-The foundational specification is
-[`docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md`](docs/specs/2026-08-08-portable-a-stock-agent-skills-spec.md); current runtime contracts and ownership follow [`docs/architecture/runtime-contracts.md`](docs/architecture/runtime-contracts.md) and [`docs/specs/2026-09-13-a-stock-runtime-contract-vnext.md`](docs/specs/2026-09-13-a-stock-runtime-contract-vnext.md).
+Start with the [current runtime contracts](docs/architecture/runtime-contracts.md).
+Read dated specs only for the rule or historical decision being changed, rather
+than loading the full migration history before ordinary development.

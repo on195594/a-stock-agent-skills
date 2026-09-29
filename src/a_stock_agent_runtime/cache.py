@@ -1,77 +1,8 @@
 #!/usr/bin/env python3
-"""
-A股投研数据缓存管理器
-用法：
-  cache.py [--confirm-write] <子命令> [参数...]
+"""A股投研数据缓存 CLI；命令和参数以生成的 --help 为准。
 
-写入安全边界（全局）：
-  --confirm-write 必须位于子命令之前。所有 W1（修改投资状态）子命令缺少该参数时
-  返回退出码 3，且不打开写事务；R0/R1 只读子命令不需要该参数。
-  W1：set / set-analysis / set-score / set-score-breakdown / set-flag / clear-flag /
-      alert-open / alert-pending / alert-resolve / l3-add / l3-update / thesis-rewrite / tier-config /
-      tier-update / holding-framework / add-holding / buy-holding / sell-holding /
-      record-dividend / corporate-action / close-holding / retro-add / remove-holding /
-      update-return / cleanup / clear
-
-子命令：
-  cache.py check <代码>                                  # 【推荐】一次性检查分析结论+基本面缓存状态
-  cache.py get <代码>                                    # 获取基本面缓存数据
-  cache.py set <代码> <名称> <行业> <JSON> [TTL]            # 写入基本面数据（TTL自动按行业推断）
-  cache.py get-analysis <代码>                           # 获取今日分析结论缓存
-  cache.py set-analysis                                  # 从stdin写入一个 decision-v1 JSON（不接受位置参数）
-  cache.py set-score <代码> <分数>                       # 写入今日综合得分（/80，向后兼容）
-  cache.py set-score-breakdown <代码> '<JSON>'           # 写入今日各维度分项得分
-  cache.py set-flag <代码> <yellow|red> <原因>            # 记录红黄线预警
-  cache.py clear-flag <代码>                             # 清除指定股票所有预警标记
-  cache.py alert-open ... / alert-pending ... / alert-resolve ... / alerts <代码>
-                                                        # 结构化预警生命周期
-  cache.py l3-add ... / l3-update ... / l3-list <代码> [--all]
-  cache.py thesis-rewrite <代码>                        # 从stdin原子重写论文和L3
-  cache.py tier-config ... / tier-update ...             # 结构化 Tier 状态
-  cache.py holding-framework <代码> <A|B|C|D|E|F>        # 显式迁移持仓框架并重算止损线
-  cache.py add-holding <代码> <成交价> [股数] [--notes 备注] [--fee 金额] [--date YYYY-MM-DD]
-                                                        # 新增建仓批次
-  cache.py buy-holding <代码> <买入价> <股数> [--fee 金额] [--date YYYY-MM-DD]
-                                                        # 加仓并保留最初 buy_date
-  cache.py sell-holding <代码> <卖出价> <股数|all> [--fee 金额] [--tax 金额] [--date YYYY-MM-DD]
-                                                        # 部分/全部卖出并同步持仓与交易账本
-  cache.py record-dividend <代码> <现金总额> [日期]        # 记录持仓现金分红
-  cache.py corporate-action <代码> <每股现金分红> <转增比例> [日期]
-                                                        # 除权/送转，分离经济成本与规则参考成本
-  cache.py close-holding <代码> <卖出价> [日期]           # 记录平仓（保留历史，用于评分验证）
-  cache.py update-return <代码> <实际回报%>             # 卖出后记录实际回报（如 15.5 或 -8.2）
-  cache.py retro-add <代码> <error_tags> [--note 备注] [--thesis 买入理由] [--gap 框架改进建议]
-                                                        # 添加平仓复盘
-  cache.py retro-pending                                # 已平仓但尚未复盘的记录
-  cache.py retro-stats [框架名]                          # 复盘统计（按框架汇总错误标签）
-  cache.py retro-outliers [--loss N]                     # 亏损超阈值且未复盘的记录（默认 10）
-  cache.py holdings                                     # 显示在仓持股 + 已平仓历史（含盈亏%）
-  cache.py holdings --compact --json --active-only      # 仅输出当前持仓，供监控消费
-  cache.py monitor-snapshot --portfolio-value <总资产> --json
-                                                        # 一次只读日常监控快照
-  cache.py position-return <代码> [当前价]               # 交易事件口径总回报
-  cache.py remove-holding <代码>                        # 彻底删除持仓记录（慎用）
-  cache.py portfolio-risk                              # 组合风险视图（持仓 + 浮盈 + 框架分布）
-  cache.py check-holdings                              # 持仓止损检查：现价对比15%/20%止损线，主动预警
-  cache.py watchlist                                    # 显示所有有效缓存股票的关键指标摘要
-  cache.py list                                         # 查看所有缓存（含过期）
-  cache.py cleanup                                      # 清除所有过期缓存条目
-  cache.py clear [代码]                                  # 清除全部或指定股票缓存
-  cache.py checklist <代码> <框架A|B|C|D|E|F>             # 打印框架客观指标核对清单（仅核对事实，不计分）
-  cache.py score-fundamentals <代码> <框架> '<评分输入JSON v1>'
-                                                        # 只读确定性基本面评分
-  cache.py performance-report --input <account.json> [--benchmark <benchmark.json>]
-                                                        # 文件型账户业绩报告（纯计算）
-
-check 命令输出格式（供 SKILL.md 解析）：
-  ANALYSIS_HIT   → 今日分析结论已缓存，直接输出结论，终止分析流程
-  FUNDAMENTALS_HIT → 基本面数据有缓存，跳过基本面搜索，只查实时行情
-  FULL_MISS      → 完全未命中，执行完整分析流程
-
-TTL 按行业自动推断（set 命令未指定 TTL 时）：
-  银行/保险/券商/公用事业/水电 → 72h（季报数据稳定）
-  消费/白酒/食品/零售         → 12h（情绪驱动，变化快）
-  其余行业                   → 24h（默认）
+W1 命令必须在子命令前提供 --confirm-write，否则返回 3 且不打开写事务。
+R0 只读；R1 可读取外部数据并刷新缓存，但不授权投资状态写入。
 """
 
 import argparse
@@ -390,12 +321,20 @@ _CLI_VALUE_OPTIONS = {
     "retro-add": ("--note", "--thesis", "--gap"),
     "retro-outliers": ("--loss",),
     "portfolio-risk": (
-        "--portfolio-value", "--max-position-risk-pct", "--max-portfolio-risk-pct",
-        "--policy-file", "--account-scope", "--portfolio-value-as-of",
+        "--portfolio-value",
+        "--max-position-risk-pct",
+        "--max-portfolio-risk-pct",
+        "--policy-file",
+        "--account-scope",
+        "--portfolio-value-as-of",
     ),
     "monitor-snapshot": (
-        "--portfolio-value", "--max-position-risk-pct", "--max-portfolio-risk-pct",
-        "--policy-file", "--account-scope", "--portfolio-value-as-of",
+        "--portfolio-value",
+        "--max-position-risk-pct",
+        "--max-portfolio-risk-pct",
+        "--policy-file",
+        "--account-scope",
+        "--portfolio-value-as-of",
     ),
     "performance-report": ("--input", "--benchmark"),
 }
@@ -405,6 +344,10 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     parser = _CLIParser(
         prog="a-stock-cache",
         description="A股投研数据缓存管理器",
+        epilog="W1（需 --confirm-write）："
+        + ", ".join(
+            name for name, level in COMMAND_CLASSIFICATION.items() if level == "W1"
+        ),
     )
     parser.add_argument(
         "--confirm-write",
@@ -416,6 +359,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         handler_doc = COMMANDS[command].__doc__ or ""
         command_parser = subparsers.add_parser(
             command,
+            description=handler_doc,
             help=handler_doc.splitlines()[0].replace("%", "%%")
             if handler_doc
             else None,
@@ -444,7 +388,9 @@ def _build_cli_parser() -> argparse.ArgumentParser:
             command_parser.add_argument("--json", action="store_true")
         if command == "performance-report":
             command_parser.add_argument("--check-ledger", action="store_true")
-            command_parser.add_argument("--allow-eod-flow-assumption", action="store_true")
+            command_parser.add_argument(
+                "--allow-eod-flow-assumption", action="store_true"
+            )
             command_parser.add_argument("--json", action="store_true")
     return parser
 

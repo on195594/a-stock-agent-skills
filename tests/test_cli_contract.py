@@ -98,12 +98,27 @@ CLI_ARGUMENT_CASES = {
     "position-return": (["600000"], ["600000", "10"]),
     "portfolio-risk": (
         [],
-        ["--portfolio-value", "100000", "--max-position-risk-pct", "2", "--max-portfolio-risk-pct", "8"],
+        [
+            "--portfolio-value",
+            "100000",
+            "--max-position-risk-pct",
+            "2",
+            "--max-portfolio-risk-pct",
+            "8",
+        ],
     ),
     "check-holdings": ([], []),
     "monitor-snapshot": (
         ["--json"],
-        ["--portfolio-value", "100000", "--max-position-risk-pct", "2", "--max-portfolio-risk-pct", "8", "--json"],
+        [
+            "--portfolio-value",
+            "100000",
+            "--max-position-risk-pct",
+            "2",
+            "--max-portfolio-risk-pct",
+            "8",
+            "--json",
+        ],
     ),
     "watchlist": ([], ["--json", "--breakdown"]),
     "list": ([], []),
@@ -290,10 +305,10 @@ def test_phase4_structured_command_help_and_schema(capsys) -> None:
     scoring_help = capsys.readouterr().out
     assert "代码 框架 评分输入JSONv1" in scoring_help
 
-    usage_text = cache.__doc__ or ""
-    assert "set-analysis <代码> <框架> [得分]" not in usage_text
-    assert "报告正文从stdin读取" not in usage_text
-    assert "set-analysis" in usage_text and "decision-v1 JSON" in usage_text
+    assert "decision-v1 JSON" in set_analysis_help
+    assert "stdin" in set_analysis_help
+    assert "set-analysis <代码> <框架> [得分]" not in set_analysis_help
+    assert "报告正文从stdin读取" not in set_analysis_help
 
 
 def test_sina_parser_preserves_price_when_previous_close_is_malformed() -> None:

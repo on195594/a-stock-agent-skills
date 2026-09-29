@@ -19,8 +19,8 @@ The frozen lock includes the immutable `a-stock-lib` GitHub Release wheel and
 its SHA256. Source/wheel installer overrides are reserved for release-candidate
 checks.
 
-An owner source checkout is only needed for release-candidate override checks or
-the external prompt renderer. It must be passed explicitly; the project never
+An owner source checkout is only needed for release-candidate override checks.
+It must be passed explicitly; the project never
 guesses a sibling home-directory path. Those tests locate it via
 `A_STOCK_LIB_SOURCE`, and skip when it is not provisioned.
 
@@ -92,8 +92,9 @@ Goal or a passing test does not grant that permission.
 
 ## Documentation and evidence
 
-Keep the governing Spec and implementation plan aligned with actual milestone
-state. Migration and review evidence may contain command output and hashes but
+Update the current owner document for the behavior being changed; do not create
+another plan/spec/review for ordinary maintenance. Read historical specifications
+only when tracing or changing their rules. Migration and review evidence may contain command output and hashes but
 must not contain credentials, database copies, WAL/SHM files or runtime logs.
 Use relative links for repository documents. Historical evidence is retained
 for auditability and is not a scratch directory.
