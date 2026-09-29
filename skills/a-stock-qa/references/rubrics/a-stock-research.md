@@ -96,9 +96,10 @@
 
 **PASS 信号**（满足任一）：
 - 每个评分子项后有"checklist核验"标注
-- 有"checklist核验失败：[错误摘要]，已降级为纯人工评分"标注
+- checklist 失败后说明错误与缺口，停止基本面评分，相关评级和矩阵保持 `not_formed`
 
 **FAIL 信号**：
+- checklist 失败后仍降级为纯人工评分、人工加总或输出完整评级/矩阵
 - A-F 框架报告中完全没有 checklist 相关标注
 - 子项打分无任何核验来源说明
 
@@ -257,11 +258,11 @@
 
 ### 16. 银行核心数据完整性（Critical，仅 B 框架）
 
-**要求**：NIM、不良贷款率和拨备覆盖率三项全缺时必须 `scoring_status=incomplete`，不得把三个0分合成为完整基本面分、总分或仓位建议。
+**要求**：银行核心字段及其趋势输入的完整性以 `score-fundamentals` 输出为准。`complete=false` 时必须 `scoring_status=incomplete`，不得把缺失维度的0分当成已核验结果。
 
-**PASS 信号**：三项至少一项可核验并按缺失规则计分；或三项全缺后明确停止总分、评级和仓位矩阵。
+**PASS 信号**：scorer 完整且报告如实引用结果；或缺失时说明 `missing_inputs`，停止配置评级、择时总分、综合分和仓位矩阵。
 
-**FAIL 信号**：三项全缺仍输出完整基本面总分、时机评级、综合总分或仓位动作。
+**FAIL 信号**：任一 required 输入缺失后绕过 scorer 人工补分，或 `complete=false` 仍输出完整评级/矩阵；三项全缺仍输出完整基本面总分或仓位动作。
 
 **SKIP 条件**：非 B 框架。
 
@@ -325,9 +326,8 @@
 
 ## Verdict 判定规则
 
-按 SKILL.md Step 2 中的通用公式执行（单一维护点）。
+仅按下表聚合有效检查结果；SKILL.md 引用本 rubric，不另定义公式：
 
-参考：
 | 状况 | Verdict |
 |------|---------|
 | 所有检查均 PASS 或 SKIP | COMPLIANT |

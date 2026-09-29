@@ -34,7 +34,7 @@ def test_level2_checklist_semantics_remain_owned_after_main_is_thinned():
         ("framework/framework_confident", PORTFOLIO_RISK),
         ("alerts <代码>", DAILY_MONITORING),
         ("明显弱于所属行业指数 ≥2pts", DAILY_MONITORING),
-        ("实际止损线由 `cache.py`", DAILY_MONITORING),
+        ("本轮 `monitor-snapshot`", DAILY_MONITORING),
         ("L3 全量核查强制要求", DAILY_MONITORING),
         ("不得直接清仓", DAILY_MONITORING),
         ("各框架触发线", VALUATION_REVIEW),

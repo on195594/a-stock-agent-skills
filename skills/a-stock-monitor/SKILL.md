@@ -23,6 +23,10 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 S3a 可附用户提供的 `--policy-file`、`--account-scope`、`--portfolio-value-as-of`；不得由模型生成政策、确认引用或估值时点。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时新增风险须复核，即使本轮为 clean 也不授予加仓权限。无个人文件的 2%/8% 是兼容默认，不等于满足用户回撤目标；确认元数据不是 W1 令牌，发现非法政策不得静默回退。
 
+`--portfolio-value-as-of` 必须是用户提供的带时区时间，格式为 `YYYY-MM-DDTHH:MM:SS+08:00`；仅有日期时请求补充，不得自行填造时刻。
+
+通过宿主的命令执行工具调用 runtime CLI，保留 stdout、stderr 和退出码；不要在有硬超时的临时代码内核中包裹整轮监控。
+
 保留退出码并解析 stdout；业务不完整时命令可能输出有效 JSON 后退出非零。解析前不得额外调用 `holdings`、Wiki、Web 或子代理。
 
 - runtime 返回干净快速路径时，输出结构化 `action_status`、异常项、覆盖率、as-of 与 `stop_reason`，立即停止。

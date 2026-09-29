@@ -21,4 +21,13 @@ git show 165e2c8:docs/plans/2026-09-17-s2-s3-implementation.md
 
 Tracker Framework A 已于 2026-09-21 `CLOSED_UNPROVEN` 结案；旧 S2 的继续收样和等待成熟均已取消。Lib/Research 的 A—F 合同并未退役。
 
+技能包中的旧 Monitor CHANGELOG 和重复 QA README 已移出活动树；历史原文保留于 `f9a4ebe`，例如：
+
+```bash
+git show f9a4ebe:skills/a-stock-monitor/CHANGELOG.md
+git show f9a4ebe:skills/a-stock-qa/README.md
+```
+
+QA 当前输入、输出和独立调用边界只维护在其 `SKILL.md`，检查细则维护在 rubric。
+
 [CHANGELOG](CHANGELOG.md)、[迁移/回滚证据](migration/README.md)、[外部审查归档](reviews/README.md) 保留原日期含义；其旧路径可通过上述快照读取。历史证据不作为普通开发的必读上下文，也不因整理而删除生产资料。

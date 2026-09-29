@@ -24,6 +24,7 @@ compatibility: Reads only the supplied immutable text snapshot and this Skill's 
 ## 输出合同
 
 字段统一为 `process_verdict`、`data_status`、`decision_status`、`input_sha256`、`checks` 和 `reason`；正文中的 verdict 指 `process_verdict`，不是另一个字段。
+`checks` 每项包含 `name`（检查项）、`result`（PASS / FAIL / SKIP）和 `note`（一句依据）。
 - Process verdict：`COMPLIANT | PARTIAL | NON_COMPLIANT | SKIP | INVALID_RUN`；前三级仅用于有效且独立完成的检查，后两级表示未产生合规结论。
 - Data status：`COMPLETE | INCOMPLETE`；Decision status：`FORMED | NOT_FORMED`，均仅描述报告文本。
 - `SKIP/INVALID_RUN` 时，`data_status` 与 `decision_status` 为 `null`、`checks` 为空，并在 `reason` 说明原因；哈希无法取得时为 `null`，不得伪造。正常完成时 `reason` 可为 `null`。

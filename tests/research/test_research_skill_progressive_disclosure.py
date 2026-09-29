@@ -98,7 +98,13 @@ def test_research_routes_scale_electronics_manufacturing_to_a() -> None:
 
     assert "research-execution-flow.md" in main
     assert "EMS/ODM/电子组装/连接器/线束/声学器件/元器件/精密电子制造" in execution
-    assert "| A | `Read references/frameworks/A.md`" in execution
+    rows = [
+        line.split("|") for line in execution.splitlines() if "| 通用科技制造 |" in line
+    ]
+    assert len(rows) == 1
+    assert rows[0][3].strip() == "A框架"
+    assert "[A](frameworks/A.md)" in execution
+    assert (REFERENCES["execution"].parent / "frameworks/A.md").is_file()
     assert "盈利公司使用真实TTM PEG" in execution
     assert "现金跑道/稀释" in framework_f
     assert "EMS/ODM" not in main

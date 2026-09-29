@@ -24,6 +24,21 @@ not copy them into this repository or evidence.
 
 ## Routine checks
 
+### Host execution note
+
+The portable Monitor Skill requires a command-execution tool that preserves
+stdout, stderr and exit status. On Hermes, use `terminal` for `a-stock-cache`
+and `a-stock-fetch`, rather than wrapping the workflow in `execute_code` (its
+300-second cell timeout discards kernel state). This host-specific mapping is
+maintained here, not injected into the shared Skill payload.
+
+The currently deployed Monitor still contains the older local execution note.
+At the next explicitly authorized Skill publication, use the canonical Monitor
+body with this host-neutral requirement; do not carry the old extra line into
+another release. Keep the immutable active release untouched until that cutover.
+
+### Commands
+
 Use the stable commands from any working directory:
 
 ```bash
