@@ -216,6 +216,34 @@ unsafe clean behavior is not made safe by this staging exercise.
 
 ## Current deployment record
 
+### Debt exception repair and repository cleanup — 2026-09-29
+
+After explicit user authorization, repair `a2b16f8` and cleanup `e66832f` were
+committed and pushed. Runtime source is `e66832f`; `current` now selects
+`~/.local/share/a-stock-agent/deployment-candidates/20260929-e66832f-debt-cleanup/release-view`.
+The A-framework checklist limits automatic debt exceptions to explicit eligible
+industry labels. Missing debt components remain unknown and missing columns no
+longer interrupt other financial fields. Retired shadow tooling, unused path
+helpers and redundant tests were removed; documentation ownership was aligned.
+
+The full repository gate passed: 1328 tests passed, two optional installer tests
+skipped, with Ruff, Skill validation, regulatory freshness and standalone/cron
+smokes passing. All 25 installed runtime modules match the committed source;
+all 34 package versions and 28 active Skill files match the prior release,
+including the local Monitor execution note. Installed debt regressions and
+isolated W1/fail-closed/monitor-v1/CLI-help checks passed before activation;
+the installed smoke also passed through stable CLI entries after activation.
+
+All twelve entry links, stock cache DB/WAL fingerprints and crontab hash remained
+unchanged. No schema migration, production data write, service restart or new
+native-client model qualification was performed. The candidate directory holds
+source/wheel hashes, logs, `ACTIVE_RELEASE.json` and `rollback.json`. Rollback
+atomically restores the retained `20260929-adeb02f-compat/release-view` pointer;
+it does not restore a database. Later documentation commits do not change the
+deployed runtime source identity.
+
+## Previous deployment records
+
 ### Runtime compatibility cleanup — 2026-09-29
 
 After explicit user authorization, source `adeb02f6555372d5bba6c6919091d26458ae63af` was committed,
@@ -241,8 +269,6 @@ are in the candidate directory. `rollback.json` points to the retained
 not a database restore. A build initially targeted the prior artifact directory;
 the old wheel was restored byte-for-byte to its recorded SHA-256 before cutover,
 and its installed runtime remained untouched.
-
-## Previous deployment records
 
 ### Runtime maintenance — 2026-09-29
 
