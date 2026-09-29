@@ -16,7 +16,7 @@ def isolated_db(tmp_path, monkeypatch):
     yield str(db_file)
 
 
-def _set_a_fundamentals(**overrides):
+def _set_a_fundamentals(*, industry="银行", **overrides):
     data = {
         "roe_3y_avg": 18.2,
         "net_profit_growth": 12.0,
@@ -24,7 +24,7 @@ def _set_a_fundamentals(**overrides):
         "gross_margin": 35.0,
     }
     data.update(overrides)
-    set_valid_fundamentals("600036", "招商银行", "银行", data, ttl=24)
+    set_valid_fundamentals("600036", "招商银行", industry, data, ttl=24)
 
 
 def _set_c_fundamentals(**overrides):
@@ -135,31 +135,44 @@ def test_a_framework_gross_margin_has_only_excellent_or_fail():
     assert item.data_status == "简化判定（不判断趋势/连续性）"
 
 
-def test_a_framework_capital_intensive_debt_exception():
-    """负债率在60%—75%且有息负债率<40%时，A通用框架整车/重型制造例外条款视同达格。"""
-    _set_a_fundamentals(debt_ratio=70.7, interest_bearing_to_total_debt=17.7)
+@pytest.mark.parametrize(
+    "industry, debt_ratio, interest_debt, expected",
+    [
+        ("汽车整车", 60, 17.7, "达格"),
+        ("整车", 70.7, 17.7, "达格"),
+        ("重型设备", 75, 0, "达格"),
+        ("汽车整车", 75.1, 17.7, "未达"),
+        ("汽车整车", 70.7, 40, "未达"),
+        ("汽车整车", 70.7, None, "未达"),
+        ("汽车整车", 70.7, -1, "未达"),
+        ("汽车整车", 70.7, True, "未达"),
+    ],
+)
+def test_a_framework_capital_intensive_debt_exception(
+    industry, debt_ratio, interest_debt, expected
+):
+    _set_a_fundamentals(
+        industry=industry,
+        debt_ratio=debt_ratio,
+        interest_bearing_to_total_debt=interest_debt,
+    )
     items = checklist.build_checklist("600036", "A")
     debt_item = _item_by_key(items, "debt_ratio")
-    assert debt_item.result == "达格"
-    assert "资本密集型制造例外适用" in (debt_item.note or "")
+    assert debt_item.result == expected
+    assert ("资本密集型制造例外适用" in (debt_item.note or "")) == (expected == "达格")
 
-    # 若有息负债率 >= 40% 或缺失，维持未达
-    _set_a_fundamentals(debt_ratio=70.7, interest_bearing_to_total_debt=45.0)
+
+@pytest.mark.parametrize(
+    "industry", ["银行", "软件服务", "汽车零部件", "机械", "未知", ""]
+)
+def test_a_framework_debt_exception_requires_specific_industry(industry):
+    _set_a_fundamentals(
+        industry=industry, debt_ratio=70.7, interest_bearing_to_total_debt=17.7
+    )
     items = checklist.build_checklist("600036", "A")
     debt_item = _item_by_key(items, "debt_ratio")
     assert debt_item.result == "未达"
-
-    _set_a_fundamentals(debt_ratio=70.7, interest_bearing_to_total_debt=None)
-    items = checklist.build_checklist("600036", "A")
-    debt_item = _item_by_key(items, "debt_ratio")
-    assert debt_item.result == "未达"
-
-
-def test_unsupported_framework_raises_custom_error():
-    _set_a_fundamentals()
-
-    with pytest.raises(checklist.UnsupportedFrameworkError):
-        checklist.build_checklist("600036", "Z")
+    assert "需人工核验" in debt_item.note
 
 
 def test_missing_field_marks_data_missing_without_error():

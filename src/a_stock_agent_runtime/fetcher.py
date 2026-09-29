@@ -898,19 +898,24 @@ def _fetch_financials_tushare(code: str) -> Any:
                 liabilities = pd.to_numeric(annual["total_cur_liab"], errors="coerce")
                 annual["流动比率"] = assets.div(liabilities.where(liabilities != 0))
             if "total_liab" in annual.columns:
-                st = pd.to_numeric(annual.get("st_borr", 0), errors="coerce").fillna(0)
-                lt = pd.to_numeric(annual.get("lt_borr", 0), errors="coerce").fillna(0)
-                bond = pd.to_numeric(
-                    annual.get("bond_payable", 0), errors="coerce"
-                ).fillna(0)
-                due1y = pd.to_numeric(
-                    annual.get("non_cur_liab_due_1y", 0), errors="coerce"
-                ).fillna(0)
+                debt = annual.reindex(
+                    columns=[
+                        "st_borr",
+                        "lt_borr",
+                        "bond_payable",
+                        "non_cur_liab_due_1y",
+                    ]
+                ).apply(pd.to_numeric, errors="coerce")
+                # 缺列/缺值不能证明债务为零；四个分项须全部有效。
+                debt = debt.where((debt >= 0) & (debt < float("inf")))
                 tot_liab = pd.to_numeric(annual["total_liab"], errors="coerce")
-                interest_debt = st + lt + bond + due1y
-                annual["有息负债率"] = interest_debt.div(
-                    tot_liab.where(tot_liab != 0)
-                ) * 100
+                interest_debt = debt.sum(axis=1, min_count=4)
+                annual["有息负债率"] = (
+                    interest_debt.div(
+                        tot_liab.where((tot_liab > 0) & (tot_liab < float("inf")))
+                    )
+                    * 100
+                )
 
     annual_cashflow = annual_frame(cashflow)
     if (

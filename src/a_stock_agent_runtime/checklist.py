@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 from a_stock_lib import framework_scoring
 
@@ -93,12 +94,24 @@ def _build_item(
         and fundamentals is not None
     ):
         interest_debt = fundamentals.get("interest_bearing_to_total_debt")
-        if isinstance(interest_debt, (int, float)) and interest_debt < 40:
+        # 只自动识别规则明确列出的类别，宽泛行业仍需人工核验。
+        eligible_industry = fundamentals.get("_cache_meta", {}).get("industry") in (
+            "汽车整车",
+            "整车",
+            "重型设备",
+        )
+        if (
+            eligible_industry
+            and isinstance(interest_debt, (int, float))
+            and not isinstance(interest_debt, bool)
+            and isfinite(interest_debt)
+            and 0 <= interest_debt < 40
+        ):
             result = "达格"
-            exception_note = (
-                f"资本密集型制造例外适用：负债率≤75%且有息负债率（{interest_debt:.1f}%）<40%"
-            )
+            exception_note = f"资本密集型制造例外适用：负债率≤75%且有息负债率（{interest_debt:.1f}%）<40%"
             note = f"{note}；{exception_note}" if note else exception_note
+        elif not eligible_industry:
+            note = "未确认属于整车/重型设备等资本密集型制造，例外适用性需人工核验"
 
     return ChecklistItem(
         key=definition.key,

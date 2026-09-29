@@ -456,7 +456,80 @@ def test_tushare_dividend_adapter_rescales_stk_div_without_rate_columns(monkeypa
     assert frame.loc[0, "现金分红-现金分红比例"] == pytest.approx(2.0)
 
 
-def test_tushare_financial_adapter_merges_balance_and_cashflow(monkeypatch):
+@pytest.mark.parametrize(
+    "debt_fields, expected_ratio",
+    [
+        ({}, None),
+        ({"total_liab": 100.0}, None),
+        (
+            dict(
+                total_liab=100,
+                st_borr=10,
+                lt_borr=5,
+                bond_payable=2,
+                non_cur_liab_due_1y=3,
+            ),
+            20.0,
+        ),
+        (
+            dict(
+                total_liab=100,
+                st_borr=0,
+                lt_borr=0,
+                bond_payable=0,
+                non_cur_liab_due_1y=0,
+            ),
+            0.0,
+        ),
+        (
+            dict(
+                total_liab=100,
+                st_borr=None,
+                lt_borr=None,
+                bond_payable=None,
+                non_cur_liab_due_1y=None,
+            ),
+            None,
+        ),
+        (
+            dict(
+                total_liab=100,
+                st_borr=10,
+                lt_borr=5,
+                bond_payable=None,
+                non_cur_liab_due_1y=3,
+            ),
+            None,
+        ),
+        (
+            dict(total_liab=100, st_borr=10, lt_borr=5, non_cur_liab_due_1y=3),
+            None,
+        ),
+        (
+            dict(
+                total_liab=0,
+                st_borr=0,
+                lt_borr=0,
+                bond_payable=0,
+                non_cur_liab_due_1y=0,
+            ),
+            None,
+        ),
+        (
+            dict(
+                total_liab=100,
+                st_borr="invalid",
+                lt_borr=5,
+                bond_payable=2,
+                non_cur_liab_due_1y=3,
+            ),
+            None,
+        ),
+    ],
+)
+def test_tushare_financial_adapter_merges_balance_and_cashflow(
+    monkeypatch, debt_fields, expected_ratio
+):
     import a_stock_lib.providers as providers
 
     def result(frame):
@@ -496,6 +569,7 @@ def test_tushare_financial_adapter_merges_balance_and_cashflow(monkeypatch):
                         "total_cur_assets": [200.0],
                         "total_cur_liab": [100.0],
                         "total_share": [100.0],
+                        **{key: [value] for key, value in debt_fields.items()},
                     }
                 )
             )
@@ -515,6 +589,10 @@ def test_tushare_financial_adapter_merges_balance_and_cashflow(monkeypatch):
 
     assert frame.loc[0, "流动比率"] == pytest.approx(2.0)
     assert frame.loc[0, "每股经营现金流"] == pytest.approx(3.0)
+    extracted = fetcher._extract_fin_fields(frame)
+    assert extracted["interest_bearing_to_total_debt"] == expected_ratio
+    assert extracted["roe_3y_avg"] == 12.0
+    assert extracted["eps"] == 1.2
 
 
 # ── cmd_batch：KeyboardInterrupt 不被吞掉 ────────────────────────────────────
