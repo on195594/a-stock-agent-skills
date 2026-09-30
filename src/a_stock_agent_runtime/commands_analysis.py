@@ -44,6 +44,8 @@ def _cash_gate_for_framework(
     if (
         framework == "B银行"
         or gate.get("reason_code") == "framework_required_for_capex_review"
+        or "a_capex_review" in data
+        or "cd_capex_review" in data
     ):
         return risk_gates.cash_flow_gate(
             {
@@ -51,6 +53,8 @@ def _cash_gate_for_framework(
                 "framework": framework,
                 "industry": industry,
                 "total_market_cap": data.get("total_market_cap"),
+                "a_capex_review": data.get("a_capex_review"),
+                "cd_capex_review": data.get("cd_capex_review"),
             }
         )
     return gate

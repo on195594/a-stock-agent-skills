@@ -917,6 +917,73 @@ def cash_flow_gate(
             "as_of": flow_as_of,
             "quote_as_of": quote_as_of,
         }
+    elif capex > cfo and framework in {"A通用", "A"}:
+        review = (
+            data.get("a_capex_review")
+            if isinstance(data.get("a_capex_review"), Mapping)
+            else {}
+        )
+        required = (
+            "capex_type",
+            "roe_ttm",
+            "expansion_rationale",
+        )
+        roe_ttm = _number(review.get("roe_ttm"))
+        capex_ratio = capex_to_cfo
+        if not review:
+            status, reason = "blocked", "capex_exceeds_cfo"
+        elif (
+            not all(review.get(key) for key in required)
+            or not review.get("sources")
+            or not _official(_sources(review.get("sources")), allow_statement_mirror=True)
+            or roe_ttm is None
+        ):
+            status, reason = "incomplete", "a_capex_review_incomplete"
+        elif review.get("capex_type") not in {
+            "expansion",
+            "acquisition",
+            "capacity_expansion",
+            "tech_upgrade",
+            "扩产",
+            "并购",
+            "产能扩张",
+            "技术升级",
+        }:
+            status, reason = "blocked", "a_capex_type_invalid"
+        elif roe_ttm < 15.0:
+            status, reason = "blocked", "a_capex_roe_below_threshold"
+        elif capex_ratio is not None and capex_ratio > 1.25:
+            status, reason = "blocked", "a_capex_ratio_above_1_25"
+        else:
+            status, reason = "clear", "a_capex_review_clear"
+        cash_redline, capex_redline = (
+            "clear" if status == "clear" else status,
+            "reviewed_expansion"
+            if status == "clear"
+            else "breached"
+            if status == "blocked"
+            else "review_required",
+        )
+        review_output = dict(review)
+        return {
+            "status": status,
+            "action_eligible": status == "clear",
+            "reason_code": reason,
+            "framework": framework,
+            "ttm_cfo": cfo,
+            "ttm_capex": capex,
+            "ttm_cash_dividends": dividends,
+            "fcf": fcf,
+            "fcf_yield": fcf_yield,
+            "capex_to_cfo": capex_to_cfo,
+            "cash_generation_redline": cash_redline,
+            "capex_redline": capex_redline,
+            "cd_capex_review": {"status": "not_applicable"},
+            "a_capex_review": review_output,
+            "sources": source_list,
+            "as_of": flow_as_of,
+            "quote_as_of": quote_as_of,
+        }
     status = "blocked" if capex > cfo else "clear"
     return {
         "status": status,

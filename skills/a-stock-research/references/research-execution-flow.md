@@ -102,7 +102,12 @@ C/D/B 在评分前必须判断周期位置；C框架还必须核对关键动态�
 a-stock-cache score-fundamentals <代码> <框架A-F> '<评分输入JSON v1>'
 ```
 
-评分输入 JSON v1 包含 `schema_version`、`metrics`、`subjective_assessments`、`cycle_stage`；具体枚举、必填项与评分规则由命令和 `a-stock-lib` 校验，不在 Skill 中复制。报告不得作为 stdin 或机器状态来源。命令输出的 `subtotal` 是唯一允许写入报告与 decision-v1 的基本面分；保留完整输出。`complete=false` 或 `blocked=true` 时停止配置评级、择时总分、综合分和仓位矩阵，只报告缺失输入或红线。禁止手工覆盖 subtotal，禁止在命令失败时退回自然语言加总。
+评分输入 JSON v1 包含 `schema_version: 1`、`metrics`、`subjective_assessments`、`cycle_stage`：
+- `metrics`：包含从正式公告补充的指标。A通用框架必须提供布尔值 `gross_margin_stable`。当 `check` 提示 `regulatory_incomplete` 且从交易所官方或公司年报核验确认无非标、无立案、非ST且分红达标时，可在 `metrics.regulatory_gate` 传入包含四大子门（`listing_risk`、`audit_opinion`、`investigation`、`dividend_compliance`）的完整 overrides 闭环 P0 门禁；对于处于扩产期且 ROE_TTM ≥ 15%、CAPEX/CFO ≤ 1.25 的高成长制造企业，可在 `metrics.a_capex_review` 传入资本开支复核（含 `capex_type`、`roe_ttm`、`expansion_rationale`、`sources`）解除 CAPEX 阻断；
+- `subjective_assessments`：每项包含 `category`（如"护城河"、"行业地位"）、`rating`（"优档" 或 "格档"）、`confidence`（"高"、"中" 或 "低"）、`evidence`（非空字符串数组 `["可核验论据"]`）；
+- `cycle_stage`：非 B/C/D 框架传 `null`；B/C/D 传对象 `{"stage": "...", "rationale": "..."}`。
+
+具体枚举、必填项与评分规则由命令和 `a-stock-lib` 校验，不在 Skill 中复制。报告不得作为 stdin 或机器状态来源。命令输出的 `subtotal` 是唯一允许写入报告与 decision-v1 的基本面分；保留完整输出。`complete=false` 或 `blocked=true` 时停止配置评级、择时总分、综合分和仓位矩阵，只报告缺失输入或红线。禁止手工覆盖 subtotal，禁止在命令失败时退回自然语言加总。
 
 ## 第三步：择时评分（20分）
 

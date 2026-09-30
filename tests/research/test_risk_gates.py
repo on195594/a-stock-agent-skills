@@ -389,6 +389,52 @@ def test_cash_flow_cd_review_requires_coverage_and_official_facts():
     assert risk_gates.cash_flow_gate(payload)["status"] == "blocked"
 
 
+def test_cash_flow_a_review_requires_roe_and_capex_thresholds():
+    payload = {
+        "framework": "A通用",
+        "ttm_cfo": 100,
+        "ttm_capex": 113,
+        "sources": ["tushare.cashflow (company-filed statement mirror)"],
+        "as_of": "2026-08-25",
+        "a_capex_review": {
+            "capex_type": "扩产",
+            "roe_ttm": 21.15,
+            "expansion_rationale": "自动化产线扩产与垂直整合",
+            "sources": ["立讯精密2025年报与交易所公告"],
+        },
+    }
+    result = risk_gates.cash_flow_gate(payload)
+    assert result["status"] == "clear"
+    assert result["action_eligible"] is True
+    assert result["reason_code"] == "a_capex_review_clear"
+    assert result["capex_redline"] == "reviewed_expansion"
+
+    # ROE below 15% threshold fails closed to blocked
+    payload["a_capex_review"]["roe_ttm"] = 14.5
+    assert risk_gates.cash_flow_gate(payload)["status"] == "blocked"
+    assert (
+        risk_gates.cash_flow_gate(payload)["reason_code"]
+        == "a_capex_roe_below_threshold"
+    )
+
+    # CAPEX/CFO ratio above 1.25 fails closed to blocked
+    payload["a_capex_review"]["roe_ttm"] = 20.0
+    payload["ttm_capex"] = 130
+    assert risk_gates.cash_flow_gate(payload)["status"] == "blocked"
+    assert (
+        risk_gates.cash_flow_gate(payload)["reason_code"]
+        == "a_capex_ratio_above_1_25"
+    )
+
+    # Incomplete review inputs fail closed to incomplete
+    del payload["a_capex_review"]["expansion_rationale"]
+    assert risk_gates.cash_flow_gate(payload)["status"] == "incomplete"
+    assert (
+        risk_gates.cash_flow_gate(payload)["reason_code"]
+        == "a_capex_review_incomplete"
+    )
+
+
 def _snapshot(now, count):
     return {
         "limit_down_count": count,
