@@ -230,6 +230,39 @@ unsafe clean behavior is not made safe by this staging exercise.
 
 ## Current deployment record
 
+### Skill copy-install hygiene and boundary clarifications — 2026-09-30
+
+After explicit user authorization, `fc54fb6` was committed, pushed and deployed.
+`current` now selects
+`~/.local/share/a-stock-agent/deployment-candidates/20260930-fc54fb6-install-cleanup/release-view`.
+The 0.1.13 runtime excludes `.git`, `__pycache__`, `*.pyc` and `*.pyo` from
+copy-installed Skills and their source hashes. Portable Skill scripts remain in
+place. Research Framework A is distinguished from the closed Tracker experiment;
+Monitor explicitly prohibits clearing pending legacy alerts merely to reduce noise.
+No investment rule or legacy production alert was changed.
+
+The full repository gate passed: 1330 tests passed, two optional installer checks
+skipped; Ruff, changed-file formatting, Skill validation, regulatory freshness,
+standalone QA and cron smokes passed. Fault injection confirmed the regression
+fails when the cache-directory exclusion is removed. All 25 installed modules
+match both the committed source and candidate wheel, all 26 published Skill files
+match the source archive, and all 34 installed package versions are unchanged.
+Installed copy/symlink regressions and identical before/after CLI help checks passed.
+Offline W1/fail-closed/monitor-v1 smokes passed before activation and again through
+the stable CLI entries afterward.
+
+All twelve entry link texts, DB/WAL/SHM and runtime-config fingerprints, and the
+crontab hash remained unchanged. No schema migration, production data write,
+notification or service restart occurred. Fresh native-client model qualification
+was NOT_RUN; existing sessions should reload the Skill or start a new session.
+The candidate directory retains source/wheel hashes, validation logs,
+`ACTIVE_RELEASE.json`, and `rollback.json`. Pointer-only rollback restores
+`20260929-226bf9c-skills/release-view`; do not restore a database or remove the
+retained previous release. Later documentation commits do not change the deployed
+runtime/Skill source identity.
+
+## Previous deployment records
+
 ### Skill contract alignment and slimming — 2026-09-29
 
 After explicit user authorization, `226bf9c` was committed, pushed and published.
@@ -254,8 +287,6 @@ retain old Skill context and should reload the Skill or start a new session.
 `ACTIVE_RELEASE.json`, exact Skill hashes and `rollback.json` are retained in the
 candidate directory. Rollback atomically restores the previous
 `20260929-e66832f-debt-cleanup/release-view` pointer without restoring a database.
-
-## Previous deployment records
 
 ### Debt exception repair and repository cleanup — 2026-09-29
 
