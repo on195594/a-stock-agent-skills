@@ -30,4 +30,13 @@ git show f9a4ebe:skills/a-stock-qa/README.md
 
 QA 当前输入、输出和独立调用边界只维护在其 `SKILL.md`，检查细则维护在 rubric。
 
+旧部署/preflight 记录和已完成的架构计划审查已移出活动文档；完整记录保留于 `f5307f7`：
+
+```bash
+git show f5307f7:docs/operations.md
+git show f5307f7:docs/reviews/a-stock-codex-plan-agy-review.md
+```
+
+当前部署及适用回滚只以 `operations.md` 的当前记录为准。
+
 [CHANGELOG](CHANGELOG.md)、[迁移/回滚证据](migration/README.md)、[外部审查归档](reviews/README.md) 保留原日期含义；其旧路径可通过上述快照读取。历史证据不作为普通开发的必读上下文，也不因整理而删除生产资料。

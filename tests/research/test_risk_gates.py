@@ -413,10 +413,20 @@ def _quote(price=8.0, **extra):
     }
 
 
-def test_legacy_gate_read_is_incomplete_without_backfill():
-    gate = store.get_risk_gate({"roe_3y_avg": 12}, "regulatory_gate")
-    assert gate["status"] == "incomplete"
-    assert gate["reason_code"] == "legacy_field_absent"
+def test_stored_gate_aggregation_is_incomplete_without_backfill():
+    legacy = {"roe_3y_avg": 12}
+    assert risk_gates.aggregate_fundamentals_gates(legacy) is None
+    assert legacy == {"roe_3y_avg": 12}
+
+    partial = {**legacy, "regulatory_gate": {"status": "clear"}}
+    status, reasons, gates = risk_gates.aggregate_fundamentals_gates(partial)
+    assert status == "incomplete"
+    for name in ("roe_structural_gate", "cash_flow_gate"):
+        assert gates[name]["status"] == "incomplete"
+        assert gates[name]["action_eligible"] is False
+        assert gates[name]["reason_code"] == "legacy_field_absent"
+        assert f"{name}:legacy_field_absent" in reasons
+    assert partial == {**legacy, "regulatory_gate": {"status": "clear"}}
 
 
 def test_liquidity_shock_500_vs_501_and_only_second_stop():

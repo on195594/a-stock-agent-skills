@@ -51,14 +51,16 @@ a-stock-fetch check <代码>
 R1 routine check: it may refresh market data and record an alert, but it does
 not write holdings, transactions or other W1 investment state.
 
-For a cron-equivalent smoke, disable notifications and point at the external
-config explicitly:
+For a cron smoke, use the isolated fixture check, not production configuration:
 
 ```bash
-A_STOCK_CONFIG_FILE="$HOME/.config/a-stock-agent/runtime.env" \
-A_STOCK_NOTIFY_MODE=disabled \
-  bash scripts/check-holdings-cron.sh
+A_STOCK_NOTIFY_MODE=disabled bash tests/test_check_holdings_cron.sh
 ```
+
+The cron script sources its config after reading the inherited environment;
+`A_STOCK_NOTIFY_MODE=disabled` alone does not override a config that enables
+Telegram. The fixture uses temporary state/config and fake CLI/notification tools,
+so it cannot access production holdings or send a real message.
 
 ## S1 risk closure (deployed after authorized migration 035)
 
@@ -75,13 +77,14 @@ block recording a user-confirmed broker execution under existing W1 rules.
 The `risk_budget_exceeded` reason requires the matching monitor-v1 validator,
 CLI and Skill release set; see [runtime contracts](architecture/runtime-contracts.md).
 
-Active Skill and CLI links share the versioned release pointer described below,
-selecting the complete 0.1.13 pair after the authorized 09:36 cutover on 2026-09-18. Do not pull source into a live discovery target or install a single client
-against an incompatible shared runtime. Deploy a complete release under explicit
-authorization with compatibility inventory and qualification/waiver recorded. The old producer/consumer
-pair can return clean despite a budget breach; rollback therefore requires
-manual budget review or suspension of risk suggestions, not a claim of safety.
-No S1 database migration, cron change or account-data cleanup is required.
+Active Skill and CLI links share the versioned `current` release pointer; the
+[current deployment record](#current-deployment-record) identifies the selected
+runtime/Skill pair. Do not pull source into a live discovery target or install a
+single client against an incompatible shared runtime. Deploy a complete release
+under explicit authorization with compatibility checks and client verification
+limits recorded. Do not roll back to a pre-risk-closure runtime that can report
+clean despite a budget breach. Repository maintenance does not require a schema
+migration, cron change or account-data cleanup.
 
 ## S3b file-only account performance (runtime deployed; real accounts unverified)
 
@@ -181,52 +184,17 @@ Backup API and records integrity, schema and count invariants. Never copy a
 production database into the repository. The installer creates its rollback
 manifest outside the repository; retain it with the external runtime backup.
 
-If the new runtime has not written production state, rollback is:
+For the current schema-compatible release, follow its external `rollback.json`
+after explicit rollback authorization. Verify the active pointer still matches
+that release, retain both release trees, and atomically restore the recorded
+previous `current` target. Do not restore a database, change `CACHE_DB_PATH`,
+rewrite client links or alter cron. Validate stable CLI entries using isolated
+state and disabled notifications, and reload Skills in existing sessions.
 
-1. stop the new cron;
-2. restore the previous crontab and client links from the manifest;
-3. point `CACHE_DB_PATH` back to the previous database;
-4. run integrity and read-only smoke checks with notifications disabled.
-
-If the new runtime has written state, stop all writers first. Do not simply
-switch databases; export and reconcile the event/holding differences before
-choosing a recovery path.
-
-## Initial 2026-09-18 preflight — historical, before activation
-
-The client checkpoint was subsequently resolved by bounded Hermes/Codex qualification
-and the user's explicit Claude verification waiver, but a separate schema gap later
-required rollback. See the current record below.
-At this historical preflight checkpoint, the user had authorized pushing and
-production deployment. Agent `4789fc9` and Tracker `7516535` were pushed to
-master, but cutover was **blocked pending current-client qualification**, not
-pending another generic deployment authorization.
-
-- Live read-only inventory confirms the active Agent runtime is still 0.1.11,
-  Python 3.13.5 / lib 0.7.0. Tracker's active interpreter also reports lib 0.7.0.
-  All nine Skill links still resolve to the original Agent checkout; all three
-  stable CLI links still resolve to `0.1.11-2c2d6018d411`.
-- A candidate wheel/runtime (0.1.13 / declared lib 0.8.0), exact Skill sources,
-  Tracker source archive and hash-bound preflight record are staged outside Git:
-  `~/.local/share/a-stock-agent/deployment-candidates/20260918-4789fc9/`.
-  `pip check`, isolated CLI help, and byte comparison of all 25 runtime Python
-  files against both wheel and installed candidate passed. No active link changed.
-- Native `claude auth status` returned exit 1, `loggedIn=false`, `authMethod=none`.
-  Credentials were not changed. The required current-release budget scenario has
-  not qualified Claude, Codex or Hermes. Historical captures cannot replace it.
-- Hermes CLI warns that gateways may retain pre-update modules; that warning
-  needs live verification, not an assumption that a CLI run qualifies the gateway.
-  No gateway restart was attempted.
-- No production database, runtime config, cron, policy or experiment registration
-  was modified. Tracker remains on its prior active checkout; pending remains
-  pending. The staging tree is not a production deployment or a new rollback target.
-
-Next: restore Claude authentication through its supported login/configuration,
-run the isolated current-release budget scenario for each intended client, verify
-Hermes gateway consistency, and coordinate a complete immutable runtime/Skill
-cutover with rollback evidence. Do not partially switch the shared CLI while old
-consumers remain active. Until then, retain manual budget review; the old runtime's
-unsafe clean behavior is not made safe by this staging exercise.
+Schema/configuration/cron rollbacks are separate operations requiring their own
+authorization and matching evidence. If writes used an incompatible schema or
+state contract, pointer-only rollback is not sufficient: stop affected writers
+under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
@@ -261,308 +229,21 @@ The candidate directory retains source/wheel hashes, validation logs,
 retained previous release. Later documentation commits do not change the deployed
 runtime/Skill source identity.
 
-## Previous deployment records
+## Historical deployment evidence
 
-### Skill contract alignment and slimming — 2026-09-29
+Superseded deployment and preflight records are retained in Git, not as current
+operating instructions. Read the last complete ledger at `f5307f7`:
 
-After explicit user authorization, `226bf9c` was committed, pushed and published.
-`current` now selects
-`~/.local/share/a-stock-agent/deployment-candidates/20260929-226bf9c-skills/release-view`.
-All 26 Skill files exactly match that commit. QA fail-closed wording, Research
-cache reuse/routing and Monitor references were aligned; the historical changelog
-and duplicate QA README were removed. The old local Monitor execution note was
-replaced by the canonical host-neutral text.
+```bash
+git show f5307f7:docs/operations.md
+```
 
-The full repository gate passed: 1329 tests passed, two optional tests skipped;
-Ruff, Skill validation, regulatory freshness and standalone/cron smokes passed.
-The candidate Skill payload validated before activation. All nine client Skill
-links resolve to the new payload; all three CLI links retain the exact existing
-`e66832f` runtime, with identical help output before activation and successful
-stable-entry help checks afterward. Runtime and dependency sources are unchanged.
+That snapshot includes the 2026-09-12/18 activation attempts, schema-gated
+rollback, 2026-09-18/20 Tracker registration, and 2026-09-28/29 publications.
+Tracker Framework A closed as `CLOSED_UNPROVEN` on 2026-09-21; historical S2
+activation and maturation notes are not pending work. The Research A—F contracts
+remain active. Dated investment authorizations under `specs/` and migration
+evidence remain in place.
 
-All twelve entry link texts, DB/WAL fingerprints and crontab hash remained
-unchanged. No schema migration, production data write or service restart occurred.
-No new native-client model qualification is claimed; existing conversations may
-retain old Skill context and should reload the Skill or start a new session.
-`ACTIVE_RELEASE.json`, exact Skill hashes and `rollback.json` are retained in the
-candidate directory. Rollback atomically restores the previous
-`20260929-e66832f-debt-cleanup/release-view` pointer without restoring a database.
-
-### Debt exception repair and repository cleanup — 2026-09-29
-
-After explicit user authorization, repair `a2b16f8` and cleanup `e66832f` were
-committed and pushed. Runtime source is `e66832f`; `current` now selects
-`~/.local/share/a-stock-agent/deployment-candidates/20260929-e66832f-debt-cleanup/release-view`.
-The A-framework checklist limits automatic debt exceptions to explicit eligible
-industry labels. Missing debt components remain unknown and missing columns no
-longer interrupt other financial fields. Retired shadow tooling, unused path
-helpers and redundant tests were removed; documentation ownership was aligned.
-
-The full repository gate passed: 1328 tests passed, two optional installer tests
-skipped, with Ruff, Skill validation, regulatory freshness and standalone/cron
-smokes passing. All 25 installed runtime modules match the committed source;
-all 34 package versions and 28 active Skill files match the prior release,
-including the local Monitor execution note. Installed debt regressions and
-isolated W1/fail-closed/monitor-v1/CLI-help checks passed before activation;
-the installed smoke also passed through stable CLI entries after activation.
-
-All twelve entry links, stock cache DB/WAL fingerprints and crontab hash remained
-unchanged. No schema migration, production data write, service restart or new
-native-client model qualification was performed. The candidate directory holds
-source/wheel hashes, logs, `ACTIVE_RELEASE.json` and `rollback.json`. Rollback
-atomically restores the retained `20260929-adeb02f-compat/release-view` pointer;
-it does not restore a database. Later documentation commits do not change the
-deployed runtime source identity.
-
-### Runtime compatibility cleanup — 2026-09-29
-
-After explicit user authorization, source `adeb02f6555372d5bba6c6919091d26458ae63af` was committed,
-pushed and installed as a new 0.1.13 runtime. `current` now selects
-`~/.local/share/a-stock-agent/deployment-candidates/20260929-adeb02f-compat/release-view`.
-This removes Python compatibility exports, patch-detection branches and eager
-path constants; CLI commands, write gates, wire contracts and investment rules
-are unchanged. Python callers use the owning modules.
-
-All 25 installed modules match committed source; all 34 package versions and
-28 active Skill files match the prior release. The local Monitor execution note
-is preserved. Full source validation passed (1311 tests, two optional installer
-checks skipped), as did isolated installed-runtime checks before and after the
-atomic switch: all W1 commands reject missing confirmation, missing holdings
-fail closed, missing-state monitor output validates monitor-v1, and all three
-stable CLIs show help from an independent working directory.
-
-DB/WAL and crontab fingerprints and all twelve entry links stayed unchanged.
-No migration, production data write, service restart or new native-client model
-qualification was performed. Release hashes, smoke logs and `ACTIVE_RELEASE.json`
-are in the candidate directory. `rollback.json` points to the retained
-`20260929-cc0c1c3-cleanup/release-view`; rollback is an atomic pointer change,
-not a database restore. A build initially targeted the prior artifact directory;
-the old wheel was restored byte-for-byte to its recorded SHA-256 before cutover,
-and its installed runtime remained untouched.
-
-### Runtime maintenance — 2026-09-29
-
-The user authorized commit, push and deployment of the repository cleanup.
-Agent runtime source is `cc0c1c360b9d143e7bdcc5250dd3b7dcfca61130` (package
-0.1.13); the immutable lib 0.8.0 wheel and all dependency versions are unchanged.
-`current` now selects
-`~/.local/share/a-stock-agent/deployment-candidates/20260929-cc0c1c3-cleanup/release-view`.
-The wheel, source archive, file hashes, smoke logs and `ACTIVE_RELEASE.json` are
-in its parent directory. All 28 previously active Skill files were copied
-unchanged, including the September 28 descriptions and the local Monitor
-execution note; this is not a publication of the mutable checkout's Skill text.
-
-Installed files match committed runtime source. Offline fail-closed/W1 checks,
-monitor-v1 validation and three CLI help commands passed from an independent cwd
-before and after the atomic pointer switch. All twelve stable entry links were
-preserved. DB/WAL files present at preflight and crontab retained their byte
-hashes; no schema migration, data writes, cron change or gateway restart occurred.
-No new native-client model qualification or live notification test is claimed.
-
-Tracker cron already runs `/home/lin/a-stock-tracker`, now at `9ea2f4519bd73d9453858407e5c509dc7cc896de`;
-its retired investment entrypoints are absent, while the data collectors and
-watchlist are unchanged. No collection job was manually triggered. Lib repository
-cleanup is `58c7f6b6379ca00a1c9f69f7eba8222102ac9777`; it required no new wheel.
-
-Rollback is the retained September 28 release-view pointer recorded in
-`rollback.json`, not a database restore. The dated records below are historical.
-
-### Description-only publication — 2026-09-28
-
-After explicit user authorization, `current` atomically selects
-`~/.local/share/a-stock-agent/deployment-candidates/20260928-skill-descriptions/release-view`.
-Only the three frontmatter description lines were promoted from the canonical
-working tree; monitor/research/QA descriptions are 57/53/58 characters. All 28
-Skill payload files otherwise retain their observed pre-publication bytes and
-modes. In particular, monitor's existing terminal-only execution note (absent
-from canonical source) was retained, not silently removed by a full-file copy.
-
-All nine client aliases resolve to the new payload; all three CLI aliases still
-resolve to the exact previous runtime binaries. Runtime 0.1.13 / lib 0.8.0,
-financial state, schema, cron and credentials are not changed. No gateway stop,
-restart, client/MCP reload or fresh model qualification was performed. Candidate
-Skill validation, standalone QA smoke and byte-identical old/new CLI help passed;
-fresh native Hermes discovery renders all three descriptions without truncation.
-Existing long conversations can retain their prior Skill context.
-
-The new directory contains `ACTIVE_RELEASE.json` and `rollback.json`; scoped
-checks and exact backups are in `~/.hermes/reports/hermes-publication-20260928/`.
-Metadata-only rollback restores the previous `20260918-4789fc9/release-view`
-with an atomic `current` switch, **not** its older `rollback-view` / 0.1.11.
-Keep the same runtime binaries and all financial data; this rollback requires
-neither database restoration nor a gateway restart. Retain both release trees.
-
-### Runtime migration — 2026-09-18
-
-**DEPLOYED_AFTER_AUTHORIZED_MIGRATION_035 — 2026-09-18 09:36 CST.**
-
-The user separately authorized migration 035: add nullable
-`analysis_results.decision_json TEXT` and register `035-analysis-decision-json`.
-Only that migration was executed. Runtime **0.1.13 / lib 0.8.0**, source
-`4789fc9272149d97f8297376afd8f469eed30f7f`, is now active through the shared
-`current` release pointer: three CLI links and nine client Skill links.
-Hermes gateway is active/running after restart (Result=success, NRestarts=0).
-
-- Before mutation, SQLite Online Backup produced the protected snapshot
-  `~/.local/share/a-stock-agent/backups/migration-035-20260918T013603Z/cache-before-035.db`
-  (directory 0700, file 0600); its integrity and row fingerprints were verified.
-- The existing schema process lock and `BEGIN IMMEDIATE` serialized writers.
-  The nullable column and one ledger entry committed in the same transaction;
-  general bootstrap/backfill was not invoked. An in-memory check also verified
-  that explicit-transaction DDL rolls back on failure.
-- All original columns, every original table row, old migration records and
-  other schema objects were compared inside the transaction and remained
-  unchanged. Existing analysis rows received NULL, not fabricated decisions.
-  Foreign-key check results were unchanged; independent backup/production
-  readback passed `quick_check`. Database bytes necessarily changed for the
-  authorized schema/ledger operation; this is **not** a zero-DB-write claim.
-- Current CLI help and twelve target links were checked. All 28 Skill files
-  match the release Git tree; all 25 runtime Python files match Git, source,
-  wheel and installed files. `uv pip check` passed for 34 installed packages.
-  The previously captured same-release Hermes/Codex budget replays remain applicable;
-  Claude is **DEPLOYED_NOT_VERIFIED_USER_WAIVER**, with no authentication/model
-  check added. Live channel delivery and real-account performance remain untested.
-- Crontab bytes are unchanged. No trading/holding/event write, personal-policy
-  adoption, experiment registration, provider/credential edit or test notification
-  was performed.
-
-### Tracker experiment registration activation — 2026-09-20 00:30 CST
-
-After separate configuration-activation authorization, Tracker was fast-forwarded
-to `304010027bd427cd26216443bbeed22851e89320`. The active
-`config/experiment_manifest.json` now verifies scoring hash
-`d312c8995522b563` for enrollment 2026-09-18 through 2026-11-17, and the active
-`config/trading_calendar.json` contains TuShare SSE calendar evidence through
-2026-09-20 with the Shanghai Stock Exchange holiday notice cross-check.
-
-Post-cutover default-path readback used SQLite `mode=ro`, `query_only=ON` and one
-explicit deferred read transaction. It returned `S2_EVALUATION /
-INSUFFICIENT_EVIDENCE`: each window selected the 2026-09-18 35/35 section, but no
-window was mature. The calendar must be refreshed from the approved source before
-a later evaluation as-of; stale evidence fails closed. Full 322 tests, 11 structure
-tests, Ruff check/format, mypy and diff check passed. Crontab and database bytes were
-unchanged; no schema/DML, notification, account or trading action occurred.
-
-### Tracker S2 deployment — 2026-09-18 13:17 CST
-
-After explicit deployment authorization, the production Tracker checkout was
-fast-forwarded from `69f11c9` to remote master `7516535`; its virtual environment
-was coordinated from a-stock-lib 0.7.0 to the declared immutable 0.8.0 wheel.
-Post-cutover validation passed 299 tests, 11 structure tests, Ruff check/format,
-mypy and diff check. A read-only production DB smoke returned
-`MANIFEST_PENDING / INSUFFICIENT_EVIDENCE`, as required by the unregistered
-manifest. Existing cron was inspected and left unchanged. No manual daily run,
-database write, notification, credential edit, experiment registration or S4 work
-was performed.
-
-This was an independent Tracker checkout deployment, not a mutation of the earlier
-Agent runtime/Skill release. The Agent-scoped `ACTIVE_RELEASE.json` was finalized
-before this cutover; its `tracker: NOT_DEPLOYED` field is a timestamped 09:36 CST
-fact, not the current Tracker state or a unified three-repository manifest. Keep
-that evidence immutable. Current Tracker identity is established by its synchronized
-production checkout, installed lib version, read-only smoke and this separate record.
-
-The permanent Agent release directory below contains `migration-035-result.json`,
-`authorized-cutover-result.json` and the final `ACTIVE_RELEASE.json`. The private
-backup directory also contains the integrity and original-row fingerprint receipt.
-A runtime/Skill rollback must preserve the additive column, ledger entry and all
-subsequent facts: switch the paired code/Skills, **never automatically restore the old DB**.
-
-### Earlier schema-gated rollback (historical)
-
-At 08:47 production was restored to **0.1.11 / lib 0.7.0**, with Skill source `2000d750`.
-The shared `current` pointer then selected the retained `rollback-view`; all twelve
-entries remained coordinated and no longer depended on a mutable Skill checkout.
-Hermes gateway was restored and was active/running (Result=success). The supervised
-rollback restart raised NRestarts to 1; this is not a reported crash loop.
-
-A late schema compatibility check found that the cumulative 0.1.11 → 0.1.13 delta
-includes `035-analysis-decision-json`: `ALTER TABLE analysis_results ADD COLUMN
-decision_json TEXT`. Production then lacked that column. The initial preflight checked
-`db.py` but missed the migration in `schema.py`; latest-schema fixtures and CLI
-help do not establish production-schema readiness. Before any future activation,
-compare **both schema code and migration list** with the active release, then
-inspect the live schema read-only. Do not let a subsequent business command
-implicitly perform an unapproved migration.
-
-At this rollback checkpoint no migration had been executed; financial DB/WAL
-fingerprints and crontab bytes matched the pre-cutover baseline.
-`schema-rollback-result.json` preserves that checkpoint, while
-`activation-result.json` preserves the earlier temporary activation. The later
-explicit schema authorization and final successful deployment are recorded above.
-Any return to the old runtime still requires manual budget review.
-
-## Historical 2026-09-18 activation attempt
-
-On 2026-09-18 the user explicitly requested Claude production switching without
-authentication or verification, and continued Hermes cutover. Runtime **0.1.13**
-(source `4789fc9272149d97f8297376afd8f469eed30f7f`) with **lib 0.8.0** was briefly
-activated at 08:33, then rolled back at 08:47 for the schema gate above.
-All three public CLIs and nine Claude/Codex/Hermes Skill entries resolve through
-`~/.local/share/a-stock-agent/current` to the same complete release view.
-
-Permanent base runtime/evidence directory (also required by the 2026-09-28 overlay;
-**do not delete it as temporary content**):
-`~/.local/share/a-stock-agent/deployment-candidates/20260918-4789fc9/`.
-`deployment-preflight.json` binds wheel, source and Skill hashes;
-`ACTIVE_RELEASE.json` records the Agent runtime/Skill deployment and twelve-link
-state at its recorded timestamp; it is not a mutable Tracker registry.
-`activation-result.json` preserves the temporary cutover checkpoint, and `rollback.json` keeps
-the original twelve link targets. Its `release-view` retains the prior paired set;
-`current` now selects the description-only view recorded above. The older
-`rollback-view` retains the old Skill bytes and 0.1.11 CLI targets.
-
-- **Claude: DEPLOYED_NOT_VERIFIED_USER_WAIVER.** No authentication or model check
-  was retried. Link switching is not a claim of client qualification.
-- **Hermes:** native CLI loaded candidate Skills and passed the synthetic
-  portfolio-only over-budget replay; session provenance confirms the intended
-  provider/model and zero actual domain/tool calls. After activation, another replay
-  passed using the actual configured default `openai-codex/gpt-5.6-sol` (rather
-  than relying on the earlier `gpt-5.6-sol-900k` alias); native provenance was checked
-  read-only for that synthetic session. The response preserved review,
-  read the portfolio reference in the simulated trace, froze added risk, and did
-  not invent a policy, clean status or W1 authorization. Gateway was restarted;
-  systemd readback was active/running, Result=success, NRestarts=0.
-- **Codex:** native CLI read the named candidate Skill/reference and passed the
-  same injected-domain-result budget replay. These bounded replays do not prove
-  real-market execution, live Telegram delivery or all client paths.
-- The first attempt safely restored old entries and the gateway after a terminal
-  icon change confused the evidence parser. The original raw model response was
-  retained and independently parsed/checked with native session provenance; no
-  evidence was rewritten to change a failing model decision. The second attempt
-  atomically switched the shared release pointer and passed three active CLI help
-  checks. Financial DB and WAL hashes and crontab bytes matched before/after.
-- No production SQL writes, schema migration, cron/config edit, policy creation, trading
-  write, or test notification was executed. Hermes recorded its native synthetic
-  verification session; that is not a financial-state write. At this earlier
-  09:36 checkpoint, Tracker was still at active source `69f11c9` / lib 0.7.0 and
-  was **not deployed** to e2; the later 13:17 deployment is recorded above.
-
-Rollback in a coordinated maintenance window: use the native Hermes planned stop,
-atomically repoint `current` to the retained `rollback-view`, then start the gateway
-and check discovery/CLI identity. `rollback.json` can also restore the original
-direct links. Keep the same financial database; do not restore old data snapshots.
-The old runtime has known unsafe clean behavior, so rollback requires manual budget
-review rather than a safety claim. Existing conversations may retain old Skill
-context; reload the Skill or start a new session after cutover.
-
-## Historical 2026-09-12 deployment record
-
-The then-current runtime was `v0.1.11` (`0.1.11-2c2d6018d411`, runtime source
-commit `2c2d6018d4115fbea4dcdf214ce1786f50b478bf`) with the immutable
-`a-stock-lib==0.7.0` release wheel (SHA-256
-`7c4a16d452f34574584531bab6fe9d150f3cb844e5c9b2fe072295f6bb2ee385`).
-Rollback manifest `rollback-1789186222598162920.json` preserves the prior
-client Skill entries; runtime `0.1.11-75a3bee8068e` remains installed and
-executable for CLI rollback. The repository HEAD may be newer because this
-deployment record is committed after cutover.
-
-The nine active client Skill entries and all three public CLI links resolve to
-the current canonical/runtime targets. Package provenance, isolated imports,
-CLI help, `pip check`, and installed-file hashes were verified. Production DB
-and crontab hashes remained unchanged during the runtime-only cutover; no
-holdings, W1 state, credentials, or production DB contents were read or written.
-
-The original `v0.1.0` cutover record, redacted DB invariants, client links,
-cron before/after snapshots and review disposition are in
-[`migration/production-cutover/20260809-115052/`](migration/production-cutover/20260809-115052/).
+Retain previous external release trees, rollback manifests and private evidence;
+removing historical prose from this document is not authorization to delete them.

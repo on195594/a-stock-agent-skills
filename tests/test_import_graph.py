@@ -102,7 +102,6 @@ def test_unused_cache_facade_does_not_return() -> None:
         (db, "read_only_db_session"),
         (domain, "parse_timestamp_utc"),
         (risk_gates, "regulatory_gate"),
-        (store, "get_risk_gate"),
         (db, "get_db"),
         (domain, "cst_today"),
         (store, "get_fundamentals"),

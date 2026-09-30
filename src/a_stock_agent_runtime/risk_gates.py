@@ -74,9 +74,6 @@ REGULATORY_RULES: dict[tuple[str, str], dict[str, Any]] = {
 }
 
 P0_STATUSES = {"clear", "blocked", "incomplete"}
-P1_STATUSES = {"clear", "blocked", "incomplete"}
-P2_STATUSES = {"clear", "blocked", "incomplete", "review_required", "not_applicable"}
-P3_STATUSES = {"not_applicable", "clear", "deferred", "untradeable", "incomplete"}
 GATE_NAMES = ("regulatory_gate", "roe_structural_gate", "cash_flow_gate")
 
 

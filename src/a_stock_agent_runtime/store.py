@@ -134,20 +134,6 @@ def validate_fundamentals_payload(data: dict) -> str | None:
     return None
 
 
-def get_risk_gate(data: dict | None, name: str) -> dict:
-    """Read a gate without upgrading legacy cache; absent means incomplete."""
-    value = data.get(name) if isinstance(data, dict) else None
-    if isinstance(value, dict):
-        return value
-    return {
-        "status": "incomplete",
-        "action_eligible": False,
-        "reason_code": "legacy_field_absent",
-        "sources": [],
-        "as_of": None,
-    }
-
-
 def safe_json_value(raw: str | None, expected_type: type, default):
     """Read legacy JSON without letting one corrupt row break batch commands."""
     if not raw:

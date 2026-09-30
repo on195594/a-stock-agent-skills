@@ -280,13 +280,6 @@ def test_every_subcommand_has_help(capsys) -> None:
         assert command in capsys.readouterr().out
 
 
-def test_top_level_help_discovers_commands_and_write_gate(capsys) -> None:
-    assert cache.main(["--help"]) == 0
-    output = capsys.readouterr().out
-    assert "--confirm-write" in output
-    assert all(command in output for command in cache.COMMANDS)
-
-
 def test_phase4_structured_command_help_and_schema(capsys) -> None:
     assert cache._CLI_POSITIONALS["set-analysis"] == ()
     assert cache.main(["set-analysis", "--help"]) == 0

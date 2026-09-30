@@ -32,12 +32,8 @@ Actual activation, paired runtime/Skill identity, client verification limits and
 rollback belong in the [operations record](docs/operations.md#current-deployment-record),
 not a second deployment ledger here. Passing offline tests is not live-client or
 real-account validation.
-A separately authorized 2026-09-28 metadata-only publication shortened the three
-Skill descriptions to 57/53/58 characters through a new shared release view.
-Active bodies/references and runtime targets were preserved, including monitor's
-existing execution note not present in this checkout. Fresh native discovery was
-checked; no gateway restart or new model qualification is implied. See the
-[description publication record](docs/operations.md#description-only-publication--2026-09-28).
+The active release contains matching committed runtime and Skill sources;
+client reload limits and pointer-only rollback are recorded in operations.
 
 Historical migration and S1/S2/S3 ledgers remain available through the
 [documentation index](docs/README.md); completed milestones are not a new task queue.

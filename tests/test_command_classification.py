@@ -11,16 +11,10 @@ def test_every_cache_command_has_one_classification() -> None:
     )
 
 
-def test_help_documents_every_command(capsys) -> None:
-    """Check actual CLI help rather than a second, manually copied command list."""
-    assert cache.main(["--help"]) == 0
-    output = capsys.readouterr().out
-    assert all(name in output for name in COMMANDS)
-
-
 def test_help_states_the_write_gate_and_lists_every_w1_command(capsys) -> None:
     assert cache.main(["--help"]) == 0
     output = capsys.readouterr().out
+    assert all(name in output for name in COMMANDS)
     _, marker, gate_section = output.partition("W1（需 --confirm-write）：")
     assert marker
     assert {"".join(name.split()) for name in gate_section.split(",")} == {
