@@ -198,26 +198,26 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
-### Skill copy-install hygiene and boundary clarifications — 2026-09-30
+### Repository maintenance — 2026-09-30
 
-After explicit user authorization, `fc54fb6` was committed, pushed and deployed.
+After explicit user authorization, `50c55b2` was committed, pushed and deployed.
 `current` now selects
-`~/.local/share/a-stock-agent/deployment-candidates/20260930-fc54fb6-install-cleanup/release-view`.
-The 0.1.13 runtime excludes `.git`, `__pycache__`, `*.pyc` and `*.pyo` from
-copy-installed Skills and their source hashes. Portable Skill scripts remain in
-place. Research Framework A is distinguished from the closed Tracker experiment;
-Monitor explicitly prohibits clearing pending legacy alerts merely to reduce noise.
-No investment rule or legacy production alert was changed.
+`~/.local/share/a-stock-agent/deployment-candidates/20260930-50c55b2-maintenance/release-view`.
+The 0.1.13 runtime removes the unused `store.get_risk_gate` helper and three
+unused status sets; CLI/write gates and investment rules are unchanged. Tests
+now exercise the actual stored-gate aggregation path and combine redundant
+top-level CLI help checks. README and operations use current release/rollback
+instructions; completed architecture-review and superseded deployment prose
+remain recoverable from Git. No production alert was cleared.
 
-The full repository gate passed: 1330 tests passed, two optional installer checks
-skipped; Ruff, changed-file formatting, Skill validation, regulatory freshness,
-standalone QA and cron smokes passed. Fault injection confirmed the regression
-fails when the cache-directory exclusion is removed. All 25 installed modules
-match both the committed source and candidate wheel, all 26 published Skill files
-match the source archive, and all 34 installed package versions are unchanged.
-Installed copy/symlink regressions and identical before/after CLI help checks passed.
-Offline W1/fail-closed/monitor-v1 smokes passed before activation and again through
-the stable CLI entries afterward.
+The full repository gate passed: 1328 tests passed, two optional installer checks
+skipped; Ruff lint, Skill validation, regulatory freshness, standalone QA and
+cron smokes passed. All 25 installed modules match the committed source and
+candidate wheel. All 26 Skill files and 34 installed package versions match the
+previous release. Installed gate-aggregation regressions preserve missing-data
+fail-closed behavior without backfill; installed copy/symlink regressions and
+identical before/after CLI help checks passed. Offline W1/fail-closed/monitor-v1
+smokes passed before activation and again through stable CLI entries afterward.
 
 All twelve entry link texts, DB/WAL/SHM and runtime-config fingerprints, and the
 crontab hash remained unchanged. No schema migration, production data write,
@@ -225,20 +225,22 @@ notification or service restart occurred. Fresh native-client model qualificatio
 was NOT_RUN; existing sessions should reload the Skill or start a new session.
 The candidate directory retains source/wheel hashes, validation logs,
 `ACTIVE_RELEASE.json`, and `rollback.json`. Pointer-only rollback restores
-`20260929-226bf9c-skills/release-view`; do not restore a database or remove the
-retained previous release. Later documentation commits do not change the deployed
+`20260930-fc54fb6-install-cleanup/release-view`; do not restore a database or
+remove retained releases. Later documentation commits do not change the deployed
 runtime/Skill source identity.
 
 ## Historical deployment evidence
 
 Superseded deployment and preflight records are retained in Git, not as current
-operating instructions. Read the last complete ledger at `f5307f7`:
+operating instructions. Read the preceding 2026-09-30 deployment record and the
+older complete ledger from their source snapshots:
 
 ```bash
-git show f5307f7:docs/operations.md
+git show 50c55b2:docs/operations.md  # fc54fb6 copy-install hygiene deployment
+git show f5307f7:docs/operations.md # older complete ledger
 ```
 
-That snapshot includes the 2026-09-12/18 activation attempts, schema-gated
+The older snapshot includes the 2026-09-12/18 activation attempts, schema-gated
 rollback, 2026-09-18/20 Tracker registration, and 2026-09-28/29 publications.
 Tracker Framework A closed as `CLOSED_UNPROVEN` on 2026-09-21; historical S2
 activation and maturation notes are not pending work. The Research A—F contracts
