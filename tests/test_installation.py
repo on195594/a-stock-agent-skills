@@ -11,6 +11,7 @@ import tomllib
 
 import pytest
 
+from a_stock_agent_runtime import install
 from a_stock_agent_runtime.install import _backup
 
 
@@ -216,6 +217,72 @@ def test_existing_skill_is_rejected_before_runtime_install(tmp_path) -> None:
     )
     assert result.returncode == 1
     assert not (tmp_path / ".local/share/a-stock-agent/runtime").exists()
+
+
+def test_copy_install_excludes_generated_files_from_payload_and_hash(
+    tmp_path, monkeypatch
+) -> None:
+    source = tmp_path / "source"
+    skill = source / "skills/a-stock-monitor"
+    scripts = skill / "scripts"
+    scripts.mkdir(parents=True)
+    (source / "pyproject.toml").write_text('[project]\nversion = "0.1.13"\n')
+    (skill / "SKILL.md").write_text("monitor", encoding="utf-8")
+    helper = scripts / "policy_replay.py"
+    helper.write_text("print('replay')", encoding="utf-8")
+    expected_hash = install._tree_hash(skill)
+    for relative in (
+        "scripts/__pycache__/policy_replay.cpython-313.pyc",
+        "scripts/__pycache__/metadata.json",
+        "scripts/legacy.pyc",
+        "scripts/legacy.pyo",
+        ".git/index",
+    ):
+        path = skill / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"generated")
+    assert install._tree_hash(skill) == expected_hash
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("PATH", f"{home / '.local/bin'}:{os.environ.get('PATH', '')}")
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/fake/uv")
+    monkeypatch.setattr(install, "SKILLS", ("a-stock-monitor",))
+    monkeypatch.setattr(
+        install, "_build_suite_wheel", lambda *args: tmp_path / "fake.whl"
+    )
+    monkeypatch.setattr(install, "_install_runtime", lambda *args: None)
+    assert (
+        install.main(
+            [
+                "--client",
+                "codex",
+                "--mode",
+                "copy",
+                "--source",
+                str(source),
+                "--target-root",
+                str(home),
+            ]
+        )
+        == 0
+    )
+
+    target = home / ".agents/skills/a-stock-monitor"
+    assert not (target / "scripts/__pycache__").exists()
+    assert not (target / ".git").exists()
+    files = {
+        str(path.relative_to(target)) for path in target.rglob("*") if path.is_file()
+    }
+    assert files == {
+        "SKILL.md",
+        "scripts/policy_replay.py",
+        ".a-stock-suite-manifest.json",
+    }
+    manifest = json.loads((target / ".a-stock-suite-manifest.json").read_text())
+    assert manifest["source_hash"] == expected_hash
+    assert (target / "scripts/policy_replay.py").read_bytes() == helper.read_bytes()
+    helper.write_text("print('changed')", encoding="utf-8")
+    assert install._tree_hash(skill) != expected_hash
 
 
 def test_backups_are_unique_within_one_second(tmp_path) -> None:

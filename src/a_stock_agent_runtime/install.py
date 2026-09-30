@@ -23,6 +23,7 @@ CLIENT_ROOTS = {
 }
 SKILLS = ("a-stock-research", "a-stock-monitor", "a-stock-qa")
 CONSOLE_SCRIPTS = ("a-stock-cache", "a-stock-fetch", "a-stock-install")
+_SKILL_IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "*.pyo")
 
 
 def _lib_release(source: Path) -> tuple[str, str, str]:
@@ -59,7 +60,7 @@ def _sha256(path: Path) -> str:
 def _tree_hash(path: Path) -> str:
     digest = hashlib.sha256()
     for item in sorted(path.rglob("*")):
-        if item.is_file() and ".git" not in item.parts:
+        if item.is_file() and not _SKILL_IGNORE("", item.relative_to(path).parts):
             digest.update(str(item.relative_to(path)).encode())
             digest.update(_sha256(item).encode())
     return digest.hexdigest()
@@ -454,7 +455,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.mode == "symlink":
                 destination.symlink_to(source_skill)
             else:
-                shutil.copytree(source_skill, destination, symlinks=True)
+                shutil.copytree(
+                    source_skill, destination, symlinks=True, ignore=_SKILL_IGNORE
+                )
                 manifest = {
                     "release": release,
                     "source": str(source),

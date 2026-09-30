@@ -109,6 +109,11 @@ for auditability and is not a scratch directory.
 
 ## Generated files
 
+Skill-local executable helpers belong in `skills/<name>/scripts/`; keep the
+portable backtest helper there. Copy installs and their `source_hash` exclude
+`.git`, `__pycache__`, `*.pyc` and `*.pyo`. Symlink installs still expose the
+source tree; Git ignores do not filter copied files or symlink targets.
+
 The following are disposable and ignored by Git: `__pycache__/`, `.pytest_cache/`,
 `.ruff_cache/` and `*.egg-info/`. Remove only those generated
 paths when cleaning a worktree; keep `.venv/` if it is the active development
