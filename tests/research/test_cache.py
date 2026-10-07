@@ -440,7 +440,7 @@ def test_add_holding_prefers_persisted_framework_over_inference(capsys):
     用 industry 关键词反推——用一个跟 industry 推断结果不一致的 framework
     验证确实读的是持久化值，不是巧合一致。"""
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     # industry='银行' 若被反推会得到 B银行，这里持久化的是故意不同的 F科技
     conn.execute(
         "INSERT INTO stock_fundamentals (code, name, industry, data, updated_at) "
@@ -567,7 +567,7 @@ def test_holdings_display_two_stocks(capsys):
 def test_set_score_displays_80_scale(capsys):
     """分数应显示 /80，不是 /100（修复过的逻辑）"""
     code = "600036"
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results (code, date, result, created_at) VALUES (?,?,?,?)",
@@ -619,7 +619,7 @@ def test_set_analysis_with_score(capsys, monkeypatch):
     )
 
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     row = conn.execute(
         """SELECT result, decision_json, score
            FROM analysis_results WHERE code='600036' AND date=?""",
@@ -638,7 +638,7 @@ def test_set_analysis_without_score(capsys, monkeypatch):
     set_valid_analysis(monkeypatch, code="000001", framework="A", score=None)
 
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     row = conn.execute(
         "SELECT score FROM analysis_results WHERE code='000001' AND date=?", (today,)
     ).fetchone()
@@ -654,7 +654,7 @@ def test_set_analysis_with_framework_persists_column(monkeypatch):
     )
 
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     row = conn.execute(
         "SELECT framework, score FROM analysis_results WHERE code='601088' AND date=?",
         (today,),
@@ -699,7 +699,7 @@ def test_set_analysis_rerun_same_day_preserves_flags_and_score_breakdown(monkeyp
     )
 
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     row = conn.execute(
         "SELECT result, score, score_breakdown, flags FROM analysis_results "
         "WHERE code='600036' AND date=?",
@@ -731,7 +731,7 @@ def test_set_analysis_rerun_with_new_score_overwrites_score(monkeypatch):
     )
 
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     row = conn.execute(
         "SELECT score FROM analysis_results WHERE code='600519' AND date=?", (today,)
     ).fetchone()
@@ -774,7 +774,7 @@ def test_set_analysis_rerun_with_same_score_preserves_previous_score(monkeypatch
     )
 
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     row = conn.execute(
         "SELECT result, score FROM analysis_results WHERE code='601318' AND date=?",
         (today,),
@@ -830,7 +830,7 @@ def test_set_analysis_accepts_valid_decision_json(monkeypatch):
     )
 
     conn = db.get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     row = conn.execute(
         """SELECT result, decision_json, framework, score
            FROM analysis_results WHERE code='600036' AND date=?""",
@@ -986,9 +986,18 @@ def test_update_return_writes_pct_and_days(capsys, monkeypatch):
     """update-return 写入 return_pct 和 holding_days"""
     set_valid_analysis(monkeypatch, code="600519", narrative="买入")
 
+    import datetime as dt
+
+    class YesterdayLocalDate(dt.date):
+        @classmethod
+        def today(cls):
+            return cls.fromisoformat(domain.cst_today()) - timedelta(days=1)
+
+    # A UTC host can still be on yesterday while the A-share ledger is on today.
+    monkeypatch.setattr(dt, "date", YesterdayLocalDate)
     commands_holdings.cmd_update_return(["600519", "18.5"])
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     conn = db.get_db()
     row = conn.execute(
         "SELECT return_pct, holding_days FROM analysis_results WHERE code=? AND date=?",
@@ -2033,7 +2042,7 @@ def test_watchlist_json_marks_pending_refresh(capsys, monkeypatch):
 
 def test_watchlist_breakdown_nested_schema(capsys):
     set_valid_fundamentals("600036", "招商银行", "银行", {"pe_ttm": 5.5, "pb": 0.8})
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results "
@@ -2079,7 +2088,7 @@ def test_watchlist_breakdown_nested_schema(capsys):
 
 def test_watchlist_breakdown_flat_schema(capsys):
     set_valid_fundamentals("600519", "贵州茅台", "白酒", {"pe_ttm": 22.1, "pb": 6.2})
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results "
@@ -2107,7 +2116,7 @@ def test_watchlist_breakdown_flat_schema(capsys):
 
 def test_watchlist_no_breakdown_unchanged(capsys):
     set_valid_fundamentals("600036", "招商银行", "银行", {"pe_ttm": 5.5, "pb": 0.8})
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results "

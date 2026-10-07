@@ -28,6 +28,7 @@ from a_stock_agent_runtime import (
     commands_holdings,
     commands_monitor,
     db,
+    domain,
     fetcher,
     market_quotes,
 )
@@ -41,7 +42,7 @@ def isolated_db(tmp_path, monkeypatch):
 
 
 def _insert_analysis(code: str, result: str = "test_result", score: int | None = None):
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results (code, date, result, created_at, score) VALUES (?,?,?,?,?)",
@@ -757,7 +758,7 @@ class TestRaceConditions:
 
         assert not errors, f"thread exceptions: {errors}"
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = domain.cst_today()
         conn = db.get_db()
         row = conn.execute(
             "SELECT flags FROM analysis_results WHERE code=? AND date=?",

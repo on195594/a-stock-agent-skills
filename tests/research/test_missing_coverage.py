@@ -47,7 +47,7 @@ def isolated_db(tmp_path, monkeypatch):
 
 
 def _insert_analysis(code: str, result: str = "结论", score: int | None = None):
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = domain.cst_today()
     conn = db.get_db()
     conn.execute(
         "INSERT INTO analysis_results (code, date, result, created_at, score) VALUES (?,?,?,?,?)",
@@ -162,7 +162,7 @@ class TestCmdSetScoreBreakdown:
         assert "分项得分已记录" in out
 
         # Verify it's actually in the database
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = domain.cst_today()
         conn = db.get_db()
         row = conn.execute(
             "SELECT score_breakdown FROM analysis_results WHERE code=? AND date=?",
@@ -288,7 +288,7 @@ class TestSetAndClearFlag:
         commands_monitor.cmd_set_flag(["600036", "red", "第二条"])
         capsys.readouterr()
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = domain.cst_today()
         conn = db.get_db()
         row = conn.execute(
             "SELECT flags FROM analysis_results WHERE code=? AND date=?",
@@ -306,7 +306,7 @@ class TestSetAndClearFlag:
         capsys.readouterr()
 
         commands_monitor.cmd_clear_flag(["600036"])
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = domain.cst_today()
         conn = db.get_db()
         row = conn.execute(
             "SELECT flags FROM analysis_results WHERE code=? AND date=?",

@@ -1365,7 +1365,10 @@ def cmd_update_return(args: list[str]) -> None:
             start_date = (
                 holding_row[0] if holding_row and holding_row[0] else analysis_date
             )
-            holding_days = (_date.today() - _date.fromisoformat(start_date)).days
+            holding_days = (
+                _date.fromisoformat(domain.cst_today())
+                - _date.fromisoformat(start_date)
+            ).days
         except Exception:
             holding_days = None
 
