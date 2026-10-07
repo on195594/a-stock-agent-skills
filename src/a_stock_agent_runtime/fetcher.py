@@ -24,7 +24,7 @@ from a_stock_lib.providers import (
     QuoteObservation,
 )
 
-from a_stock_agent_runtime import db, risk_gates, store
+from a_stock_agent_runtime import db, paths, risk_gates, store
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -263,7 +263,9 @@ def _fetch_trading_dates_tushare() -> tuple[date, ...]:
     try:
         from a_stock_lib.providers.tushare_quotes import TushareMarketDataProvider
 
-        result = TushareMarketDataProvider().fetch_trade_calendar(
+        result = TushareMarketDataProvider(
+            token=paths.tushare_token()
+        ).fetch_trade_calendar(
             (date.today() - timedelta(days=366)).isoformat(),
             date.today().isoformat(),
         )
@@ -367,9 +369,9 @@ def _fetch_info_tushare(code: str) -> dict | None:
 
     end_date = date.today().isoformat()
     start_date = (date.today() - timedelta(days=30)).isoformat()
-    result = TushareValuationProvider().fetch_valuation_history(
-        code, start_date, end_date
-    )
+    result = TushareValuationProvider(
+        token=paths.tushare_token()
+    ).fetch_valuation_history(code, start_date, end_date)
     frame = _tushare_frame(result, "tushare.daily_basic")
     if isinstance(frame, tuple) or frame is None or frame.empty:
         return frame
@@ -397,7 +399,9 @@ def _fetch_tushare_industry_map() -> dict | None:
             TushareFundamentalsProvider,
         )
 
-        result = TushareFundamentalsProvider().fetch_industry_map()
+        result = TushareFundamentalsProvider(
+            token=paths.tushare_token()
+        ).fetch_industry_map()
 
         if getattr(result, "status", None) == "ok" and getattr(result, "value", None):
             return result.value
@@ -789,7 +793,7 @@ def _fetch_financials_tushare(code: str) -> Any:
     import pandas as pd
     from a_stock_lib.providers import TushareFinancialProvider
 
-    provider = TushareFinancialProvider()
+    provider = TushareFinancialProvider(token=paths.tushare_token())
 
     def fetch_frame(method_name: str, source: str) -> Any:
         method = getattr(provider, method_name, None)
@@ -962,7 +966,9 @@ def _fetch_dividends_akshare(code: str) -> Any:
 def _fetch_dividends_tushare(code: str) -> Any:
     from a_stock_lib.providers import TushareDividendProvider
 
-    result = TushareDividendProvider().fetch_dividend_history(code)
+    result = TushareDividendProvider(
+        token=paths.tushare_token()
+    ).fetch_dividend_history(code)
     frame = _tushare_frame(result, "tushare.dividend")
     if isinstance(frame, tuple) or frame is None:
         return frame
@@ -1012,7 +1018,9 @@ def _fetch_price_history_akshare(code: str) -> Any:
 def _fetch_price_history_tushare(code: str) -> Any:
     from a_stock_lib.providers import TushareValuationProvider
 
-    result = TushareValuationProvider().fetch_valuation_history(
+    result = TushareValuationProvider(
+        token=paths.tushare_token()
+    ).fetch_valuation_history(
         code,
         (date.today() - timedelta(days=3665)).isoformat(),
         date.today().isoformat(),

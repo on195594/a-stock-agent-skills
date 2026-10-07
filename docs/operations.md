@@ -18,9 +18,13 @@ The config file must be user-owned and mode `0600`:
 ~/.local/share/a-stock-agent/artifacts/
 ```
 
-The production config contains the state paths and notification mode. Keep
-Telegram credentials in that external file or the existing secret store; do
-not copy them into this repository or evidence.
+The production config contains the state paths and notification mode. After
+explicit authorization, `TUSHARE_TOKEN` can be configured in the same private file;
+market-data adapters resolve environment → selected runtime.env and pass only the
+token to `a-stock-lib`. An exported token takes precedence. Missing credentials
+remain fail-closed; no Tracker file is discovered and no settings are exported by
+the direct CLI. Keep Telegram credentials in that external file or the existing
+secret store; do not copy credentials into this repository or evidence.
 
 ## Routine checks
 

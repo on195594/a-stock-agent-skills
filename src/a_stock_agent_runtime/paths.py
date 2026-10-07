@@ -62,6 +62,11 @@ def _setting(name: str, default: Path | str) -> str:
     return os.environ.get(name) or _read_config().get(name) or str(default)
 
 
+def tushare_token() -> str:
+    """Resolve only this consumer's token; never export other private settings."""
+    return _setting("TUSHARE_TOKEN", "")
+
+
 def _data_home() -> Path:
     return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
 

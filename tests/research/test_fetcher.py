@@ -37,7 +37,7 @@ def _patch_tushare_provider(monkeypatch, provider_factory):
     tushare_module = ModuleType("a_stock_lib.providers.tushare_fundamentals")
     root_module.__path__ = []
     providers_module.__path__ = []
-    tushare_module.TushareFundamentalsProvider = provider_factory
+    tushare_module.TushareFundamentalsProvider = lambda **kwargs: provider_factory()
     root_module.providers = providers_module
     providers_module.tushare_fundamentals = tushare_module
 
@@ -69,6 +69,91 @@ def test_structured_fetchers_honor_data_source(monkeypatch, name, source):
     )
 
     assert getattr(fetcher, f"_fetch_{name}")("600519") is selected
+
+
+@pytest.mark.parametrize("credential_source", ["config", "environment", "missing"])
+@pytest.mark.parametrize(
+    "function_name, provider_name, method_name, args",
+    [
+        (
+            "_fetch_trading_dates_tushare",
+            "TushareMarketDataProvider",
+            "fetch_trade_calendar",
+            (),
+        ),
+        (
+            "_fetch_info_tushare",
+            "TushareValuationProvider",
+            "fetch_valuation_history",
+            ("600519",),
+        ),
+        (
+            "_fetch_tushare_industry_map",
+            "TushareFundamentalsProvider",
+            "fetch_industry_map",
+            (),
+        ),
+        (
+            "_fetch_financials_tushare",
+            "TushareFinancialProvider",
+            "fetch_indicator_history",
+            ("600519",),
+        ),
+        (
+            "_fetch_dividends_tushare",
+            "TushareDividendProvider",
+            "fetch_dividend_history",
+            ("600519",),
+        ),
+        (
+            "_fetch_price_history_tushare",
+            "TushareValuationProvider",
+            "fetch_valuation_history",
+            ("600519",),
+        ),
+    ],
+)
+def test_tushare_adapters_resolve_private_config_without_exporting_secrets(
+    tmp_path,
+    monkeypatch,
+    credential_source,
+    function_name,
+    provider_name,
+    method_name,
+    args,
+):
+    import os
+    import a_stock_lib.providers as providers
+
+    config = tmp_path / "runtime.env"
+    config.write_text(
+        "TUSHARE_TOKEN=config-test-token\n" if credential_source != "missing" else ""
+    )
+    config.chmod(0o600)
+    monkeypatch.setenv("A_STOCK_CONFIG_FILE", str(config))
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    if credential_source == "environment":
+        monkeypatch.setenv("TUSHARE_TOKEN", "environment-test-token")
+    before = os.environ.get("TUSHARE_TOKEN")
+    tokens = []
+
+    def capture_token(self, *args, **kwargs):
+        tokens.append(self.token)
+        return SimpleNamespace(status="failed", value=None, error_code="TEST_OFFLINE")
+
+    monkeypatch.setattr(getattr(providers, provider_name), method_name, capture_token)
+    monkeypatch.setattr(
+        fetcher, "timed_call", lambda func, *args, **kwargs: func(*args)
+    )
+    getattr(fetcher, function_name)(*args)
+
+    expected = {
+        "config": "config-test-token",
+        "environment": "environment-test-token",
+        "missing": "",
+    }
+    assert tokens == [expected[credential_source]]
+    assert os.environ.get("TUSHARE_TOKEN") == before
 
 
 def test_current_pb_uses_the_same_report_period_bps_as_pb_history(monkeypatch):
@@ -421,7 +506,9 @@ def test_tushare_dividend_adapter_rescales_per_share_units_to_per_10_shares(
                 ),
             )
 
-    monkeypatch.setattr(providers, "TushareDividendProvider", FakeProvider)
+    monkeypatch.setattr(
+        providers, "TushareDividendProvider", lambda **kwargs: FakeProvider()
+    )
     frame = fetcher._fetch_dividends_tushare("603606")
 
     assert frame.loc[0, "送转股份-送转总比例"] == pytest.approx(2.00)
@@ -449,7 +536,9 @@ def test_tushare_dividend_adapter_rescales_stk_div_without_rate_columns(monkeypa
                 ),
             )
 
-    monkeypatch.setattr(providers, "TushareDividendProvider", FakeProvider)
+    monkeypatch.setattr(
+        providers, "TushareDividendProvider", lambda **kwargs: FakeProvider()
+    )
     frame = fetcher._fetch_dividends_tushare("600519")
 
     assert frame.loc[0, "送转股份-送转总比例"] == pytest.approx(1.0)
@@ -584,7 +673,9 @@ def test_tushare_financial_adapter_merges_balance_and_cashflow(
                 )
             )
 
-    monkeypatch.setattr(providers, "TushareFinancialProvider", FakeProvider)
+    monkeypatch.setattr(
+        providers, "TushareFinancialProvider", lambda **kwargs: FakeProvider()
+    )
     frame = fetcher._fetch_financials_tushare("600519")
 
     assert frame.loc[0, "流动比率"] == pytest.approx(2.0)

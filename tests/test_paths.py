@@ -19,12 +19,16 @@ def test_default_paths_are_external_and_configurable(monkeypatch, tmp_path) -> N
     assert paths.cache_db_path() == tmp_path / "changed/cache.db"
 
 
-def test_invalid_config_permissions_fail_closed(tmp_path) -> None:
+def test_invalid_config_permissions_fail_closed(tmp_path, monkeypatch) -> None:
     config = tmp_path / "runtime.env"
-    config.write_text("A_STOCK_STATE_DIR=/tmp/state\n", encoding="utf-8")
+    config.write_text("TUSHARE_TOKEN=private-test-token\n", encoding="utf-8")
     config.chmod(0o644)
+    monkeypatch.setenv("A_STOCK_CONFIG_FILE", str(config))
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
     with pytest.raises(RuntimeError, match="0600"):
         paths.read_private_config(config)
+    with pytest.raises(RuntimeError, match="0600"):
+        paths.tushare_token()
 
 
 def test_importing_paths_does_not_create_home_state(tmp_path) -> None:

@@ -41,10 +41,12 @@ Historical migration and S1/S2/S3 ledgers remain available through the
 ## Install or update
 
 Requirements: Python 3.13+ and `uv`. The installer resolves the hash-pinned
-`a-stock-lib` Release wheel from project metadata. Market-data commands require
-an explicitly exported `TUSHARE_TOKEN`; they no longer discover another project's
-`.env`. Merely placing that token in runtime.env does not export it for direct CLI
-calls; the cron entrypoint explicitly exports its selected configuration.
+`a-stock-lib` Release wheel from project metadata. Market-data commands resolve
+`TUSHARE_TOKEN` from the environment first, then the selected private runtime.env
+(`A_STOCK_CONFIG_FILE` or the XDG default). Only that token is passed to Providers;
+direct CLI calls do not export the file's other secrets. The cron entrypoint
+continues to export its explicitly selected configuration. Neither route discovers
+another project's `.env`.
 
 ```bash
 python3 scripts/install.py \
