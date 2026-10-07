@@ -10,6 +10,14 @@ from a_stock_agent_runtime import paths
 @pytest.fixture(autouse=True)
 def isolated_cache_database(tmp_path, monkeypatch):
     """Keep every test and child process away from external runtime state."""
+    for name in (
+        "A_STOCK_STATE_DIR",
+        "A_STOCK_RISK_POLICY_FILE",
+        "XDG_DATA_HOME",
+        "XDG_CONFIG_HOME",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("A_STOCK_CONFIG_FILE", str(tmp_path / "missing-runtime.env"))
     external_path = paths.cache_db_path()
     database = tmp_path / "cache.db"
     monkeypatch.setenv("CACHE_DB_PATH", str(database))

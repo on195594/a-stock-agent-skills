@@ -45,6 +45,43 @@ def test_read_only_scope_resets_after_exception() -> None:
     assert not db.is_read_only()
 
 
+@pytest.mark.parametrize("suffix", ["#fragment", "?query", "%23"])
+def test_read_only_database_path_is_literal(tmp_path, monkeypatch, suffix) -> None:
+    database = tmp_path / f"cache.db{suffix}"
+    decoy = tmp_path / "cache.db"
+    for path, value in ((database, "selected"), (decoy, "decoy")):
+        connection = sqlite3.connect(path)
+        connection.execute("CREATE TABLE identity (value TEXT)")
+        connection.execute("INSERT INTO identity VALUES (?)", (value,))
+        connection.commit()
+        connection.close()
+    monkeypatch.setenv("CACHE_DB_PATH", str(database))
+    before = set(tmp_path.iterdir())
+    with db.read_only_db_session() as connection:
+        assert connection.execute("SELECT value FROM identity").fetchone() == (
+            "selected",
+        )
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            connection.execute("CREATE TABLE forbidden (value TEXT)")
+    assert set(tmp_path.iterdir()) == before
+    database.unlink()
+    with pytest.raises(sqlite3.OperationalError):
+        with db.read_only_db_session():
+            pytest.fail("missing database must not be created or replaced by the decoy")
+    assert set(tmp_path.iterdir()) == before - {database}
+
+
+def test_w1_refuses_public_parent_without_changing_it(tmp_path, monkeypatch, capsys):
+    parent = tmp_path / "shared"
+    parent.mkdir(mode=0o755)
+    parent.chmod(0o755)
+    monkeypatch.setenv("CACHE_DB_PATH", str(parent / "cache.db"))
+    assert cache.main(["--confirm-write", "add-holding", "600036", "40", "100"]) == 1
+    assert "0700" in capsys.readouterr().err
+    assert parent.stat().st_mode & 0o777 == 0o755
+    assert list(parent.iterdir()) == []
+
+
 def test_missing_w1_confirmation_keeps_fixture_hash(tmp_path, monkeypatch) -> None:
     database = tmp_path / "cache.db"
     monkeypatch.setenv("CACHE_DB_PATH", str(database))

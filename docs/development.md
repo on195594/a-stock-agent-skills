@@ -6,6 +6,11 @@ create feature branches, open pull requests or force-push. It must remain
 fixture-first: do not point tests at a production database, production
 credentials or the active client directories.
 
+The shared test fixture selects an absent temporary runtime config and clears
+inherited state, risk-policy and XDG overrides before isolating the database.
+Tests that exercise configuration set their own synthetic overrides afterward;
+the caller's environment must not choose a different test path or validation gate.
+
 ## Setup
 
 Requirements are Python 3.13+ and `uv`. Install the locked development

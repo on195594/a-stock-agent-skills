@@ -19,11 +19,11 @@ QA checks report compliance, not factual truth or investment effectiveness.
 
 `a-stock-lib` owns shared deterministic calculations and Providers. This runtime
 owns holdings, risk and decision-v1/monitor-v1 application contracts. Tracker
-owns generic data collection and historical audit; **Framework A closed as
-`CLOSED_UNPROVEN` on 2026-09-21**, so S2 enrollment and maturation are not pending
-work. The separate `a-stock-screen` workbench owns peer discovery, personal notes
-and fact changes, not holdings or trading. Do not merge these state or permission
-boundaries, restore Tracker experiments, or add an LLM orchestration platform.
+has absorbed the former screen workbench: it owns peer discovery, personal notes,
+fact changes and isolated machine research, not holdings or trading; it no longer
+depends on `a-stock-lib`. **Framework A closed as `CLOSED_UNPROVEN` on 2026-09-21**,
+so S2 enrollment and maturation are not pending work. Do not merge these state or
+permission boundaries, restore Tracker experiments, or add an LLM orchestration platform.
 
 ## Version and deployment records
 
@@ -41,7 +41,10 @@ Historical migration and S1/S2/S3 ledgers remain available through the
 ## Install or update
 
 Requirements: Python 3.13+ and `uv`. The installer resolves the hash-pinned
-`a-stock-lib==0.8.0` Release wheel from project metadata:
+`a-stock-lib` Release wheel from project metadata. Market-data commands require
+an explicitly exported `TUSHARE_TOKEN`; they no longer discover another project's
+`.env`. Merely placing that token in runtime.env does not export it for direct CLI
+calls; the cron entrypoint explicitly exports its selected configuration.
 
 ```bash
 python3 scripts/install.py \

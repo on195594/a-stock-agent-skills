@@ -198,6 +198,26 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Release preflight — 2026-10-07
+
+Live readback supersedes the historical pointer-only deployment description below:
+the stable CLI links select `runtime/0.1.13-9574b686f910/venv/bin`, and all nine
+client Skill links select the canonical `skills/` directories. The older `current`
+pointer is not the active CLI or Skill owner. These links are preserved while
+preparing 0.1.14 with the hash-pinned a-stock-lib 0.8.2 wheel.
+
+Production activation is blocked pending explicit credential-routing approval:
+the selected runtime config does not contain `TUSHARE_TOKEN`, and direct CLI
+execution does not export it. The new library no longer discovers Tracker's
+`.env`. Do not activate first and silently borrow or move credentials afterward.
+The existing database parent already satisfies 0700; no permissions, database,
+client links or cron changes are required or authorized by this preflight.
+
+The release includes literal SQLite read-only paths and fail-closed private-parent
+checks. `a-stock-fetch check` can still print a traceback when a selected database
+parent is non-private; refusal and exit 1 remain effective and create no database.
+This presentation issue does not justify relaxing the permission guard.
+
 ### Repository maintenance — 2026-09-30
 
 After explicit user authorization, `50c55b2` was committed, pushed and deployed.

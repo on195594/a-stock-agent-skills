@@ -83,7 +83,8 @@ def artifact_dir() -> Path:
 
 
 def ensure_db_parent(path: str | Path) -> None:
-    """Create only the selected database parent, preserving read-only probes."""
+    """Create a private database parent without changing existing directories."""
     parent = Path(path).expanduser().resolve().parent
     parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    parent.chmod(0o700)
+    if parent.stat().st_mode & 0o077:
+        raise PermissionError(f"database parent must be private (0700): {parent}")

@@ -15,6 +15,13 @@ belong in the [operations record](../operations.md#current-deployment-record).
 `checklist.py` retains checklist presentation metadata. Runtime routing does not
 depend on importing that registry.
 
+`db.py` owns SQLite connections: read-only paths use an escaped file URI with
+`mode=ro`, preserving literal filenames and refusing missing databases or writes.
+Writable setup creates a new database parent with mode `0700`; it never changes
+permissions of an existing directory. An existing parent with group/other access
+is rejected before opening the database, with a controlled CLI failure. Operators
+must select a private state directory or explicitly secure it themselves.
+
 The A-framework checklist debt exception automatically recognizes only cached
 industry labels `汽车整车`, `整车`, and `重型设备`. Broader or unknown labels require
 manual verification under the existing A-framework rule; the checklist retains

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
 import threading
 from collections.abc import Iterator
@@ -35,7 +34,7 @@ def read_only_scope(enabled: bool = True) -> Iterator[None]:
 def _read_only_connection(timeout: float) -> sqlite3.Connection:
     database_path = paths.cache_db_path().resolve()
     connection = sqlite3.connect(
-        f"file:{os.path.abspath(database_path)}?mode=ro",
+        database_path.as_uri() + "?mode=ro",
         uri=True,
         timeout=timeout,
     )
@@ -48,7 +47,10 @@ def get_db(timeout: float = 30.0) -> sqlite3.Connection:
     if is_read_only():
         return _read_only_connection(timeout)
     database_path = str(paths.cache_db_path())
-    paths.ensure_db_parent(database_path)
+    try:
+        paths.ensure_db_parent(database_path)
+    except PermissionError as exc:
+        raise sqlite3.OperationalError(str(exc)) from exc
     connection = sqlite3.connect(database_path, timeout=timeout)
     connection.execute(f"PRAGMA busy_timeout={max(1, round(timeout * 1000))}")
     if not _SCHEMA_INITIALIZED or _SCHEMA_INITIALIZED_PATH != database_path:
