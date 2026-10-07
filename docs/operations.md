@@ -77,9 +77,9 @@ block recording a user-confirmed broker execution under existing W1 rules.
 The `risk_budget_exceeded` reason requires the matching monitor-v1 validator,
 CLI and Skill release set; see [runtime contracts](architecture/runtime-contracts.md).
 
-Active Skill and CLI links share the versioned `current` release pointer; the
-[current deployment record](#current-deployment-record) identifies the selected
-runtime/Skill pair. Do not pull source into a live discovery target or install a
+Read back the actual Skill and CLI link targets; the `current` pointer alone is
+not activation evidence. The [current deployment record](#current-deployment-record)
+identifies the selected runtime/Skill pair and any drift. Do not pull source into a live discovery target or install a
 single client against an incompatible shared runtime. Deploy a complete release
 under explicit authorization with compatibility checks and client verification
 limits recorded. Do not roll back to a pre-risk-closure runtime that can report
@@ -203,8 +203,16 @@ under explicit authorization and reconcile compatibility before proceeding.
 Live readback supersedes the historical pointer-only deployment description below:
 the stable CLI links select `runtime/0.1.13-9574b686f910/venv/bin`, and all nine
 client Skill links select the canonical `skills/` directories. The older `current`
-pointer is not the active CLI or Skill owner. These links are preserved while
-preparing 0.1.14 with the hash-pinned a-stock-lib 0.8.2 wheel.
+pointer is not the active CLI or Skill owner. These links remain unchanged.
+Version 0.1.14 (`785460a`) is committed, pushed and published with the hash-pinned
+a-stock-lib 0.8.2 wheel, but is not activated on this host.
+
+The exact release passed all 1338 repository tests, including both optional
+candidate installer checks; the other repository gates and GitHub CI passed.
+The normal installer without dependency overrides passed in an isolated target
+root for all clients. All 38 installed Python modules match the release wheels;
+all 78 client Skill file copies match committed sources. Dependency checks and
+the CLI confirmation-gate smoke passed without protected-state writes.
 
 Production activation is blocked pending explicit credential-routing approval:
 the selected runtime config does not contain `TUSHARE_TOKEN`, and direct CLI
