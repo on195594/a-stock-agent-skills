@@ -189,10 +189,11 @@ production database into the repository. The installer creates its rollback
 manifest outside the repository; retain it with the external runtime backup.
 
 For the current schema-compatible release, follow its external `rollback.json`
-after explicit rollback authorization. Verify the active pointer still matches
-that release, retain both release trees, and atomically restore the recorded
-previous `current` target. Do not restore a database, change `CACHE_DB_PATH`,
-rewrite client links or alter cron. Validate stable CLI entries using isolated
+after explicit rollback authorization. Verify the three active CLI targets still
+match that release, retain both runtimes, then atomically restore the recorded
+previous CLI targets and the private runtime.env backup. The historical `current`
+pointer does not own these entries. Do not restore a database, change `CACHE_DB_PATH`,
+rewrite Skill links or alter cron. Validate stable CLI entries using isolated
 state and disabled notifications, and reload Skills in existing sessions.
 
 Schema/configuration/cron rollbacks are separate operations requiring their own
@@ -202,70 +203,53 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
-### Release preflight — 2026-10-07
+### Explicit credential cutover — 2026-10-08
 
-Live readback supersedes the historical pointer-only deployment description below:
-the stable CLI links select `runtime/0.1.13-9574b686f910/venv/bin`, and all nine
-client Skill links select the canonical `skills/` directories. The older `current`
-pointer is not the active CLI or Skill owner. These links remain unchanged.
-Version 0.1.14 (`785460a`) is committed, pushed and published with the hash-pinned
-a-stock-lib 0.8.2 wheel, but is not activated on this host.
+After explicit user authorization to reuse the existing TuShare token, release
+0.1.16 (`1a29d06451e42638e3c97d7c774b563ca84845e8`) is active with a-stock-lib
+0.8.2. The three stable CLI symlinks now select
+`~/.local/share/a-stock-agent/runtime/0.1.16-1a29d06451e4/venv/bin`.
+All nine client Skill links still select the canonical `skills/` directories;
+78 client file comparisons match the release. The historical `current` pointer
+is unchanged and is not the active CLI or Skill owner.
 
-The exact release passed all 1338 repository tests, including both optional
-candidate installer checks; the other repository gates and GitHub CI passed.
-The normal installer without dependency overrides passed in an isolated target
-root for all clients. All 38 installed Python modules match the release wheels;
-all 78 client Skill file copies match committed sources. Dependency checks and
-the CLI confirmation-gate smoke passed without protected-state writes.
+The existing token was copied into the selected external runtime.env, still
+mode 0600, without changing its other settings or the Tracker credential files.
+Direct commands resolve that private configuration without exporting its other
+secrets. A real TuShare calendar read returned 242 rows through the installed
+fetcher, with no AKShare fallback. The cron configuration export route and the
+actual cron script with the installed CLI passed in isolated, notification-disabled
+state. No production cron job or notification was manually triggered.
 
-Production activation is blocked pending explicit credential-routing approval:
-the selected runtime config does not contain `TUSHARE_TOKEN`, and direct CLI
-execution does not export it. The new library no longer discovers Tracker's
-`.env`. Do not activate first and silently borrow or move credentials afterward.
-The existing database parent already satisfies 0700; no permissions, database,
-client links or cron changes are required or authorized by this preflight.
+Both UTC and Asia/Shanghai repository gates passed all 1356 tests, including
+optional installer checks. Independent reviews and release-commit GitHub CI passed.
+The normal all-client installer passed in an isolated home. The downloaded wheel,
+GitHub asset digest, 25 runtime modules and 13 library modules match their verified
+release artifacts. Stable CLI help, missing-token refusal, W1 exit-3 refusal and
+read-only production holdings checks passed. No investment-rule, schema, scheduler
+or service change occurred; native-client model/reload qualification was NOT_RUN.
 
-The release includes literal SQLite read-only paths and fail-closed private-parent
-checks. `a-stock-fetch check` can still print a traceback when a selected database
-parent is non-private; refusal and exit 1 remain effective and create no database.
-This presentation issue does not justify relaxing the permission guard.
+The UTC gate exposed old analysis-date fixtures and a host-local holding-duration
+calculation. Version 0.1.16 aligns these with the existing CST ledger date; buy-date
+precedence and return semantics are unchanged. Published 0.1.15 artifacts were
+retained unchanged and that version was never activated.
 
-### Repository maintenance — 2026-09-30
+Private evidence and rollback inputs are retained under
+`~/.local/share/a-stock-agent/deployment-candidates/20261008-skills-token/`.
+Use `rollback.json`, `runtime.env.before` and the old executable runtime
+`runtime/0.1.13-9574b686f910/venv` for a bounded config/CLI rollback. Do not alter
+Skill links, the unrelated `current` pointer, the database or crontab.
 
-After explicit user authorization, `50c55b2` was committed, pushed and deployed.
-`current` now selects
-`~/.local/share/a-stock-agent/deployment-candidates/20260930-50c55b2-maintenance/release-view`.
-The 0.1.13 runtime removes the unused `store.get_risk_gate` helper and three
-unused status sets; CLI/write gates and investment rules are unchanged. Tests
-now exercise the actual stored-gate aggregation path and combine redundant
-top-level CLI help checks. README and operations use current release/rollback
-instructions; completed architecture-review and superseded deployment prose
-remain recoverable from Git. No production alert was cleared.
-
-The full repository gate passed: 1328 tests passed, two optional installer checks
-skipped; Ruff lint, Skill validation, regulatory freshness, standalone QA and
-cron smokes passed. All 25 installed modules match the committed source and
-candidate wheel. All 26 Skill files and 34 installed package versions match the
-previous release. Installed gate-aggregation regressions preserve missing-data
-fail-closed behavior without backfill; installed copy/symlink regressions and
-identical before/after CLI help checks passed. Offline W1/fail-closed/monitor-v1
-smokes passed before activation and again through stable CLI entries afterward.
-
-All twelve entry link texts, DB/WAL/SHM and runtime-config fingerprints, and the
-crontab hash remained unchanged. No schema migration, production data write,
-notification or service restart occurred. Fresh native-client model qualification
-was NOT_RUN; existing sessions should reload the Skill or start a new session.
-The candidate directory retains source/wheel hashes, validation logs,
-`ACTIVE_RELEASE.json`, and `rollback.json`. Pointer-only rollback restores
-`20260930-fc54fb6-install-cleanup/release-view`; do not restore a database or
-remove retained releases. Later documentation commits do not change the deployed
-runtime/Skill source identity.
+The first verification attempt restored the old config/CLI because SQLite's
+read-only open created its WAL/SHM auxiliary files. The main database SHA256 stayed
+identical and the WAL is empty. The retry checks persistent-file hashes and empty
+WAL separately; failed-attempt evidence is retained. No auxiliary file was deleted
+to manufacture a byte-identical state. Existing sessions may reload their Skills.
 
 ## Historical deployment evidence
 
 Superseded deployment and preflight records are retained in Git, not as current
-operating instructions. Read the preceding 2026-09-30 deployment record and the
-older complete ledger from their source snapshots:
+operating instructions. Read older deployment ledgers from their source snapshots:
 
 ```bash
 git show 50c55b2:docs/operations.md  # fc54fb6 copy-install hygiene deployment
