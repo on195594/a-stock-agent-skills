@@ -23,7 +23,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 S3a 可附用户提供的 `--policy-file`、`--account-scope`、`--portfolio-value-as-of`；不得由模型生成政策、确认引用或估值时点。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时新增风险须复核，即使本轮为 clean 也不授予加仓权限。无个人文件的 2%/8% 是兼容默认，不等于满足用户回撤目标；确认元数据不是 W1 令牌，发现非法政策不得静默回退。
 
-`--portfolio-value-as-of` 必须是用户提供的带时区时间，格式为 `YYYY-MM-DDTHH:MM:SS+08:00`；仅有日期时请求补充，不得自行填造时刻。
+`--portfolio-value-as-of` 必须是用户或截图明确确认的带时区时间，格式为 `YYYY-MM-DDTHH:MM:SS+08:00`。仅在截图本身包含明确日期与资产估值时点，或用户在对话中明确确认时点时才可传入；手机设备状态栏时间不能替代资产估值时间。日期缺失、估值时点未经确认或不可见时请求补充并保持缺省，由系统判定 `denominator_requires_review=true`，不得凭空填造或推定时刻。可同时附截图标注的明确账号范围（`--account-scope`）。
 
 通过宿主的命令执行工具调用 runtime CLI，保留 stdout、stderr 和退出码；不要在有硬超时的临时代码内核中包裹整轮监控。
 
@@ -31,7 +31,7 @@ S3a 可附用户提供的 `--policy-file`、`--account-scope`、`--portfolio-val
 
 - runtime 返回干净快速路径时，输出结构化 `action_status`、异常项、覆盖率、as-of 与 `stop_reason`，立即停止。
 - runtime 返回阻断、复核候选、触发、到期、异常或冲突时，仅对 `escalations` 指定的持仓和证据进入 Level 2。
-- 缺少 required 数据时不得输出确定性无动作、继续持有或仓位不变；点名最小补数动作，并冻结相关交易与风险变更。
+- 缺少 required 数据时不得输出确定性无动作、继续持有或仓位不变；点名最小补数动作（如针对 governance_gates 过期指明执行 `a-stock-fetch fetch <代码>`），并冻结相关交易与风险变更。
 
 ### Level 2：按升级项展开
 

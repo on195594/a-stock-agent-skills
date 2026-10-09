@@ -38,6 +38,21 @@ runtime.env 的 `A_STOCK_RISK_POLICY_FILE` → 配置目录 `risk-policy.json`�
   用户有既定预算时以用户值为准；
 - 任一单股或组合严格 `>` 上限才超限，不按显示舍入值判定。超限冻结新增风险建议，不自动卖出、不调整止损；
 - 兼容默认 `compatibility_default` 并非已确认个人政策；显式 CLI 覆盖须显示真实来源，模型不得为绕过超限自行调整参数；
+- 针对高权益仓位（如股票仓位 > 70%）或持有大幅浮盈标的的组合，兼容默认 8% 易触发常态化超限。用户可配置个人政策文件 `~/.config/a-stock-agent/risk-policy.json`（权限 0600，user-owned）或通过 `--policy-file` 指定个人预算，配置契约格式：
+  ```json
+  {
+    "schema_version": 1,
+    "policy_id": "personal-risk-policy",
+    "account_scope": "<账号掩码或ID>",
+    "currency": "CNY",
+    "effective_from": "YYYY-MM-DDTHH:MM:SS+08:00",
+    "effective_to": "YYYY-MM-DDTHH:MM:SS+08:00",
+    "confirmed_at": "YYYY-MM-DDTHH:MM:SS+08:00",
+    "confirmation_ref": "user-explicit-confirmation",
+    "max_position_risk_pct": 5.0,
+    "max_portfolio_risk_pct": 18.0
+  }
+  ```
 - 冻结建议不阻断用户确认的已成交事实记账，仍需原 W1/具体动作授权；记录后报告异常，禁止拒记或改写真实成交；
 - 已跌破第二档的持仓单独标为“已破线”，不能因剩余风险为0显示正常。
 
@@ -49,10 +64,11 @@ runtime.env 的 `A_STOCK_RISK_POLICY_FILE` → 配置目录 `risk-policy.json`�
 
 当券商截图成本与本地记录不一致时：
 
-1. 先核对股数、买卖事件、费用税费、现金分红及除权送转记录；
-2. 未完成对账前，成本比例派生的止损/Tier只可展示来源，不得授权对应交易；
-3. 结构化L3中的绝对价格线仅在确认其与当前除权口径一致后才可执行，否则保持待核实；
-4. 成本复核须分别注明账户盈亏成本来源、规则参考成本来源及对账状态。
+1. 先核对4项基本要素：券商持仓数量 vs `holdings.shares`、券商市价 vs `quote.price`、券商成本 vs `holdings.reference_cost`、券商浮盈 vs 账面计算；
+2. 核对买卖事件、费用税费、现金分红及除权送转记录（券商摊薄成本通常扣除累计分红，导致显著低于建仓成本）；
+3. 未完成对账前，成本比例派生的止损/Tier只可展示来源，不得授权对应交易；
+4. 结构化L3中的绝对价格线仅在确认其与当前除权口径一致后才可执行，否则保持待核实；
+5. 成本复核须分别注明账户盈亏成本来源、规则参考成本来源及对账状态。
 
 ### 集中度
 
