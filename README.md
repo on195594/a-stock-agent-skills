@@ -19,9 +19,13 @@ QA checks report compliance, not factual truth or investment effectiveness.
 
 `a-stock-lib` owns shared deterministic calculations and Providers. This runtime
 owns holdings, risk and decision-v1/monitor-v1 application contracts. Tracker
-has absorbed the former screen workbench: it owns peer discovery, personal notes,
-fact changes and isolated machine research, not holdings or trading; it no longer
-depends on `a-stock-lib`. **Framework A closed as `CLOSED_UNPROVEN` on 2026-09-21**,
+is the cited financial research engine and reading UI (peer screen, single-company
+research with verbatim-checked citations, price discipline reference), not holdings
+or trading; it does not currently depend on `a-stock-lib`. Per the 2026-10-15
+ownership decision, `a-stock-research` will take cited financial research (official
+source facts, counterevidence, gaps) from Tracker's local MCP server instead of
+writing its own uncited financial narrative, and keeps A–F scoring, holdings, risk
+and QA. Until that MCP ships, the current Skill flow stays unchanged. **Framework A closed as `CLOSED_UNPROVEN` on 2026-09-21**,
 so S2 enrollment and maturation are not pending work. Do not merge these state or
 permission boundaries, restore Tracker experiments, or add an LLM orchestration platform.
 
