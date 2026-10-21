@@ -24,6 +24,32 @@ DECISIONS = json.loads(
 )
 
 
+def test_followup_and_account_conflict_contracts_are_explicit():
+    assert "账户、证据和用户目标未变时，追问不改变行动结论" in SKILL
+    assert "发现前次错误应明确纠正并解释依据" in SKILL
+    assert "不把旧账本风险汇总当作当前账户结果" in SKILL
+    assert "缺口逐项说明缺什么、由系统还是用户补" in SKILL
+    assert "相较上次的关键变化" in SKILL
+    assert "已提供材料不重复索取" in SKILL
+    assert "仅比较本会话或用户提供的上次结论，不额外检索历史" in SKILL
+
+
+def test_reconciliation_preserves_events_and_authorization():
+    assert "用户确认、仅供本次分析的持仓" in DATA_OPERATIONS
+    assert "尚未同步的正式账本" in DATA_OPERATIONS
+    assert "不把卖出回款重复加到截图现金" in DATA_OPERATIONS
+    assert "取得具体写入授权" in DATA_OPERATIONS
+    assert "避免重复成交或重复分红" in DATA_OPERATIONS
+    assert "position-return <代码> <快照现价>" in DATA_OPERATIONS
+    assert "合计一致不能证明事件未重复" in DATA_OPERATIONS
+    assert "暂缓该笔写入" in DATA_OPERATIONS
+    assert "不否认已成功记账" in DATA_OPERATIONS
+    assert "--account-scope" in DATA_OPERATIONS
+    assert "范围缺失先请求补充" in PORTFOLIO_RISK
+    assert "不在示例命令中覆盖个人预算" in PORTFOLIO_RISK
+    assert "--max-position-risk-pct 2" not in PORTFOLIO_RISK
+
+
 def test_level2_checklist_semantics_remain_owned_after_main_is_thinned():
     # Deterministic checklist rows must not be duplicated in the entrypoint.
     assert not re.search(r"^\| C\d{2} \|", SKILL, flags=re.MULTILINE)
@@ -48,7 +74,7 @@ def test_generic_single_holding_request_has_bounded_delivery_contract():
     assert "### Level 1：默认快照" in SKILL
     assert "monitor-snapshot --portfolio-value <账户总资产> --json" in SKILL
     assert "干净快速路径" in SKILL and "立即停止" in SKILL
-    assert "只加载与 runtime 升级原因相符的资料" in SKILL
+    assert "只加载与 runtime 升级原因或上述账户差异相符的资料" in SKILL
     assert "默认不启动研究子代理" in SKILL
     assert "a-stock-qa` 尚无 monitor rubric" in SKILL
     assert "监控任务不得调用它" in SKILL

@@ -19,7 +19,7 @@ git ls-tree -r --name-only 165e2c8 docs/plans docs/specs
 git show 165e2c8:docs/plans/2026-09-17-s2-s3-implementation.md
 ```
 
-Tracker Framework A 已于 2026-09-21 `CLOSED_UNPROVEN` 结案；旧 S2 的继续收样和等待成熟均已取消。Lib/Research 的 A—F 合同并未退役。
+按用户 2026-10-21 决定，Tracker 项目已停止，Skill 消费 Tracker MCP 证据包的计划取消；不等待其接口，也不将其作为研究依赖或回退来源。历史 Tracker Framework A 已于 2026-09-21 `CLOSED_UNPROVEN` 结案，旧 S2 收样和等待成熟均已取消。保留的规格与迁移记录仅供追溯；Lib/Research 的 A—F 合同并未退役。
 
 技能包中的旧 Monitor CHANGELOG 和重复 QA README 已移出活动树；历史原文保留于 `f9a4ebe`，例如：
 

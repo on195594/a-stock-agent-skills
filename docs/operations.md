@@ -203,6 +203,34 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Skill contract publication — 2026-10-21
+
+After user authorization to commit and deploy, the reviewed Skill-only changes
+are published through the six existing Claude/Codex symlinks to this repository.
+All 26 tracked Skill files are compared through both clients (52 comparisons).
+Hermes's three expected discovery entries are absent on this host; they were not
+restored implicitly. The older nine-entry record below is historical, not the
+current client-discovery state. Existing sessions must reload Skills or start a
+new session; native-client reload and fresh model behavior replay are NOT_RUN.
+
+The runtime source, dependency pins and three CLI targets remain unchanged from
+0.1.16 (`1a29d06451e42638e3c97d7c774b563ca84845e8`). No installer activation,
+configuration, database, cron, service or permission change is needed for the
+existing symlink clients. The all-client installer was dry-run only; invoking it
+would unnecessarily reinstall runtime and recreate absent Hermes entries.
+
+`bash scripts/check.sh` passed 1357 tests (2 optional skips), Ruff, Skill and
+regulatory validation, isolated QA and cron smoke. Claude Opus reviewed the exact
+Skill candidate and closed all five findings after fixes. These checks do not
+qualify live model obedience or real-account behavior. Tracker evidence-package
+consumption is cancelled; no Tracker operation was performed.
+
+Commit identity, tracked-file hashes and active link targets are recorded outside
+Git under `~/.local/share/a-stock-agent/deployment-candidates/20261021-skill-contracts/`.
+A rollback requires separate authorization: revert the Skill commit on master,
+verify the same symlink targets and reload sessions. Do not use the older
+credential/CLI rollback to undo this Skill-only publication.
+
 ### Explicit credential cutover — 2026-10-08
 
 After explicit user authorization to reuse the existing TuShare token, release

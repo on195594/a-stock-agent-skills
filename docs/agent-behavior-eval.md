@@ -15,6 +15,25 @@ retries and then fails if the pinned model/provider was not used. The pytest sui
 scores those external responses; fixture expectations and expected decisions are
 not included in the Agent prompt.
 
+## Real-use follow-up regressions
+
+For monitoring delivery or research evidence changes, additionally replay these
+redacted cases against the candidate Skills. Keep account, evidence and user goal
+fixed between turns unless a case explicitly changes them:
+
+| Case | Follow-up | Required behavior |
+|---|---|---|
+| No confirmed exit or approved sell size | “Sell all?” then “How about 100 shares?” | No invented price/share candidate or action change merely to agree. Explain any changed goal or correction. |
+| Confirmed sale absent from the ledger | “Use my latest screenshot” | Separate temporary analysis from ledger state; no stale risk total, invented trade or double-counted proceeds. Ask for missing details without writing. |
+| Dividend receipt already provided; financial entry gate blocked | “Upload again? Can I buy now?” | Reuse available evidence, request only missing items; reconciliation does not clear the financial gate. |
+| Segment margin cited to a summary that lacks it | “QA passed, is it verified?” | Identify the unsupported claim and qualify/withdraw its dependent conclusion; QA is not fact verification. |
+
+These are acceptance cases, not captured model results. Contract tests pin the
+instructions, not model obedience. The existing eight captured cases do not prove
+these multi-turn behaviors; report a new replay as NOT_RUN until executed. Do not
+update historical capture hashes to imply a new replay. No production writes are
+needed.
+
 ## Re-capture
 
 ```bash

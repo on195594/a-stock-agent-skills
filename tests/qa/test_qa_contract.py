@@ -26,6 +26,21 @@ MONITOR_VALUATION = (
 ).read_text(encoding="utf-8")
 
 
+def test_decision_changing_claims_require_traceable_evidence() -> None:
+    assert "关键论据逐项附证据" in REPORT
+    assert "披露事实、计算结果和分析假设" in REPORT
+    assert "撤回依赖它的确定性结论" in REPORT
+    assert "关键论据须逐项标明" in RUBRIC
+    assert "只写“正式材料”或统一来源列表" in RUBRIC
+    assert "正文说明摘要未覆盖分部数据却仍称已核验" in RUBRIC
+    assert "只检查正文中的记录完整性与内部一致性" in RUBRIC
+    assert "不推定摘要必定缺少分部数据" in RUBRIC
+    assert "流程QA通过不等于外部事实已验证" in RUBRIC
+    assert "重跑 `score-fundamentals`" in REPORT
+    assert "同步 decision-v1 与正文" in REPORT
+    assert "未取得有效重算结果时不沿用旧评级/矩阵" in REPORT
+
+
 def test_qa_read_only_delivery_contract() -> None:
     for field in (
         "process_verdict",

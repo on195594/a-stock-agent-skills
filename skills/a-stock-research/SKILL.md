@@ -41,6 +41,6 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 - `FUNDAMENTALS_HIT` 或 `FULL_MISS` 需要展开研究时：读取 [完整研究流程](references/research-execution-flow.md)。
 - B/C/D 框架需要周期判定时：读取 [周期评估](references/cycle-assessment.md)。
 - 需要择时调整时：读取 [择时调整](references/timing-adjustments.md)。
-- 需要组织交付或 QA 输入时：读取 [报告合同](references/report-contract.md)。
+- 展开取证前读取 [报告合同](references/report-contract.md)：先确定会改变结论的关键论据与来源，默认五段首版，不先写长文再补证据；QA复用同一正文快照。
 - 催化、产品周期或订单兑现问题：读取 [催化与产品周期](references/catalyst-cycle-analysis.md)。
 - 需要详细数据来源与 CLI 说明时：读取 [数据与缓存合同](references/data-cache-contract.md)，但以当前命令帮助和输出为准。
