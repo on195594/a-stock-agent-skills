@@ -40,22 +40,7 @@ runtime.env 的 `A_STOCK_RISK_POLICY_FILE` → 配置目录 `risk-policy.json`�
   用户有既定预算时以用户值为准；
 - 任一单股或组合严格 `>` 上限才超限，不按显示舍入值判定。超限冻结新增风险建议，不自动卖出、不调整止损；
 - 兼容默认 `compatibility_default` 并非已确认个人政策；显式 CLI 覆盖须显示真实来源，模型不得为绕过超限自行调整参数；
-- 针对高权益仓位（如股票仓位 > 70%）或持有大幅浮盈标的的组合，兼容默认 8% 易触发常态化超限。用户可配置个人政策文件 `~/.config/a-stock-agent/risk-policy.json`（权限 0600，user-owned）或通过 `--policy-file` 指定个人预算，配置契约格式：
-  ```json
-  {
-    "schema_version": 1,
-    "policy_id": "personal-risk-policy",
-    "account_scope": "<账号掩码或ID>",
-    "currency": "CNY",
-    "effective_from": "YYYY-MM-DDTHH:MM:SS+08:00",
-    "effective_to": "YYYY-MM-DDTHH:MM:SS+08:00",
-    "confirmed_at": "YYYY-MM-DDTHH:MM:SS+08:00",
-    "confirmation_ref": "user-explicit-confirmation",
-    "max_position_risk_pct": 5.0,
-    "max_portfolio_risk_pct": 18.0,
-    "off_account_strategy_cash": 0
-  }
-  ```
+- 针对高权益仓位（如股票仓位 > 70%）或持有大幅浮盈标的的组合，兼容默认 8% 易触发常态化超限。用户可通过 `--policy-file` 或在 `~/.config/a-stock-agent/risk-policy.json`（权限 0600，user-owned）中配置个人预算。不在示例命令中覆盖个人预算。
 - 可选 `off_account_strategy_cash`：仍归本策略、但在券商账户外的现金，只能由用户确认写入。
   有 `--portfolio-value` 时分母 = 账户资产 + 该值，输出 `denominator_components`；资金转回账户时须同步改文件，避免重复计入。
 - 超限明细的 `principal`/`unrealized_gain` 是第二档止损风险中本金与浮盈回吐的拆分；报告超限原因时只引用这两项和
