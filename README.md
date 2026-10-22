@@ -19,6 +19,19 @@ QA checks report compliance, not factual truth or investment effectiveness.
 
 `a-stock-lib` owns shared deterministic calculations and Providers. This runtime
 owns holdings, risk and decision-v1/monitor-v1 application contracts.
+`a-share-research` is an independent peer application for cited financial-report
+research, history and price references; it also consumes `a-stock-lib`. The two
+applications keep separate state and releases. Skills do not currently consume
+its reports. A future read-only evidence interface requires a concrete use case;
+it cannot replace runtime risk gates or grant account-write authorization.
+
+The shared [project contract](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md),
+[roadmap](https://github.com/on195594/a-share-research/blob/main/docs/roadmap.md) and
+[implementation plan](https://github.com/on195594/a-share-research/blob/main/docs/implementation-plan.md)
+are maintained in `a-share-research/docs/`. They describe current boundaries and
+conditional future work; runtime contracts and active deployment records remain
+owned here.
+
 Per the user's 2026-10-21 decision, Tracker is stopped and the planned consumption
 of its MCP evidence packages is cancelled. Skills continue to use the installed
 runtime and official disclosures directly; Tracker is not a prerequisite or fallback.

@@ -12,6 +12,14 @@ belong in the [operations record](../operations.md#current-deployment-record).
 | Framework routing | `framework_catalog.py` | A–F industry routing, portfolio labels and stop-loss coefficients |
 | Skill text | `skills/*/SKILL.md` | Thin routing and tool-use instructions; never reconstruct machine state from prose |
 
+The cross-project [contract](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md)
+defines `a-share-research` as an independent peer consuming the same Lib. It owns
+its report format, source documents and research state. A read-only report
+interface is planned but not implemented or consumed here; its future evidence
+does not replace decision-v1/monitor-v1 or their authorization boundaries.
+`a-stock-qa` continues to check only the Research Skill's text rubric, not the
+peer application's report format or Monitor output.
+
 `checklist.py` retains checklist presentation metadata. Runtime routing does not
 depend on importing that registry.
 
@@ -124,8 +132,10 @@ fixture evidence and unfinished reconciliation/evaluation boundaries.
 
 ## Independent version dimensions
 
-- **Package version** identifies installed code: `a-stock-lib==0.8.0` and the
-  `a-stock-agent-skills==0.1.13` source line.
+- **Package version** identifies packaged code. Source versions and dependency
+  pins are maintained in `pyproject.toml` and `uv.lock`; actual installed identity
+  and the matching runtime/Skill release set are recorded in operations. Do not
+  infer active code from a source checkout or a development version alone.
 - **Contract version** identifies a wire shape: decision v1 and monitor v1.
 - **Policy version** identifies investment or regulatory rules independently of
   package and wire versions. Framework policy uses `RULE_VERSION` and

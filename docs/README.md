@@ -5,6 +5,7 @@
 - [README](../README.md)：目标、安装和安全边界。
 - [development](development.md)：本地验证；[operations](operations.md)：配置、部署与回滚。
 - [runtime contracts](architecture/runtime-contracts.md)：decision-v1 / monitor-v1、owner 和版本合同。
+- 三项目共用正文：[项目契约](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md)、[路线图](https://github.com/on195594/a-share-research/blob/main/docs/roadmap.md)、[实施计划](https://github.com/on195594/a-share-research/blob/main/docs/implementation-plan.md)，统一维护在 `a-share-research/docs/`。新研究应用的报告消费接口仍为规划项，本仓运行时、Skill 和部署状态继续由本仓文档维护。
 - [Agent 行为验证](agent-behavior-eval.md)。
 - `skills/*/references/`：Agent 当前执行规则；`specs/`：仍需追溯的投资/风险规则依据。规则变更须显式授权，不能用整理文档绕过。
 
