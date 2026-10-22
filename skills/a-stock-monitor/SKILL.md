@@ -9,7 +9,7 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 
 ## 路由
 
-`a-stock-monitor` 是已有持仓的唯一 Primary Skill。明确排除交易判断的公开数据子任务不得加载本 Skill；首次研究改用 `a-stock-research`。
+`a-stock-monitor` 是已有持仓的唯一 Primary Skill。明确排除交易判断的公开数据子任务不得加载本 Skill；首次研究改用 `a-stock-research`。用户仅要求阈值历史回放或策略复盘验证时，跳过 Level 1，直接读取 [阈值回放](references/backtest.md)。
 
 ### Level 1：默认快照
 
@@ -44,7 +44,6 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 | A/E/F Tier 复核 | `references/step4-tier-system.md` |
 | 账户差异、已成交补账或状态更新 | `references/data-operations.md` |
 | `risk_budget_exceeded`、组合再平衡或任何加仓 | `references/portfolio-risk.md` |
-| 阈值历史回放或策略复盘验证 | `references/backtest.md` |
 
 `risk_budget_exceeded` 的 `code=null` 表示组合级只读复核：仅用本轮汇总、持仓和 `data_gaps`，不重查价、不心算补全风险、不调用 W1。兼容默认/显式覆盖不等于个人预算，禁止改参数绕过超限；超预算不能 clean/no_action，已有合法交易候选不降级。超限原因只引用明细中的 principal/unrealized_gain 与 `denominator_components`；快照未给出的卖出标的或股数不得提出。
 
