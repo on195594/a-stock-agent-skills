@@ -58,6 +58,7 @@ COMMANDS = {
     "update-return": commands_holdings.cmd_update_return,
     "position-return": commands_holdings.cmd_position_return,
     "dividend-check": commands_holdings.cmd_dividend_check,
+    "benchmark-report": commands_holdings.cmd_benchmark_report,
     "portfolio-risk": commands_holdings.cmd_portfolio_risk,
     "check-holdings": commands_holdings.cmd_check_holdings,
     "monitor-snapshot": commands_monitor.cmd_monitor_snapshot,
@@ -98,6 +99,7 @@ COMMAND_CLASSIFICATION = {
             "portfolio-risk",
             "monitor-snapshot",
             "dividend-check",
+            "benchmark-report",
         ),
         "R1",
     ),
@@ -208,6 +210,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "update-return": (("代码", None), ("回报率", None)),
     "position-return": (("代码", None), ("当前价", "?")),
     "dividend-check": (("代码", "?"),),
+    "benchmark-report": (),
     "portfolio-risk": (),
     "check-holdings": (),
     "monitor-snapshot": (),
@@ -244,6 +247,7 @@ _CLI_VALUE_OPTIONS = {
         "--portfolio-value-as-of",
     ),
     "performance-report": ("--input", "--benchmark"),
+    "benchmark-report": ("--end",),
 }
 
 

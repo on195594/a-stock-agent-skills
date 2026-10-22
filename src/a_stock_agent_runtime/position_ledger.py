@@ -131,3 +131,38 @@ def calculate_lifecycle_return(
         holding_days=(last_day - first_day).days,
         contains_inferred=contains_inferred,
     )
+
+
+def ledger_cash_flows(events: list[tuple]) -> list[tuple[str, float]]:
+    """Investor cash flows (buys negative) from all lifecycles' ledger events.
+
+    Rows use ``event_type, event_date, shares, price, fees, tax, cash_amount``.
+    """
+    flows = []
+    for event_type, event_date, shares, price, fees, tax, cash_amount, *_ in events:
+        costs = _finite_event_amount(fees, "fees") + _finite_event_amount(tax, "tax")
+        if event_type == "buy":
+            flows.append((event_date, -(shares * price + costs)))
+        elif event_type == "sell":
+            flows.append((event_date, shares * price - costs))
+        elif event_type == "dividend":
+            flows.append((event_date, _finite_event_amount(cash_amount, "cash_amount")))
+    return flows
+
+
+def public_market_equivalent(
+    flows: list[tuple[str, float]], closes: dict[str, float]
+) -> float:
+    """Net P&L had every ledger cash flow bought or sold the index instead.
+
+    Each flow trades at the first index close on or after its date; the mirror
+    is valued at the last close supplied, which must be the valuation date.
+    """
+    days = sorted(closes)
+    units = 0.0
+    for flow_date, flow in flows:
+        trade_day = next((day for day in days if day >= flow_date), None)
+        if trade_day is None:
+            raise ValueError(f"指数在 {flow_date} 之后没有收盘价")
+        units -= flow / closes[trade_day]
+    return sum(flow for _, flow in flows) + units * closes[days[-1]]

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 新增只读 `benchmark-report [--end YYYY-MM-DD]`：把账本全部买卖与分红现金流按同日同额镜像到沪深300全收益、中证红利全收益（TuShare H00300.CSI/H00922.CSI），在共同估值日比较净盈亏与超额；含推断事件时标为近似值。a-stock-lib 0.8.2 指数接口返回 SCHEMA_CHANGED，暂直接调 TuShare（代码内 shortcut 注释）。
+
 ## 0.1.19 — 2026-10-22
 
 - 修复 Codex 审查发现：`regulatory-evidence` 拒绝预设子门对象；P0 沿用改为保存原始事实并按现行规则重判，且在写缓存的同一事务内读取最新证据；`dividend-check` 识别已记账的纯转增，登记日后股数变化时改给按应收总额的命令，现金与转增只记一部分时不给自动命令；`fetch` 完成摘要按写入后的门状态统计；组合级止损风险归因在任一持仓拆分未知时标为 unknown；新增测试守卫，禁止测试撤销数据库隔离。

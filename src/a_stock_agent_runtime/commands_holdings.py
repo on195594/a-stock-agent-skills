@@ -9,6 +9,7 @@ import sys
 from datetime import date, datetime
 
 from a_stock_lib.market_data import MarketDataResult
+from a_stock_lib.providers import TushareMarketDataProvider
 from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
 
 from a_stock_agent_runtime import (
@@ -25,6 +26,8 @@ from a_stock_agent_runtime.market_quotes import PriceQuote
 from a_stock_agent_runtime.position_ledger import (
     LifecycleReturn,
     calculate_lifecycle_return,
+    ledger_cash_flows,
+    public_market_equivalent,
 )
 
 STAMP_TAX_RATE = 0.0005  # A-share seller stamp duty: 0.5‰ of turnover
@@ -979,6 +982,90 @@ def cmd_dividend_check(args: list[str]) -> None:
         print(f"已核对{len(holdings)}只在仓持仓：未发现未记账分红")
     if failed:
         sys.exit(1)
+
+
+BENCHMARKS = (("H00300.CSI", "沪深300全收益"), ("H00922.CSI", "中证红利全收益"))
+
+
+def _index_closes(ts_code: str, start: str, end: str) -> dict[str, float]:
+    # shortcut: a-stock-lib 0.8.2 fetch_index_bars returns SCHEMA_CHANGED and has no
+    # total-return codes; move to it once the library provider is fixed.
+    import tushare
+
+    frame = tushare.pro_api(paths.tushare_token()).index_daily(
+        ts_code=ts_code, start_date=start.replace("-", ""), end_date=end.replace("-", "")
+    )
+    if frame is None or frame.empty:
+        raise RuntimeError(f"{ts_code} 指数行情不可用")
+    return {
+        f"{day[:4]}-{day[4:6]}-{day[6:]}": float(close)
+        for day, close in zip(frame["trade_date"], frame["close"])
+    }
+
+
+def _close_on(code: str, day: str) -> float:
+    result = TushareMarketDataProvider(
+        token=paths.tushare_token()
+    ).fetch_daily_bars_range(code, day, day)
+    frame = result.value
+    if frame is None or frame.empty:
+        raise RuntimeError(f"{code} 在 {day} 无收盘价（{result.status}）")
+    return float(frame["close"].iloc[-1])
+
+
+def cmd_benchmark_report(args: list[str]) -> None:
+    """Compare ledger cash flows with the same flows into total-return indices."""
+    if args and (len(args) != 2 or args[0] != "--end"):
+        print("错误：用法 benchmark-report [--end YYYY-MM-DD]", file=sys.stderr)
+        sys.exit(1)
+    end = args[1] if args else domain.cst_today()
+    try:
+        date.fromisoformat(end)
+    except ValueError:
+        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
+        sys.exit(1)
+    with db.read_only_db_session() as conn:
+        events = conn.execute(
+            """SELECT code, event_type, event_date, shares, price, fees, tax,
+                      cash_amount, inferred
+               FROM holding_events WHERE event_date <= ? ORDER BY event_date, id""",
+            (end,),
+        ).fetchall()
+    if not events:
+        print("错误：账本没有交易事件", file=sys.stderr)
+        sys.exit(1)
+    first = events[0][2]
+    benchmarks = {code: _index_closes(code, first, end) for code, _ in BENCHMARKS}
+    valuation_day = min(max(closes) for closes in benchmarks.values())
+    rows = [row[1:] for row in events if row[2] <= valuation_day]
+    flows = ledger_cash_flows(rows)
+    open_shares: dict[str, int] = {}
+    for code, event_type, day, shares, *_ in events:
+        if day <= valuation_day and event_type in ("buy", "sell", "adjustment"):
+            delta = (shares or 0) * (-1 if event_type == "sell" else 1)
+            open_shares[code] = open_shares.get(code, 0) + delta
+    market_value = sum(
+        shares * _close_on(code, valuation_day)
+        for code, shares in open_shares.items()
+        if shares
+    )
+    gross_buys = -sum(flow for _, flow in flows if flow < 0)
+    pnl = sum(flow for _, flow in flows) + market_value
+    print(
+        f"账本 vs 指数（{first} 至 {valuation_day} 收盘）| 累计买入 {gross_buys:,.0f} 元 | "
+        f"在仓市值 {market_value:,.0f} 元"
+    )
+    print(f"  账本净盈亏：{pnl:+,.0f} 元（{pnl / gross_buys:+.2%}）")
+    for code, label in BENCHMARKS:
+        closes = {day: px for day, px in benchmarks[code].items() if day <= valuation_day}
+        bench = public_market_equivalent(flows, closes)
+        print(
+            f"  同样现金流买{label}：{bench:+,.0f} 元（{bench / gross_buys:+.2%}）"
+            f" | 账本超额 {pnl - bench:+,.0f} 元"
+        )
+    if any(row[8] for row in events):
+        print("  ⚠️ 含推断补录的早期事件：结果为近似值，须与券商流水核对")
+    print("  样本期短、交易少时只说明期间相对表现，不证明方法有效")
 
 
 def cmd_record_dividend(args: list[str]) -> None:
