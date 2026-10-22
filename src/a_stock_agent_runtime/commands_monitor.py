@@ -6,7 +6,7 @@ import json
 import sqlite3
 import sys
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from importlib import metadata
 from typing import Any
 
@@ -1016,6 +1016,88 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
     print(monitor_contract.dumps_monitor_snapshot(payload))
     if payload["data_status"] != "complete":
         raise SystemExit(1)
+
+
+_BRIEF_REASONS = {
+    "price_stop_1": "触及第一档止损",
+    "price_stop_2": "触及第二档止损",
+    "daily_drop": "日跌幅达3%",
+    "relative_underperformance": "显著跑输行业",
+    "tier_review_due": "Tier到期复核",
+    "alert_review_due": "预警到期复核",
+    "l3_review_due": "L3到期复核",
+    "l3_candidate": "L3待复核",
+    "governance_gate": "门禁未通过",
+    "risk_budget_exceeded": "风险预算超限",
+    "quote_gap": "行情缺失",
+    "data_conflict": "数据冲突",
+}
+
+
+def format_daily_brief(snapshot: dict, extra: list[str], today: str) -> str:
+    """Plain-text post-close brief; empty when no holding has a quote for today."""
+    holdings = snapshot["holdings"]
+    if not any(
+        item["quote"].get("price") and item["quote"].get("quote_date") == today
+        for item in holdings
+    ):
+        return ""
+    lines = [f"📈 A股持仓盘后简报 {snapshot['as_of'][:16].replace('T', ' ')}"]
+    for item in holdings:
+        quote = item["quote"]
+        price = quote.get("price")
+        if not price:
+            lines.append(f"{item['name']} {item['code']} 行情缺失")
+            continue
+        change = quote.get("daily_change_pct")
+        stops = " ".join(
+            f"距{label}{(price - stop) / price:+.1%}"
+            for label, stop in (("止损1", item["stop_loss_15"]), ("止损2", item["stop_loss_20"]))
+            if stop
+        )
+        change_text = f"（{change:+.2f}%）" if change is not None else ""
+        lines.append(f"{item['name']} {item['code']} {price:.2f}{change_text} {stops}")
+    attention = [
+        f"{event['code'] or '组合'} {_BRIEF_REASONS.get(event['reason_code'], event['reason_code'])}："
+        f"{event['detail']}"
+        for event in snapshot["escalations"]
+        if event["reason_code"] != "denominator_missing"
+    ]
+    horizon = (date.fromisoformat(today) + timedelta(days=7)).isoformat()
+    for item in holdings:
+        for condition in (item.get("l3") or {}).get("conditions", []):
+            due = condition.get("next_review")
+            if condition.get("status") != "not_triggered" or due and due <= horizon:
+                attention.append(
+                    f"{item['code']} L3#{condition['id']} {condition.get('status')}，"
+                    f"下次复核 {due or '未设'}"
+                )
+    attention += extra
+    lines.append("需关注：" + ("" if attention else "无触发项"))
+    lines += [f"- {text}" for text in attention]
+    lines.append("仓位与风险预算需当日账户总资产：发资金截图后由 Hermes 计算。")
+    return "\n".join(lines)
+
+
+def cmd_daily_brief(args: list[str]) -> None:
+    """Print a post-close brief for push delivery; prints nothing on non-trading days."""
+    if args:
+        _fail("daily-brief 不接受参数")
+    local = _load_monitor_local_snapshot()
+    codes = list(dict.fromkeys(item["code"] for item in local["holdings"]))
+    quotes, industry_result = commands_holdings.fetch_monitor_price_quotes(codes)
+    snapshot = build_monitor_snapshot(
+        local, quotes, None, industry_result=industry_result, now=domain.cst_now()
+    )
+    _, findings, failures = commands_holdings.scan_unrecorded_dividends()
+    extra = [
+        f"{code} 疑似漏记分红：登记日{item['record_date']} 应收{item['cash']:.2f}元"
+        "（运行 dividend-check 核对）"
+        for code, _name, _shares, item in findings
+    ] + [f"{code} 分红未核对：数据获取失败" for code, _name, _exc in failures]
+    brief = format_daily_brief(snapshot, extra, domain.cst_today())
+    if brief:
+        print(brief)
 
 
 def _validated_rewrite_payload() -> dict:

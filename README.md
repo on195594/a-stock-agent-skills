@@ -70,6 +70,7 @@ a-stock-cache    shared cache, holdings and portfolio-risk CLI
 a-stock-cache score-fundamentals  read-only deterministic A—F fundamental scorer
 a-stock-cache performance-report  file-only account performance, optional read-only ledger check
 a-stock-cache benchmark-report    read-only ledger cash flows vs the same flows into total-return indices
+a-stock-cache daily-brief         read-only post-close push text; silent without same-day quotes
 a-stock-fetch    structured market-data fetch CLI
 a-stock-install  installer entrypoint
 ```

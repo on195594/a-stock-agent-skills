@@ -928,59 +928,71 @@ def _implemented_dividends(code: str) -> list[dict]:
     return rows
 
 
-def cmd_dividend_check(args: list[str]) -> None:
-    """Compare TuShare implemented dividends with ledger events for open holdings."""
+def scan_unrecorded_dividends(
+    code: str | None = None,
+) -> tuple[int, list[tuple], list[tuple]]:
+    """Return (open holdings, (code, name, shares, item) findings, (code, name, error))."""
     with db.read_only_db_session() as conn:
         holdings = conn.execute(
             """SELECT id, code, name, shares FROM holdings
                WHERE exit_date IS NULL AND (? IS NULL OR code=?) ORDER BY code""",
-            (args[0] if args else None, args[0] if args else None),
+            (code, code),
         ).fetchall()
         events = {row[0]: _load_lifecycle_events(conn, row[0]) for row in holdings}
-    if not holdings:
+    today = domain.cst_today()
+    findings, failures = [], []
+    for holding_id, holding_code, name, current_shares in holdings:
+        try:
+            dividends = _implemented_dividends(holding_code)
+        except Exception as exc:  # one provider failure must not hide other codes
+            failures.append((holding_code, name, exc))
+            continue
+        findings += [
+            (holding_code, name, current_shares, item)
+            for item in unrecorded_dividends(events[holding_id], dividends, today)
+        ]
+    return len(holdings), findings, failures
+
+
+def cmd_dividend_check(args: list[str]) -> None:
+    """Compare TuShare implemented dividends with ledger events for open holdings."""
+    count, findings, failures = scan_unrecorded_dividends(args[0] if args else None)
+    if not count:
         print("暂无在仓持仓")
         return
-    today = domain.cst_today()
-    failed = found = 0
-    for holding_id, code, name, current_shares in holdings:
-        try:
-            dividends = _implemented_dividends(code)
-        except Exception as exc:  # one provider failure must not hide other codes
-            failed += 1
-            print(f"{code} {name or ''}：分红数据获取失败，未核对（{exc}）")
-            continue
-        for item in unrecorded_dividends(events[holding_id], dividends, today):
-            found += 1
+    for code, name, exc in failures:
+        print(f"{code} {name or ''}：分红数据获取失败，未核对（{exc}）")
+    for code, name, current_shares, item in findings:
+        print(
+            f"{code} {name or ''}：登记日{item['record_date']} 每股{item['cash_div']:g}元"
+            f" 转增{item['split_ratio']:g} | 登记日账本持股{item['shares']}股 → "
+            f"应收{item['cash']:.2f}元；账本无对应分红记录"
+        )
+        if item["partially_recorded"]:
+            # A full corporate-action would re-record the half already booked.
             print(
-                f"{code} {name or ''}：登记日{item['record_date']} 每股{item['cash_div']:g}元"
-                f" 转增{item['split_ratio']:g} | 登记日账本持股{item['shares']}股 → "
-                f"应收{item['cash']:.2f}元；账本无对应分红记录"
+                "  现金与转增只记了一部分：不给自动记账命令，按券商流水人工核对未记部分"
             )
-            if item["partially_recorded"]:
-                # A full corporate-action would re-record the half already booked.
-                print(
-                    "  现金与转增只记了一部分：不给自动记账命令，按券商流水人工核对未记部分"
-                )
-            elif current_shares == item["shares"]:
-                print(
-                    f"  核对到账后记账：a-stock-cache --confirm-write corporate-action "
-                    f"{code} {item['cash_div']:g} {item['split_ratio']:g} {item['record_date']}"
-                )
-            elif not item["split_ratio"]:
-                # corporate-action uses today's shares; record the entitled total instead.
-                print(
-                    f"  登记日后股数已变（现{current_shares}股）：核对到账后用 "
-                    f"a-stock-cache --confirm-write record-dividend {code} "
-                    f"{item['cash']:.2f} {item['record_date']}；规则参考成本另行人工核对"
-                )
-            else:
-                print(
-                    f"  登记日后股数已变（现{current_shares}股）且含转增："
-                    "不给自动记账命令，按券商流水人工核对"
-                )
-    if not found and not failed:
-        print(f"已核对{len(holdings)}只在仓持仓：未发现未记账分红")
-    if failed:
+        elif current_shares == item["shares"]:
+            print(
+                f"  核对到账后记账：a-stock-cache --confirm-write corporate-action "
+                f"{code} {item['cash_div']:g} {item['split_ratio']:g} {item['record_date']}"
+            )
+        elif not item["split_ratio"]:
+            # corporate-action uses today's shares; record the entitled total instead.
+            print(
+                f"  登记日后股数已变（现{current_shares}股）：核对到账后用 "
+                f"a-stock-cache --confirm-write record-dividend {code} "
+                f"{item['cash']:.2f} {item['record_date']}；规则参考成本另行人工核对"
+            )
+        else:
+            print(
+                f"  登记日后股数已变（现{current_shares}股）且含转增："
+                "不给自动记账命令，按券商流水人工核对"
+            )
+    if not findings and not failures:
+        print(f"已核对{count}只在仓持仓：未发现未记账分红")
+    if failures:
         sys.exit(1)
 
 

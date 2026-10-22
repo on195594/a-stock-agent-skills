@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.21 — 2026-10-22
+
+- 新增只读 `daily-brief`：基于 monitor-v1 快照输出盘后推送文本（现价、日涨跌、距两档止损、升级项、未触发以外或 7 天内到期的 L3、疑似漏记分红）；无当日行情时不输出，供 Hermes no-agent 定时推送。`dividend-check` 的扫描抽为共享函数，输出不变。
+
 ## 0.1.20 — 2026-10-22
 
 - 新增只读 `benchmark-report [--end YYYY-MM-DD]`：把账本全部买卖与分红现金流按同日同额镜像到沪深300全收益、中证红利全收益（TuShare H00300.CSI/H00922.CSI），在共同估值日比较净盈亏与超额；含推断事件时标为近似值。a-stock-lib 0.8.2 指数接口返回 SCHEMA_CHANGED，暂直接调 TuShare（代码内 shortcut 注释）。

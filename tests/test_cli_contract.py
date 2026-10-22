@@ -97,6 +97,7 @@ CLI_ARGUMENT_CASES = {
     "position-return": (["600000"], ["600000", "10"]),
     "dividend-check": ([], ["600000"]),
     "benchmark-report": ([], ["--end", "2026-10-21"]),
+    "daily-brief": ([], []),
     "regulatory-evidence": (["600000"], ["600000"]),
     "portfolio-risk": (
         [],
