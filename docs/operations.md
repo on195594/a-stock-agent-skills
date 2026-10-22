@@ -203,6 +203,33 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Risk denominator and breach attribution — 2026-10-22
+
+After user authorization to commit and install, release 0.1.17
+(`12d485f`, a-stock-lib 0.8.2) is active: the three stable CLI symlinks select
+`~/.local/share/a-stock-agent/runtime/0.1.17-12d485f45ad9/venv/bin`, and the
+all-client installer recreated the same nine canonical Skill links (Claude,
+Codex, Hermes). Rule basis: the
+[2026-10-22 spec](specs/2026-10-22-risk-denominator-and-breach-attribution-spec.md).
+Per the user, no `off_account_strategy_cash` is configured; the denominator stays
+the broker-screenshot total supplied per run. No database, schema, runtime.env,
+cron or service change.
+
+Hermes `skills.external_dirs` was separately authorized and changed from the stale
+`~/.local/share/a-stock-agent/current/skills` (09-30 release view) to this
+repository's `skills/`; backup `~/.hermes/backups/config.yaml.pre-skill-dir-20261022`.
+Hermes's own loader returns the repository SKILL.md and references unchanged.
+
+`bash scripts/check.sh` passed 1368 tests (2 optional skips). The installed CLI
+reports 0.1.17, emits `denominator_components`, refuses an unconfirmed W1 with
+exit 3, and reads production holdings read-only. A pre-open snapshot had no
+same-day quotes, so live attribution values remain unobserved; fresh model
+behavior replay is NOT_RUN.
+
+Rollback requires separate authorization: restore the CLI entries from
+`~/.local/share/a-stock-agent/rollback-1792630276278475080.json` (runtime 0.1.16
+is retained), revert `12d485f` on master and reload sessions.
+
 ### Skill contract publication — 2026-10-21
 
 After user authorization to commit and deploy, the reviewed Skill-only changes
