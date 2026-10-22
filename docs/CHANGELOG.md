@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 新增只读 `dividend-check`：按登记日账本持股找出已实施但未记账的分红，并给出 `corporate-action` 记账命令；`sell-holding` 税费为 0 时提示 0.5‰ 印花税估算。不改投资规则。
+
 ## 0.1.17 — 2026-10-22
 
 - 按[风险分母与超限归因规范](specs/2026-10-22-risk-denominator-and-breach-attribution-spec.md)（用户选择 B+D）：风险政策可选 `off_account_strategy_cash` 计入分母并输出 `denominator_components`；单股止损风险拆出 `stop_risk_unrealized_gain`，超限明细列出本金/浮盈两部分与分母来源。风险公式、上限与判定不变；超限只触发复核，Skill 禁止提出快照未给出的卖出标的或股数。方案 A（止损随浮盈上移）经历史回放否决。

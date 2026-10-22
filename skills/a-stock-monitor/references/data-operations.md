@@ -35,9 +35,16 @@ $CACHE --confirm-write sell-holding <代码> <卖出价> <股数|all> \
 # 记录实际到账的现金分红总额
 $CACHE --confirm-write record-dividend <代码> <现金总额> [YYYY-MM-DD]
 
+# 只读：按登记日账本持股找出已实施但未记账的分红，并给出 corporate-action 命令
+$CACHE dividend-check [代码]
+
 # 用全部买卖现金流、费用税费、分红和剩余市值计算总回报及真实持有天数
 $CACHE position-return <代码> [当前价]
 ```
+
+成本对账或用户提供账户截图时先运行 `dividend-check`：命中项向用户确认是否到账后按其命令记账，
+不让用户自己查分红；数据获取失败的代码报告“未核对”，不推定无分红。卖出时印花税按成交额×0.5‰计入
+`--tax`，不因回单未列明而记 0。
 
 `corporate-action` 已自动生成对应现金分红事件；同一次分红不要再调用
 `record-dividend`，否则会重复计算回报。后者只用于不伴随规则参考成本调整的独立补录。

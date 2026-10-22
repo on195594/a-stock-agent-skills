@@ -95,6 +95,7 @@ CLI_ARGUMENT_CASES = {
     "remove-holding": (["600000"], ["600000"]),
     "update-return": (["600000", "10"], ["600000", "10"]),
     "position-return": (["600000"], ["600000", "10"]),
+    "dividend-check": ([], ["600000"]),
     "portfolio-risk": (
         [],
         [

@@ -15,6 +15,7 @@ from a_stock_agent_runtime import (
     db,
     domain,
     market_quotes,
+    paths,
     risk_budget,
     risk_gates,
     risk_policy,
@@ -25,6 +26,8 @@ from a_stock_agent_runtime.position_ledger import (
     LifecycleReturn,
     calculate_lifecycle_return,
 )
+
+STAMP_TAX_RATE = 0.0005  # A-share seller stamp duty: 0.5‰ of turnover
 
 
 def _single_open_holding(conn: sqlite3.Connection, code: str) -> tuple:
@@ -833,6 +836,110 @@ def cmd_sell_holding(args: list[str], *, single_lot: bool = False) -> None:
         f"  费用:{fees:.2f} 税费:{tax:.2f} | "
         f"本次已实现盈亏:{total_realized:+.2f}元 | 剩余:{residual}股"
     )
+    if tax == 0:
+        stamp_tax = round(exit_price * sell_shares * STAMP_TAX_RATE, 2)
+        print(
+            f"  ⚠️ 税费记为0：A股卖出须缴印花税（成交额×0.5‰≈{stamp_tax:.2f}元）；"
+            "如非免税，请核对回单"
+        )
+
+
+def unrecorded_dividends(
+    events: list[tuple], dividends: list[dict], today: str
+) -> list[dict]:
+    """Implemented dividends the ledger position was entitled to but never recorded.
+
+    ``events`` use the lifecycle query order; ``dividends`` carry ISO
+    ``record_date``/``ex_date``/``pay_date`` and pre-tax ``cash_div``. A ledger
+    dividend dated from the record date through the later of ex/pay date counts
+    as recorded. Entitlement is the position at the close of the record date.
+    """
+    recorded = [day for event_type, day, *_ in events if event_type == "dividend"]
+    missing = []
+    for item in dividends:
+        record = item["record_date"]
+        if not events or record > today or record < events[0][1]:
+            continue
+        held = sum(
+            (-1 if event_type == "sell" else 1) * (shares or 0)
+            for event_type, day, shares, *_ in events
+            if day <= record and event_type in ("buy", "sell", "adjustment")
+        )
+        window_end = max(item["ex_date"] or record, item["pay_date"] or record)
+        if held <= 0 or any(record <= day <= window_end for day in recorded):
+            continue
+        missing.append({**item, "shares": held, "cash": item["cash_div"] * held})
+    return missing
+
+
+def _implemented_dividends(code: str) -> list[dict]:
+    from a_stock_lib.providers import TushareDividendProvider
+
+    result = TushareDividendProvider(token=paths.tushare_token()).fetch_dividend_history(
+        code
+    )
+    frame = result.value
+    if frame is None:
+        raise RuntimeError(f"TuShare 分红数据不可用（{getattr(result, 'status', 'error')}）")
+    rows = []
+    for row in frame.to_dict("records"):
+        cash = row.get("cash_div_tax")
+        if row.get("div_proc") != "实施" or not isinstance(row.get("record_date"), str):
+            continue
+        if not risk_budget.positive_number(cash) and not risk_budget.positive_number(
+            row.get("stk_div")
+        ):
+            continue
+        rows.append(
+            {
+                "record_date": row["record_date"],
+                "ex_date": row.get("ex_date") if isinstance(row.get("ex_date"), str) else None,
+                "pay_date": row.get("pay_date") if isinstance(row.get("pay_date"), str) else None,
+                "cash_div": float(cash) if risk_budget.positive_number(cash) else 0.0,
+                "split_ratio": float(row["stk_div"])
+                if risk_budget.positive_number(row.get("stk_div"))
+                else 0.0,
+            }
+        )
+    return rows
+
+
+def cmd_dividend_check(args: list[str]) -> None:
+    """Compare TuShare implemented dividends with ledger events for open holdings."""
+    with db.read_only_db_session() as conn:
+        holdings = conn.execute(
+            """SELECT id, code, name FROM holdings
+               WHERE exit_date IS NULL AND (? IS NULL OR code=?) ORDER BY code""",
+            (args[0] if args else None, args[0] if args else None),
+        ).fetchall()
+        events = {row[0]: _load_lifecycle_events(conn, row[0]) for row in holdings}
+    if not holdings:
+        print("暂无在仓持仓")
+        return
+    today = domain.cst_today()
+    failed = found = 0
+    for holding_id, code, name in holdings:
+        try:
+            dividends = _implemented_dividends(code)
+        except Exception as exc:  # one provider failure must not hide other codes
+            failed += 1
+            print(f"{code} {name or ''}：分红数据获取失败，未核对（{exc}）")
+            continue
+        for item in unrecorded_dividends(events[holding_id], dividends, today):
+            found += 1
+            print(
+                f"{code} {name or ''}：登记日{item['record_date']} 每股{item['cash_div']:g}元"
+                f" 转增{item['split_ratio']:g} | 登记日账本持股{item['shares']}股 → "
+                f"应收{item['cash']:.2f}元；账本无对应分红记录"
+            )
+            print(
+                f"  核对到账后记账：a-stock-cache --confirm-write corporate-action "
+                f"{code} {item['cash_div']:g} {item['split_ratio']:g} {item['record_date']}"
+            )
+    if not found and not failed:
+        print(f"已核对{len(holdings)}只在仓持仓：未发现未记账分红")
+    if failed:
+        sys.exit(1)
 
 
 def cmd_record_dividend(args: list[str]) -> None:

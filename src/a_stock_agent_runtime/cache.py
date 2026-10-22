@@ -56,6 +56,7 @@ COMMANDS = {
     "remove-holding": commands_holdings.cmd_remove_holding,
     "update-return": commands_holdings.cmd_update_return,
     "position-return": commands_holdings.cmd_position_return,
+    "dividend-check": commands_holdings.cmd_dividend_check,
     "portfolio-risk": commands_holdings.cmd_portfolio_risk,
     "check-holdings": commands_holdings.cmd_check_holdings,
     "monitor-snapshot": commands_monitor.cmd_monitor_snapshot,
@@ -90,7 +91,14 @@ COMMAND_CLASSIFICATION = {
         "R0",
     ),
     **dict.fromkeys(
-        ("check", "check-holdings", "portfolio-risk", "monitor-snapshot"), "R1"
+        (
+            "check",
+            "check-holdings",
+            "portfolio-risk",
+            "monitor-snapshot",
+            "dividend-check",
+        ),
+        "R1",
     ),
     **dict.fromkeys(
         (
@@ -197,6 +205,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "remove-holding": (("代码", None),),
     "update-return": (("代码", None), ("回报率", None)),
     "position-return": (("代码", None), ("当前价", "?")),
+    "dividend-check": (("代码", "?"),),
     "portfolio-risk": (),
     "check-holdings": (),
     "monitor-snapshot": (),
