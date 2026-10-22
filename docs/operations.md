@@ -203,6 +203,22 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Ledger benchmark report and monthly Hermes job — 2026-10-22
+
+After user authorization, release 0.1.20 (`e122078`) is active (CLI symlinks select
+`runtime/0.1.20-e12207826d46/venv/bin`; rollback manifest
+`~/.local/share/a-stock-agent/rollback-1792633880547816440.json`, 0.1.19 retained). It adds
+read-only `benchmark-report`. The installed CLI reproduced the scratch result
+(ledger +4,874 CNY; excess +16,886 vs CSI 300 TR, +2,529 vs CSI Dividend TR, 2026-05-27
+to 2026-10-21).
+
+Separately authorized: Hermes no-agent cron job `a-stock-benchmark-monthly`
+(`93c4f5a4d0fc`, `0 9 1 * *`, Telegram delivery) runs
+`~/.hermes/scripts/cron/a-stock-benchmark-monthly.sh`; no model call. Backup
+`~/.hermes/cron/jobs.json.bak.20261022-pre-benchmark`. Remove with
+`hermes cron remove 93c4f5a4d0fc`. The script was run locally without delivery; the
+first scheduled delivery (2026-11-01) is not yet observed.
+
 ### Codex review fixes — 2026-10-22
 
 After user authorization to commit and install, release 0.1.19 (`b01b38c`) is
