@@ -338,6 +338,13 @@ def _industry_context(
     }
 
 
+def _denominator_source(portfolio_value, denominator_evidence) -> str | None:
+    components = (denominator_evidence or {}).get("denominator_components") or {}
+    if portfolio_value is None:
+        return None
+    return "cli+policy_file" if components.get("off_account_strategy_cash") else "cli"
+
+
 def build_monitor_snapshot(
     local: dict[str, Any],
     quotes: dict[str, commands_holdings.PriceQuote | None],
@@ -447,6 +454,7 @@ def build_monitor_snapshot(
             current_price,
             holding["stop_loss_20"] if required_fields["stop_loss_20"] else None,
             portfolio_value,
+            holding["reference_cost"],
         )
         if risk["market_value"] is not None:
             valued += 1
@@ -783,9 +791,11 @@ def build_monitor_snapshot(
         else "exact"
     )
     quote_complete = priced == active_count
+    denominator_source = _denominator_source(portfolio_value, denominator_evidence)
     budget = risk_budget.assess(
         output_holdings, portfolio_value, limits,
         account_scope=denominator_evidence.get("account_scope") if denominator_evidence else None,
+        denominator_source=denominator_source or "cli",
     )
     for breach in budget.pop("breaches"):
         _add_escalation(
@@ -877,7 +887,7 @@ def build_monitor_snapshot(
             },
             "active_holdings": active_count,
             "closed_holdings": local["closed_count"],
-            "denominator_source": "cli" if portfolio_value is not None else None,
+            "denominator_source": denominator_source,
             "owners": {
                 "holdings_alerts_l3_tier_gates": "read_only_db_session",
                 "quotes": "fetch_current_price_quotes",
@@ -945,7 +955,7 @@ def unavailable_monitor_snapshot(
             "sources": {"local_state": "unavailable", "quotes": [], "quote_as_of": []},
             "active_holdings": None,
             "closed_holdings": None,
-            "denominator_source": "cli" if portfolio_value is not None else None,
+            "denominator_source": _denominator_source(portfolio_value, denominator_evidence),
             "owners": {
                 "holdings_alerts_l3_tier_gates": "read_only_db_session",
                 "quotes": "fetch_current_price_quotes",

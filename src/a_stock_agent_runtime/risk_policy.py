@@ -20,6 +20,7 @@ class RiskParameters:
     risk_policy: dict[str, Any]
     account_scope: str | None = None
     portfolio_value_as_of: str | None = None
+    off_account_strategy_cash: float = 0.0
 
     def denominator_evidence(self) -> dict[str, Any]:
         has_value = self.portfolio_value is not None
@@ -33,7 +34,18 @@ class RiskParameters:
             if as_of_known
             else "unknown",
             "denominator_requires_review": not (scope_known and as_of_known),
+            "denominator_components": {
+                "account_value": self.portfolio_value - self.off_account_strategy_cash,
+                "off_account_strategy_cash": self.off_account_strategy_cash,
+            }
+            if has_value
+            else None,
         }
+
+    def denominator_source(self) -> str | None:
+        if self.portfolio_value is None:
+            return None
+        return "cli+policy_file" if self.off_account_strategy_cash else "cli"
 
 
 def _nonempty(value: object, field: str) -> str:
@@ -126,6 +138,13 @@ def _load_policy(path: str | None, scope: str | None, now: datetime) -> dict | N
         value["drawdown_observation_target_pct"] = _limit(
             value["drawdown_observation_target_pct"], "drawdown_observation_target_pct"
         )
+    if "off_account_strategy_cash" in value:
+        cash = value["off_account_strategy_cash"]
+        if not risk_budget.finite_number(cash) or cash < 0:
+            raise RiskPolicyError(
+                "off_account_strategy_cash must be a finite number >= 0"
+            )
+        value["off_account_strategy_cash"] = float(cash)
     return value
 
 
@@ -189,6 +208,11 @@ def resolve_risk_parameters(
             effective["field_sources"]["drawdown_observation_target_pct"] = (
                 "policy_file"
             )
+        if "off_account_strategy_cash" in file_policy:
+            effective["off_account_strategy_cash"] = file_policy[
+                "off_account_strategy_cash"
+            ]
+            effective["field_sources"]["off_account_strategy_cash"] = "policy_file"
         for field, override in (
             ("max_position_risk_pct", max_position_risk_pct),
             ("max_portfolio_risk_pct", max_portfolio_risk_pct),
@@ -197,7 +221,14 @@ def resolve_risk_parameters(
                 effective[field] = float(override)
                 effective["field_sources"][field] = "cli"
                 effective["source"] = "cli_override"
-    return RiskParameters(portfolio_value, effective, scope, as_of)
+    # Strategy cash held outside the broker account is still at the strategy's
+    # disposal, so it belongs in the denominator; it never creates one by itself.
+    off_account = effective.get("off_account_strategy_cash", 0.0)
+    if portfolio_value is None:
+        off_account = 0.0
+    else:
+        portfolio_value += off_account
+    return RiskParameters(portfolio_value, effective, scope, as_of, off_account)
 
 
 def parse_risk_args(args: list[str] | None) -> RiskParameters:

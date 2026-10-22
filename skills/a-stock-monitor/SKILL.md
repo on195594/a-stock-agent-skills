@@ -45,7 +45,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 | 账户差异、已成交补账或状态更新 | `references/data-operations.md` |
 | `risk_budget_exceeded`、组合再平衡或任何加仓 | `references/portfolio-risk.md` |
 
-`risk_budget_exceeded` 的 `code=null` 表示组合级只读复核：仅用本轮汇总、持仓和 `data_gaps`，不重查价、不心算补全风险、不调用 W1。兼容默认/显式覆盖不等于个人预算，禁止改参数绕过超限；超预算不能 clean/no_action，已有合法交易候选不降级。
+`risk_budget_exceeded` 的 `code=null` 表示组合级只读复核：仅用本轮汇总、持仓和 `data_gaps`，不重查价、不心算补全风险、不调用 W1。兼容默认/显式覆盖不等于个人预算，禁止改参数绕过超限；超预算不能 clean/no_action，已有合法交易候选不降级。超限原因只引用明细中的 principal/unrealized_gain 与 `denominator_components`；快照未给出的卖出标的或股数不得提出。
 
 动作冲突只服从 `references/decision-table.json` 及 runtime 输出。阈值、优先级、状态机、整手、组合风险与可执行性由 runtime/library 判定；Skill 不复算或从自然语言推断。
 

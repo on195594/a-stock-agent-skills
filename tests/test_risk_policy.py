@@ -67,6 +67,10 @@ def test_absent_policy_does_not_create_files_and_retains_defaults(tmp_path):
         "denominator_scope_status": "unknown",
         "denominator_freshness_status": "unknown",
         "denominator_requires_review": True,
+        "denominator_components": {
+            "account_value": 100000.0,
+            "off_account_strategy_cash": 0.0,
+        },
     }
     assert sorted(tmp_path.rglob("*")) == before
     assert "drawdown_observation_target_pct" not in result.risk_policy
@@ -362,3 +366,84 @@ def test_policy_error_precedes_database_network_and_has_no_report(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "风险参数不可用" in captured.err
+
+
+def test_off_account_strategy_cash_extends_cli_denominator_in_both_clis(
+    tmp_path, isolated_cache_database, monkeypatch, capsys
+):
+    _seed_holding(isolated_cache_database, "600000")
+    mock_price_quotes(monkeypatch, _quotes)
+    path = _file(tmp_path / "policy.json", _policy(off_account_strategy_cash=150000))
+    args = [
+        "--portfolio-value", "100000", "--policy-file", path,
+        "--account-scope", "fixture-account",
+    ]
+    assert cache.main(["monitor-snapshot", *args, "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    account = payload["account"]
+    # 2000 CNY at risk: 2% of the broker account alone, 0.8% of strategy capital.
+    assert account["portfolio_value"] == 250000
+    assert account["denominator_components"] == {
+        "account_value": 100000.0,
+        "off_account_strategy_cash": 150000.0,
+    }
+    assert account["risk_budget_status"] == "within_budget"
+    assert account["risk_policy"]["field_sources"]["off_account_strategy_cash"] == (
+        "policy_file"
+    )
+    assert payload["manifest"]["denominator_source"] == "cli+policy_file"
+    assert payload["holdings"][0]["stop_risk_unrealized_gain"] == 0
+    assert cache.main(["portfolio-risk", *args]) == 0
+    text = capsys.readouterr().out
+    assert "账户外策略现金 150000.00元" in text and "已知超预算" not in text
+
+
+def test_off_account_strategy_cash_never_creates_a_denominator(tmp_path):
+    path = _file(tmp_path / "policy.json", _policy(off_account_strategy_cash=5000))
+    result = _resolve(policy_file=path, account_scope="fixture-account")
+    assert result.portfolio_value is None
+    assert result.denominator_evidence()["denominator_components"] is None
+    assert result.denominator_source() is None
+
+
+@pytest.mark.parametrize("bad", [-1, True, "1000", None])
+def test_invalid_off_account_strategy_cash_fails_closed(bad, tmp_path):
+    path = _file(tmp_path / "policy.json", _policy(off_account_strategy_cash=bad))
+    with pytest.raises(risk_policy.RiskPolicyError):
+        _resolve(portfolio_value=1, policy_file=path, account_scope="fixture-account")
+
+
+@pytest.mark.parametrize(
+    ("price", "reference_cost", "gain"),
+    [
+        (29.41, 25.2014, 800 * (29.41 - 25.2014)),  # 600900 on 2026-10-15
+        (24.0, 25.2014, 0.0),  # below reference cost: all principal
+        (29.41, 19.0, 800 * (29.41 - 20.665)),  # cost below stop: all gain
+        (29.41, None, None),  # unknown cost: attribution unknown
+    ],
+)
+def test_stop_risk_splits_into_principal_and_unrealized_gain(
+    price, reference_cost, gain
+):
+    risk = commands_holdings.calculate_position_risk(
+        800, price, 20.665, 75911.02, reference_cost
+    )
+    assert risk["stop_risk"] == pytest.approx(800 * (price - 20.665))
+    assert risk["stop_risk_unrealized_gain"] == (
+        None if gain is None else pytest.approx(gain)
+    )
+
+
+def test_breach_detail_reports_drivers_and_unknown_attribution():
+    limits = risk_budget.policy(6, 18)
+    positions = [
+        {"code": "600900", "stop_risk": 6996.0, "stop_risk_unrealized_gain": 3366.88},
+        {"code": "603606", "stop_risk": 8000.0, "stop_risk_unrealized_gain": None},
+    ]
+    breaches = risk_budget.assess(
+        positions, 75911.02, limits, denominator_source="cli+policy_file"
+    )["breaches"]
+    detail = {item["code"]: item["detail"] for item in breaches}
+    assert "principal=3629.12 CNY; unrealized_gain=3366.88 CNY" in detail["600900"]
+    assert "denominator_source=cli+policy_file" in detail["600900"]
+    assert "principal=unknown; unrealized_gain=unknown" in detail[None]

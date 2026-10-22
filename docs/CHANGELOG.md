@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.17 — 2026-10-22
+
+- 按[风险分母与超限归因规范](specs/2026-10-22-risk-denominator-and-breach-attribution-spec.md)（用户选择 B+D）：风险政策可选 `off_account_strategy_cash` 计入分母并输出 `denominator_components`；单股止损风险拆出 `stop_risk_unrealized_gain`，超限明细列出本金/浮盈两部分与分母来源。风险公式、上限与判定不变；超限只触发复核，Skill 禁止提出快照未给出的卖出标的或股数。方案 A（止损随浮盈上移）经历史回放否决。
+
 ## 0.1.13 — 2026-09-18 (runtime deployed)
 
 - 13:17 CST：用户明确授权上线后，Tracker S2 `7516535` / lib 0.8.0 已作为独立 checkout 部署；299 tests 与全部项目门禁通过，只读报告 smoke 按 pending manifest 返回证据不足。09:36 的 Agent `ACTIVE_RELEASE.json` 是不可变的 runtime/Skill 快照，其 `tracker: NOT_DEPLOYED` 不代表 13:17 后的 Tracker 现场。cron、schema、生产数据库、通知与实验登记均未改动；S4 继续延后。

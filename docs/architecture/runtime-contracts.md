@@ -70,7 +70,11 @@ not confirmed personal policy. Comparisons are strict `>` before formatting.
 
 A budget escalation is a review candidate; code=null means portfolio scope.
 There is at most one budget escalation per scope/code. Details identify amount,
-ratio, limit, denominator and source/scope. Proven breaches cannot coexist with
+its principal/unrealized-gain split (or unknown), ratio, limit, denominator and
+source/scope. `account.denominator_components` splits the denominator into the
+CLI account value and policy-file `off_account_strategy_cash`;
+`manifest.denominator_source` is `cli` or `cli+policy_file`, and
+`holdings[].stop_risk_unrealized_gain` is the gain above `reference_cost`. Proven breaches cannot coexist with
 cleared/no_action/clean. Existing valid trade candidates retain precedence;
 stale/unavailable/conflicted data remains blocked. No alert is persisted.
 Clean additionally requires complete risk, quotes, valuation and denominator

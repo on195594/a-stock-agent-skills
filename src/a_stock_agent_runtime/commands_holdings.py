@@ -1470,6 +1470,7 @@ def calculate_position_risk(
     current_price: float | None,
     stop_loss_20: float | None,
     portfolio_value: float | None,
+    reference_cost: float | None = None,
 ) -> dict[str, float | None]:
     """Validate inputs once, preserving the existing second-stop risk formula."""
     shares = shares if risk_budget.valid_shares(shares) else None
@@ -1493,6 +1494,13 @@ def calculate_position_risk(
     if not risk_budget.finite_number(market_value):
         market_value = None
         stop_risk = None
+    # The part of stop_risk above the rule reference cost is unrealized gain that
+    # would be given back; the rest is principal between that cost and the stop.
+    unrealized_gain = (
+        max(current_price - max(reference_cost, stop_loss_20), 0) * shares
+        if stop_risk is not None and risk_budget.positive_number(reference_cost)
+        else None
+    )
     result = {
         "market_value": market_value,
         "portfolio_weight_pct": (
@@ -1506,6 +1514,7 @@ def calculate_position_risk(
             if stop_risk is not None and portfolio_value is not None
             else None
         ),
+        "stop_risk_unrealized_gain": unrealized_gain,
     }
     return {
         key: value if risk_budget.finite_number(value) else None
@@ -1530,7 +1539,8 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         with db.read_only_db_session() as conn:
             holdings = conn.execute(
                 """SELECT h.code, h.name, h.cost_price, h.shares, h.buy_date, h.buy_score,
-                          f.industry, h.framework, h.framework_confident, h.stop_loss_20
+                          f.industry, h.framework, h.framework_confident, h.stop_loss_20,
+                          h.reference_cost
                    FROM holdings h LEFT JOIN stock_fundamentals f ON h.code = f.code
                    WHERE h.exit_date IS NULL ORDER BY h.buy_date DESC"""
             ).fetchall()
@@ -1549,6 +1559,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
     quotes = market_quotes.fetch_current_price_quotes(codes)
     today_str = domain.cst_today()
     valued_rows = []
+    reference_costs: dict[str, float | None] = {}
     for (
         code,
         name,
@@ -1560,6 +1571,7 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         holding_framework,
         framework_confident,
         sl20,
+        reference_cost,
     ) in holdings:
         if holding_framework:
             fw, confident = holding_framework, bool(framework_confident)
@@ -1573,16 +1585,23 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
         valued_rows.append(
             (code, name, cost, shares, score, fw, confident, sl20, curr, market_value)
         )
+        reference_costs[code] = reference_cost
 
     risks = [
         {
             "code": row[0],
-            **calculate_position_risk(row[3], row[8], row[7], portfolio_value),
+            **calculate_position_risk(
+                row[3], row[8], row[7], portfolio_value, reference_costs[row[0]]
+            ),
         }
         for row in valued_rows
     ]
     budget = risk_budget.assess(
-        risks, portfolio_value, limits, account_scope=parameters.account_scope
+        risks,
+        portfolio_value,
+        limits,
+        account_scope=parameters.account_scope,
+        denominator_source=parameters.denominator_source() or "cli",
     )
     stock_market_value = sum(row[9] for row in valued_rows if row[9] is not None)
     valued_count = sum(row[9] is not None for row in valued_rows)
@@ -1597,6 +1616,12 @@ def cmd_portfolio_risk(args: list[str] | None = None) -> None:
 
     print(f"  风险分母：{denominator_label} = {portfolio_value:.2f}元")
     evidence = parameters.denominator_evidence()
+    if parameters.off_account_strategy_cash:
+        components = evidence["denominator_components"]
+        print(
+            f"  分母构成：账户资产 {components['account_value']:.2f}元 + "
+            f"政策文件确认的账户外策略现金 {components['off_account_strategy_cash']:.2f}元"
+        )
     print(
         f"  分母估值时间：{evidence['portfolio_value_as_of'] or 'unknown'}；"
         f"账户范围：{evidence['account_scope'] or 'unknown'}；"

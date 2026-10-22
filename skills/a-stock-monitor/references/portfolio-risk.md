@@ -52,9 +52,14 @@ runtime.env 的 `A_STOCK_RISK_POLICY_FILE` → 配置目录 `risk-policy.json`�
     "confirmed_at": "YYYY-MM-DDTHH:MM:SS+08:00",
     "confirmation_ref": "user-explicit-confirmation",
     "max_position_risk_pct": 5.0,
-    "max_portfolio_risk_pct": 18.0
+    "max_portfolio_risk_pct": 18.0,
+    "off_account_strategy_cash": 0
   }
   ```
+- 可选 `off_account_strategy_cash`：仍归本策略、但在券商账户外的现金，只能由用户确认写入。
+  有 `--portfolio-value` 时分母 = 账户资产 + 该值，输出 `denominator_components`；资金转回账户时须同步改文件，避免重复计入。
+- 超限明细的 `principal`/`unrealized_gain` 是第二档止损风险中本金与浮盈回吐的拆分；报告超限原因时只引用这两项和
+  `denominator_components`。超限只触发复核：快照未给出的卖出标的、顺序或股数不得提出，也不得仅因浮盈占比高建议先卖盈利仓。
 - 冻结建议不阻断用户确认的已成交事实记账，仍需原 W1/具体动作授权；记录后报告异常，禁止拒记或改写真实成交；
 - 已跌破第二档的持仓单独标为“已破线”，不能因剩余风险为0显示正常。
 

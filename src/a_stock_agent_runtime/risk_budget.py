@@ -67,9 +67,13 @@ def assess(
     limits: dict,
     *,
     account_scope: str | None = None,
+    denominator_source: str = "cli",
 ) -> dict:
     """Keep proven breaches even when the complete risk total is unknown."""
-    known = [item["stop_risk"] for item in positions if item["stop_risk"] is not None]
+    known_items = [item for item in positions if item["stop_risk"] is not None]
+    known = [item["stop_risk"] for item in known_items]
+    known_gains = [item.get("stop_risk_unrealized_gain") for item in known_items]
+    known_gain = None if None in known_gains else sum(known_gains)
     lower_bound = sum(known)
     if not finite_number(lower_bound):
         lower_bound = None
@@ -91,9 +95,11 @@ def assess(
                     _breach(
                         item["code"],
                         amount,
+                        item.get("stop_risk_unrealized_gain"),
                         portfolio_value,
                         limits["max_position_risk_pct"],
                         account_scope,
+                        denominator_source,
                     )
                 )
         if (
@@ -104,9 +110,11 @@ def assess(
                 _breach(
                     None,
                     lower_bound,
+                    known_gain,
                     portfolio_value,
                     limits["max_portfolio_risk_pct"],
                     account_scope,
+                    denominator_source,
                 )
             )
     return {
@@ -120,14 +128,24 @@ def assess(
     }
 
 
-def _breach(code, amount, denominator, limit, account_scope) -> dict:
+def _breach(
+    code, amount, gain, denominator, limit, account_scope, denominator_source
+) -> dict:
     scope = "position" if code is not None else "portfolio"
+    # Attribution: how much of the at-risk amount is unrealized gain above the
+    # rule reference cost versus principal between that cost and the stop.
+    drivers = (
+        f"principal={amount - gain:.6g} CNY; unrealized_gain={gain:.6g} CNY; "
+        if gain is not None
+        else "principal=unknown; unrealized_gain=unknown; "
+    )
     return {
         "code": code,
         "detail": (
-            f"scope={scope}; amount={amount:.6g} CNY; "
+            f"scope={scope}; amount={amount:.6g} CNY; {drivers}"
             f"ratio={amount / denominator * 100:.6g}%; limit={limit:.6g}%; "
-            f"denominator={denominator:.6g} CNY; denominator_source=cli; "
+            f"denominator={denominator:.6g} CNY; "
+            f"denominator_source={denominator_source}; "
             f"account_scope={account_scope or 'unknown'}"
         ),
     }
