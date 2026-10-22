@@ -203,6 +203,25 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Daily brief job and Hermes router slimming — 2026-10-22
+
+Per the user's request to proceed with B and C, release 0.1.21 (`6ac1663`) is active
+(rollback manifest `~/.local/share/a-stock-agent/rollback-1792634285856578400.json`,
+0.1.20 retained) and adds read-only `daily-brief`. Hermes no-agent job
+`a-stock-daily-brief` (`7ab0ded3121c`, `35 15 * * 1-5`, Telegram) runs
+`~/.hermes/scripts/cron/a-stock-daily-brief.sh`; it is silent without same-day quotes.
+Backup `~/.hermes/cron/jobs.json.bak.20261022-pre-daily-brief`; remove with
+`hermes cron remove 7ab0ded3121c`. A local run printed the expected brief; the first
+delivery (2026-10-22 15:35) is not yet observed.
+
+Hermes's private router `investment-decision-and-account-workflows` now only routes
+A-share work to the canonical Skills: its conflicting A-share rules (screenshot
+inference ban, per-write external backup, tracker DB, parallel holding alerts) and the
+three legacy watchlist/notification references were removed. Backup
+`~/.hermes/backups/investment-decision-and-account-workflows.bak-20261022`; Hermes's
+loader reads the new file and its skill validator passes. The pre-existing user alert
+job `华东医药000963低于27.8预警` (`dd0a642416df`) was left unchanged.
+
 ### Ledger benchmark report and monthly Hermes job — 2026-10-22
 
 After user authorization, release 0.1.20 (`e122078`) is active (CLI symlinks select
