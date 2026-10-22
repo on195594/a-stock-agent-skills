@@ -2023,10 +2023,16 @@ def _fetch_bond_yield(null_reasons: dict) -> dict | None:
 def _cache_gate_defaults(
     code: str, results: dict, data_period: str, industry: str
 ) -> None:
-    """Persist explicit gates; P0 stays incomplete until official evidence is supplied."""
+    """Persist explicit gates; P0 stays incomplete until official evidence is supplied.
+
+    Supplied P0 evidence for the same annual period survives a refresh.
+    """
     as_of = results.get("_quote_as_of") or data_period
     unavailable = ["unavailable"]
     regulatory = results.get("regulatory_gate")
+    if not isinstance(regulatory, dict):
+        previous = (store.get_cached_fundamentals_data(code) or {}).get("regulatory_gate")
+        regulatory = risk_gates.carry_forward_regulatory_gate(previous, code, data_period)
     if not isinstance(regulatory, dict):
         regulatory = risk_gates.regulatory_gate(
             {

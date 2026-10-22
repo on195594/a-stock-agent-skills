@@ -81,6 +81,6 @@ JSON数据结构示例：
 
 ## P0-P2 JSON 门合同
 
-新版 payload 可包含 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`。每个门必须保留 `status`、`action_eligible`、稳定 `reason_code`、`sources`、`as_of` 和适用报告期；P0 还必须保留交易所/板块、`rule_version` 与四个子门。`company-filed statement mirror` 仅可满足 P1/P2 数值来源门，不能充当 P0 的交易所、证监会或公司正式文件。旧缓存没有门字段时按 `legacy_field_absent` 处理为不具备买入资格，读取不得回填。`check` 额外输出只读 `_decision_meta`；`not_evaluated` 表示尚未运行 scorer，`data_completeness` 必须把普通字段与完整 gate 分开计数。
+新版 payload 可包含 `regulatory_gate`、`roe_structural_gate`、`cash_flow_gate`。每个门必须保留 `status`、`action_eligible`、稳定 `reason_code`、`sources`、`as_of` 和适用报告期；P0 还必须保留交易所/板块、`rule_version` 与四个子门。`company-filed statement mirror` 仅可满足 P1/P2 数值来源门，不能充当 P0 的交易所、证监会或公司正式文件。旧缓存没有门字段时按 `legacy_field_absent` 处理为不具备买入资格，读取不得回填。经 `regulatory-evidence` 写入的 P0 证据在同一年报期内跨 `fetch` 刷新沿用。`check` 额外输出只读 `_decision_meta`；`not_evaluated` 表示尚未运行 scorer，`data_completeness` 必须把普通字段与完整 gate 分开计数。
 
 P1 使用同口径最新 TTM ROE 与最近五个完整年度均值，负 ROE无条件取消历史估值动作资格，保留率严格低于0.75同样处理；P1 不得清空已完整形成的基本面 subtotal/配置评级，只令 `timing_status=incomplete`。P2 只使用合并现金流量表 CFO 与“购建固定资产、无形资产和其他长期资产支付的现金”计算 `FCF=CFO-Capex`；财报 as-of 与行情 quote as-of 分别保留，FCF Yield 使用 quote as-of 的总市值，不要求财报公告时点等于行情时点。金融框架可经正式依据标记 `not_applicable`，C/D 的 Capex>CFO 只能进入有证据的周期专项复核。

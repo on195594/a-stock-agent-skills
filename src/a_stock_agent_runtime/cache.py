@@ -28,6 +28,7 @@ COMMANDS = {
     "set-score": commands_analysis.cmd_set_score,
     "set-score-breakdown": commands_analysis.cmd_set_score_breakdown,
     "score-fundamentals": commands_analysis.cmd_score_fundamentals,
+    "regulatory-evidence": commands_analysis.cmd_regulatory_evidence,
     "performance-report": performance.cmd_performance_report,
     "set-flag": commands_monitor.cmd_set_flag,
     "clear-flag": commands_monitor.cmd_clear_flag,
@@ -104,6 +105,7 @@ COMMAND_CLASSIFICATION = {
         (
             "set",
             "set-analysis",
+            "regulatory-evidence",
             "set-score",
             "set-score-breakdown",
             "set-flag",
@@ -216,6 +218,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "checklist": (("代码", None), ("框架", None)),
     "score-fundamentals": (("代码", None), ("框架", None), ("评分输入JSONv1", None)),
     "performance-report": (),
+    "regulatory-evidence": (("代码", None),),
 }
 
 _CLI_VALUE_OPTIONS = {

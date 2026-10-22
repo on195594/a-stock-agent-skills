@@ -243,12 +243,13 @@ def _listing_gate(
     )
     if provided is not None:
         return provided
+    # An explicit JSON null is missing evidence, not the "none" (no-risk) token.
     state = (
-        str(facts.get("listing_status", facts.get("official_status", "")))
+        str(facts.get("listing_status") or facts.get("official_status") or "")
         .strip()
         .lower()
     )
-    risk = str(facts.get("risk_type", "")).strip().lower()
+    risk = str(facts.get("risk_type") or "").strip().lower()
     if state in {
         "st",
         "*st",
@@ -360,7 +361,7 @@ def _investigation_gate(
     )
     if provided is not None:
         return provided
-    status = str(facts.get("investigation_status", "")).strip().lower()
+    status = str(facts.get("investigation_status") or "").strip().lower()
     company = facts.get("company_investigated")
     related = facts.get("related_person_investigated")
     financial_impact = facts.get("affects_financial_truth") or facts.get(
@@ -575,6 +576,45 @@ def regulatory_gate(
         if status == "blocked"
         else "regulatory_incomplete",
     }
+
+
+REGULATORY_CHECKS = ("listing_risk", "audit_opinion", "investigation", "dividend_compliance")
+
+
+def carry_forward_regulatory_gate(
+    previous: Any, code: str, annual_period: str | None, *, today: date | None = None
+) -> dict[str, Any] | None:
+    """Re-evaluate supplied P0 evidence for the same annual report period.
+
+    Per the 2026-10-22 spec, clear/blocked evidence stays valid until a newer
+    annual report period appears; the current rule set and its freshness are
+    re-applied, so stale rules or non-official sources still fail closed.
+    """
+    if not isinstance(previous, Mapping) or previous.get("status") not in {
+        "clear",
+        "blocked",
+    }:
+        return None
+    checks = previous.get("checks")
+    if not annual_period or not isinstance(checks, Mapping):
+        return None
+    if any(
+        not isinstance(checks.get(name), Mapping)
+        or checks[name].get("report_period") != annual_period
+        for name in REGULATORY_CHECKS
+    ):
+        return None
+    return regulatory_gate(
+        {
+            "code": code,
+            "exchange": previous.get("exchange"),
+            "board": previous.get("board"),
+            "as_of": previous.get("as_of"),
+            "report_period": annual_period,
+            **{name: dict(checks[name]) for name in REGULATORY_CHECKS},
+        },
+        today=today,
+    )
 
 
 def _period_values(payload: Mapping[str, Any], key: str) -> list[float] | None:

@@ -358,6 +358,21 @@ def add_market_indicators(data: dict) -> dict:
     return result
 
 
+def get_cached_fundamentals_data(code: str) -> dict | None:
+    """Raw cached fundamentals JSON regardless of TTL, or None when absent."""
+    with db.db_session() as conn:
+        row = conn.execute(
+            "SELECT data FROM stock_fundamentals WHERE code=?", (code,)
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        data = json.loads(row[0])
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def get_fundamentals(code: str) -> dict | None:
     """获取基本面缓存。未命中或过期返回 None；命中返回含 _cache_meta 的 dict。"""
     with db.db_session() as conn:

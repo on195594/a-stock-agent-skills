@@ -298,6 +298,65 @@ def cmd_set(args: list[str]) -> None:
     print(f"已缓存 {name}({code}) 行业:{industry} TTL:{ttl_hours}h")
 
 
+def cmd_regulatory_evidence(args: list[str]) -> None:
+    """Merge official P0 evidence from stdin into the cached fundamentals for one code."""
+    if len(args) != 1:
+        print("错误：需要参数 <代码>；从 stdin 读取 P0 证据 JSON", file=sys.stderr)
+        sys.exit(1)
+    code = args[0]
+    try:
+        facts = json.loads(sys.stdin.read())
+    except json.JSONDecodeError as exc:
+        print(f"JSON解析错误: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(facts, dict):
+        print("错误：P0 证据必须是 JSON 对象", file=sys.stderr)
+        sys.exit(1)
+    with db.db_session() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT data FROM stock_fundamentals WHERE code=?", (code,)
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            print(f"错误：{code} 无基本面缓存，先运行 a-stock-fetch fetch {code}", file=sys.stderr)
+            sys.exit(1)
+        data = json.loads(row[0])
+        period = data.get("data_period")
+        if facts.get("report_period") != period:
+            conn.rollback()
+            print(f"错误：P0 证据 report_period 须为当前年报期 {period}", file=sys.stderr)
+            sys.exit(1)
+        gate = risk_gates.regulatory_gate({**facts, "code": code})
+        data["regulatory_gate"] = gate
+        null_reasons = data.setdefault("null_reasons", {})
+        if gate["status"] == "clear":
+            null_reasons.pop("regulatory_gate", None)
+        else:
+            null_reasons["regulatory_gate"] = gate["reason_code"]
+        data.setdefault("field_provenance", {})["regulatory_gate"] = {
+            "source": "computed",
+            "as_of": gate["as_of"] or period,
+            "status": "ok" if gate["status"] == "clear" else "missing",
+        }
+        validation_error = store.validate_fundamentals_payload(data)
+        if validation_error:
+            conn.rollback()
+            print(f"P0 证据校验错误: {validation_error}", file=sys.stderr)
+            sys.exit(1)
+        # Keep updated_at: new P0 evidence must not make other fundamentals look fresh.
+        conn.execute(
+            "UPDATE stock_fundamentals SET data=? WHERE code=?",
+            (json.dumps(data, ensure_ascii=False), code),
+        )
+        conn.commit()
+    checks = "; ".join(
+        f"{name}={check['status']}({check['reason_code']})"
+        for name, check in gate["checks"].items()
+    )
+    print(f"{code} P0监管门={gate['status']}（{period}）| {checks}")
+
+
 def cmd_get_analysis(args: list[str]) -> None:
     """获取今日分析结论缓存，未命中返回 CACHE_MISS"""
     if len(args) < 1:
