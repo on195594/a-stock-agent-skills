@@ -131,3 +131,16 @@ def test_business_content_has_no_legacy_client_paths() -> None:
                 assert ".claude/skills" not in text
                 assert ".agents/skills" not in text
                 assert ".hermes/skills" not in text
+
+
+def test_tests_never_undo_the_autouse_database_isolation():
+    # Undoing monkeypatch also reverts conftest's CACHE_DB_PATH, so later CLI calls
+    # in that test reach the real ~/.local/share database (happened 2026-10-22).
+    root = Path(__file__).resolve().parent
+    pattern = "monkeypatch" + ".undo("
+    offenders = [
+        str(path.relative_to(root))
+        for path in root.rglob("*.py")
+        if pattern in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []

@@ -447,3 +447,13 @@ def test_breach_detail_reports_drivers_and_unknown_attribution():
     assert "principal=3629.12 CNY; unrealized_gain=3366.88 CNY" in detail["600900"]
     assert "denominator_source=cli+policy_file" in detail["600900"]
     assert "principal=unknown; unrealized_gain=unknown" in detail[None]
+
+
+def test_portfolio_attribution_is_unknown_when_any_position_split_is_unknown():
+    positions = [
+        {"code": "600900", "stop_risk": 9000.0, "stop_risk_unrealized_gain": 3000.0},
+        {"code": "603606", "stop_risk": None, "stop_risk_unrealized_gain": None},
+    ]
+    breaches = risk_budget.assess(positions, 100000, risk_budget.policy(10, 8))["breaches"]
+    assert [item["code"] for item in breaches] == [None]
+    assert "principal=unknown; unrealized_gain=unknown" in breaches[0]["detail"]

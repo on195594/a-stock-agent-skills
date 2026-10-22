@@ -327,18 +327,13 @@ def cmd_regulatory_evidence(args: list[str]) -> None:
             conn.rollback()
             print(f"错误：P0 证据 report_period 须为当前年报期 {period}", file=sys.stderr)
             sys.exit(1)
-        gate = risk_gates.regulatory_gate({**facts, "code": code})
-        data["regulatory_gate"] = gate
-        null_reasons = data.setdefault("null_reasons", {})
-        if gate["status"] == "clear":
-            null_reasons.pop("regulatory_gate", None)
-        else:
-            null_reasons["regulatory_gate"] = gate["reason_code"]
-        data.setdefault("field_provenance", {})["regulatory_gate"] = {
-            "source": "computed",
-            "as_of": gate["as_of"] or period,
-            "status": "ok" if gate["status"] == "clear" else "missing",
-        }
+        try:
+            gate = risk_gates.regulatory_evidence_gate(facts, code)
+        except ValueError as exc:
+            conn.rollback()
+            print(f"错误：{exc}", file=sys.stderr)
+            sys.exit(1)
+        store.apply_regulatory_gate(data, gate)
         validation_error = store.validate_fundamentals_payload(data)
         if validation_error:
             conn.rollback()

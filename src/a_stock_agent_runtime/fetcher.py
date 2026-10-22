@@ -2025,14 +2025,11 @@ def _cache_gate_defaults(
 ) -> None:
     """Persist explicit gates; P0 stays incomplete until official evidence is supplied.
 
-    Supplied P0 evidence for the same annual period survives a refresh.
+    store.set_fundamentals carries supplied P0 evidence for the same annual period.
     """
     as_of = results.get("_quote_as_of") or data_period
     unavailable = ["unavailable"]
     regulatory = results.get("regulatory_gate")
-    if not isinstance(regulatory, dict):
-        previous = (store.get_cached_fundamentals_data(code) or {}).get("regulatory_gate")
-        regulatory = risk_gates.carry_forward_regulatory_gate(previous, code, data_period)
     if not isinstance(regulatory, dict):
         regulatory = risk_gates.regulatory_gate(
             {
@@ -2208,8 +2205,9 @@ def _build_cache_payload(
     complete_gates = sum(
         1
         for key in gate_names
-        if isinstance(results.get(key), dict)
-        and results[key].get("status") in {"clear", "not_applicable"}
+        # set_fundamentals may carry P0 evidence forward into cache_data.
+        if isinstance(cache_data.get(key), dict)
+        and cache_data[key].get("status") in {"clear", "not_applicable"}
     )
     logger.info(
         f"\n=== {name}({code}) 完成 | "

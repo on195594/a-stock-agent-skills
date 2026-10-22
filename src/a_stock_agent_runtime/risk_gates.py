@@ -581,40 +581,49 @@ def regulatory_gate(
 REGULATORY_CHECKS = ("listing_risk", "audit_opinion", "investigation", "dividend_compliance")
 
 
+def regulatory_evidence_gate(
+    facts: Mapping[str, Any], code: str, *, today: date | None = None
+) -> dict[str, Any]:
+    """Evaluate raw P0 facts and keep them so later refreshes can re-judge them.
+
+    Pre-decided sub-check objects are rejected: the runtime, not the caller,
+    decides each status.
+    """
+    preset = sorted(set(REGULATORY_CHECKS) & set(facts))
+    if preset:
+        raise ValueError(f"P0 证据只接受事实字段，不接受预设子门：{', '.join(preset)}")
+    evidence = {key: value for key, value in facts.items() if key != "code"}
+    gate = regulatory_gate({**evidence, "code": code}, today=today)
+    gate["evidence_facts"] = evidence
+    return gate
+
+
 def carry_forward_regulatory_gate(
     previous: Any, code: str, annual_period: str | None, *, today: date | None = None
 ) -> dict[str, Any] | None:
-    """Re-evaluate supplied P0 evidence for the same annual report period.
+    """Re-judge supplied P0 facts for the same annual report period.
 
     Per the 2026-10-22 spec, clear/blocked evidence stays valid until a newer
-    annual report period appears; the current rule set and its freshness are
-    re-applied, so stale rules or non-official sources still fail closed.
+    annual report period appears; the stored facts are re-evaluated under the
+    current rules, so changed thresholds, stale rules or non-official sources
+    still decide the result.
     """
     if not isinstance(previous, Mapping) or previous.get("status") not in {
         "clear",
         "blocked",
     }:
         return None
-    checks = previous.get("checks")
-    if not annual_period or not isinstance(checks, Mapping):
-        return None
-    if any(
-        not isinstance(checks.get(name), Mapping)
-        or checks[name].get("report_period") != annual_period
-        for name in REGULATORY_CHECKS
+    facts = previous.get("evidence_facts")
+    if (
+        not annual_period
+        or not isinstance(facts, Mapping)
+        or facts.get("report_period") != annual_period
     ):
         return None
-    return regulatory_gate(
-        {
-            "code": code,
-            "exchange": previous.get("exchange"),
-            "board": previous.get("board"),
-            "as_of": previous.get("as_of"),
-            "report_period": annual_period,
-            **{name: dict(checks[name]) for name in REGULATORY_CHECKS},
-        },
-        today=today,
-    )
+    try:
+        return regulatory_evidence_gate(facts, code, today=today)
+    except ValueError:
+        return None
 
 
 def _period_values(payload: Mapping[str, Any], key: str) -> list[float] | None:

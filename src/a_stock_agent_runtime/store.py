@@ -358,19 +358,37 @@ def add_market_indicators(data: dict) -> dict:
     return result
 
 
-def get_cached_fundamentals_data(code: str) -> dict | None:
-    """Raw cached fundamentals JSON regardless of TTL, or None when absent."""
-    with db.db_session() as conn:
-        row = conn.execute(
-            "SELECT data FROM stock_fundamentals WHERE code=?", (code,)
-        ).fetchone()
-    if not row:
-        return None
+def apply_regulatory_gate(data: dict, gate: dict) -> None:
+    """Install a P0 gate with matching null reason and provenance."""
+    data["regulatory_gate"] = gate
+    null_reasons = data.setdefault("null_reasons", {})
+    if gate["status"] == "clear":
+        null_reasons.pop("regulatory_gate", None)
+    else:
+        null_reasons["regulatory_gate"] = gate["reason_code"]
+    data.setdefault("field_provenance", {})["regulatory_gate"] = {
+        "source": "computed",
+        "as_of": gate.get("as_of") or data.get("data_period"),
+        "status": "ok" if gate["status"] == "clear" else "missing",
+    }
+
+
+def _carry_forward_regulatory_gate(conn, code: str, data_dict: dict) -> None:
+    incoming = data_dict.get("regulatory_gate")
+    if isinstance(incoming, dict) and "evidence_facts" in incoming:
+        return
+    row = conn.execute(
+        "SELECT data FROM stock_fundamentals WHERE code=?", (code,)
+    ).fetchone()
     try:
-        data = json.loads(row[0])
-    except (TypeError, ValueError):
-        return None
-    return data if isinstance(data, dict) else None
+        previous = json.loads(row[0]).get("regulatory_gate") if row else None
+    except (TypeError, ValueError, AttributeError):
+        previous = None
+    carried = risk_gates.carry_forward_regulatory_gate(
+        previous, code, data_dict.get("data_period")
+    )
+    if carried is not None:
+        apply_regulatory_gate(data_dict, carried)
 
 
 def get_fundamentals(code: str) -> dict | None:
@@ -399,12 +417,18 @@ def get_fundamentals(code: str) -> dict | None:
 def set_fundamentals(
     code: str, name: str, industry: str, data_dict: dict, ttl: int | None = None
 ) -> str:
-    """写入基本面缓存，ttl=None 时按行业自动推断。返回状态消息。"""
-    validation_error = validate_fundamentals_payload(data_dict)
-    if validation_error:
-        raise ValueError(validation_error)
+    """写入基本面缓存，ttl=None 时按行业自动推断。返回状态消息。
+
+    同一写事务内读取最新 P0 证据并按年报期沿用，避免覆盖并发补录的证据。
+    """
     ttl_hours = ttl if ttl is not None else domain.get_industry_ttl(industry)
     with db.db_session() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _carry_forward_regulatory_gate(conn, code, data_dict)
+        validation_error = validate_fundamentals_payload(data_dict)
+        if validation_error:
+            conn.rollback()
+            raise ValueError(validation_error)
         conn.execute(
             """INSERT OR REPLACE INTO stock_fundamentals
                (code, name, industry, data, updated_at, ttl_hours)

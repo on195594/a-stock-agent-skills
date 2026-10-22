@@ -850,11 +850,11 @@ def unrecorded_dividends(
     """Implemented dividends the ledger position was entitled to but never recorded.
 
     ``events`` use the lifecycle query order; ``dividends`` carry ISO
-    ``record_date``/``ex_date``/``pay_date`` and pre-tax ``cash_div``. A ledger
-    dividend dated from the record date through the later of ex/pay date counts
-    as recorded. Entitlement is the position at the close of the record date.
+    ``record_date``/``ex_date``/``pay_date``, pre-tax ``cash_div`` and
+    ``split_ratio``. Cash counts as recorded with a ledger dividend, and a bonus
+    or split with a positive share adjustment, dated from the record date through
+    the later of ex/pay date. Entitlement is the position at the record-date close.
     """
-    recorded = [day for event_type, day, *_ in events if event_type == "dividend"]
     missing = []
     for item in dividends:
         record = item["record_date"]
@@ -866,9 +866,30 @@ def unrecorded_dividends(
             if day <= record and event_type in ("buy", "sell", "adjustment")
         )
         window_end = max(item["ex_date"] or record, item["pay_date"] or record)
-        if held <= 0 or any(record <= day <= window_end for day in recorded):
+        in_window = [
+            (event_type, shares)
+            for event_type, day, shares, *_ in events
+            if record <= day <= window_end
+        ]
+        cash_found = bool(item["cash_div"]) and any(
+            event_type == "dividend" for event_type, _ in in_window
+        )
+        split_found = bool(item["split_ratio"]) and any(
+            event_type == "adjustment" and (shares or 0) > 0
+            for event_type, shares in in_window
+        )
+        cash_recorded = cash_found or not item["cash_div"]
+        split_recorded = split_found or not item["split_ratio"]
+        if held <= 0 or cash_recorded and split_recorded:
             continue
-        missing.append({**item, "shares": held, "cash": item["cash_div"] * held})
+        missing.append(
+            {
+                **item,
+                "shares": held,
+                "cash": item["cash_div"] * held,
+                "partially_recorded": cash_found or split_found,
+            }
+        )
     return missing
 
 
@@ -908,7 +929,7 @@ def cmd_dividend_check(args: list[str]) -> None:
     """Compare TuShare implemented dividends with ledger events for open holdings."""
     with db.read_only_db_session() as conn:
         holdings = conn.execute(
-            """SELECT id, code, name FROM holdings
+            """SELECT id, code, name, shares FROM holdings
                WHERE exit_date IS NULL AND (? IS NULL OR code=?) ORDER BY code""",
             (args[0] if args else None, args[0] if args else None),
         ).fetchall()
@@ -918,7 +939,7 @@ def cmd_dividend_check(args: list[str]) -> None:
         return
     today = domain.cst_today()
     failed = found = 0
-    for holding_id, code, name in holdings:
+    for holding_id, code, name, current_shares in holdings:
         try:
             dividends = _implemented_dividends(code)
         except Exception as exc:  # one provider failure must not hide other codes
@@ -932,10 +953,28 @@ def cmd_dividend_check(args: list[str]) -> None:
                 f" 转增{item['split_ratio']:g} | 登记日账本持股{item['shares']}股 → "
                 f"应收{item['cash']:.2f}元；账本无对应分红记录"
             )
-            print(
-                f"  核对到账后记账：a-stock-cache --confirm-write corporate-action "
-                f"{code} {item['cash_div']:g} {item['split_ratio']:g} {item['record_date']}"
-            )
+            if item["partially_recorded"]:
+                # A full corporate-action would re-record the half already booked.
+                print(
+                    "  现金与转增只记了一部分：不给自动记账命令，按券商流水人工核对未记部分"
+                )
+            elif current_shares == item["shares"]:
+                print(
+                    f"  核对到账后记账：a-stock-cache --confirm-write corporate-action "
+                    f"{code} {item['cash_div']:g} {item['split_ratio']:g} {item['record_date']}"
+                )
+            elif not item["split_ratio"]:
+                # corporate-action uses today's shares; record the entitled total instead.
+                print(
+                    f"  登记日后股数已变（现{current_shares}股）：核对到账后用 "
+                    f"a-stock-cache --confirm-write record-dividend {code} "
+                    f"{item['cash']:.2f} {item['record_date']}；规则参考成本另行人工核对"
+                )
+            else:
+                print(
+                    f"  登记日后股数已变（现{current_shares}股）且含转增："
+                    "不给自动记账命令，按券商流水人工核对"
+                )
     if not found and not failed:
         print(f"已核对{len(holdings)}只在仓持仓：未发现未记账分红")
     if failed:

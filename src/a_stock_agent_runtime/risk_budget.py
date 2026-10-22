@@ -70,10 +70,10 @@ def assess(
     denominator_source: str = "cli",
 ) -> dict:
     """Keep proven breaches even when the complete risk total is unknown."""
-    known_items = [item for item in positions if item["stop_risk"] is not None]
-    known = [item["stop_risk"] for item in known_items]
-    known_gains = [item.get("stop_risk_unrealized_gain") for item in known_items]
-    known_gain = None if None in known_gains else sum(known_gains)
+    known = [item["stop_risk"] for item in positions if item["stop_risk"] is not None]
+    # Portfolio attribution is known only when every position's split is known.
+    gains = [item.get("stop_risk_unrealized_gain") for item in positions]
+    known_gain = None if None in gains else sum(gains)
     lower_bound = sum(known)
     if not finite_number(lower_bound):
         lower_bound = None

@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 
-from a_stock_agent_runtime import cache, fetcher, risk_gates, schema
+from a_stock_agent_runtime import cache, risk_gates, schema, store
 
 TODAY = date(2026, 10, 22)
 FACTS = {
@@ -28,33 +28,56 @@ FACTS = {
 
 
 def _gate(**updates):
-    return risk_gates.regulatory_gate({**FACTS, "code": "600900", **updates}, today=TODAY)
+    return risk_gates.regulatory_evidence_gate({**FACTS, **updates}, "600900", today=TODAY)
 
 
-def test_same_annual_period_keeps_clear_and_blocked_evidence():
+def _carry(previous, period="2025年报", today=TODAY):
+    return risk_gates.carry_forward_regulatory_gate(previous, "600900", period, today=today)
+
+
+def test_same_annual_period_rejudges_clear_and_blocked_evidence():
     clear = _gate()
     assert clear["status"] == "clear"
-    kept = risk_gates.carry_forward_regulatory_gate(clear, "600900", "2025年报", today=TODAY)
-    assert kept["status"] == "clear" and kept["checks"] == clear["checks"]
-    blocked = _gate(investigation_status="正式立案")
-    kept = risk_gates.carry_forward_regulatory_gate(blocked, "600900", "2025年报", today=TODAY)
-    assert kept["status"] == "blocked"
+    assert _carry(clear) == clear
+    assert _carry(_gate(investigation_status="正式立案"))["status"] == "blocked"
 
 
-def test_new_annual_period_or_incomplete_evidence_is_not_carried():
-    assert risk_gates.carry_forward_regulatory_gate(
-        _gate(), "600900", "2026年报", today=TODAY
-    ) is None
-    assert risk_gates.carry_forward_regulatory_gate(
-        _gate(listing_status=None), "600900", "2025年报", today=TODAY
-    ) is None
+def test_new_period_incomplete_or_factless_evidence_is_not_carried():
+    assert _carry(_gate(), period="2026年报") is None
+    assert _carry(_gate(listing_status=None)) is None
+    legacy = dict(_gate())
+    legacy.pop("evidence_facts")
+    assert _carry(legacy) is None
+
+
+def test_carry_forward_applies_changed_rule_thresholds(monkeypatch):
+    # 3-year dividends 40M vs avg profit 100M: clear at 30%, blocked at 50% (50M floor).
+    facts = {"three_year_cash_dividend": 4.0e7, "three_year_annual_profits": [1e8] * 3,
+             "latest_annual_attributable_profit": 1e8}
+    rule = dict(risk_gates.REGULATORY_RULES[("SSE", "main")])
+    assert rule["dividend_ratio"] == 0.3 and rule["dividend_amount"] == 5e7
+    old = _gate(**facts)
+    assert old["status"] == "clear"
+    monkeypatch.setitem(
+        risk_gates.REGULATORY_RULES, ("SSE", "main"), {**rule, "dividend_ratio": 0.5}
+    )
+    assert _carry(old)["status"] == "blocked"
 
 
 def test_stale_rule_still_fails_closed_after_carry_forward():
-    kept = risk_gates.carry_forward_regulatory_gate(
-        _gate(), "600900", "2025年报", today=date(2027, 6, 1)
-    )
-    assert kept["status"] == "incomplete"
+    assert _carry(_gate(), today=date(2027, 6, 1))["status"] == "incomplete"
+
+
+@pytest.mark.parametrize("field", ["listing_status", "investigation_status"])
+def test_explicit_null_status_is_missing_evidence_not_none_token(field):
+    assert _gate(**{field: None})["status"] == "incomplete"
+
+
+def test_preset_sub_check_cannot_override_facts():
+    preset = {"status": "clear", "sources": ["上交所公司公告"],
+              "as_of": "2026-10-22T10:00:00+08:00", "report_period": "2024年报"}
+    with pytest.raises(ValueError):
+        _gate(listing_status="st", listing_risk=preset)
 
 
 def _seed_fundamentals(database, data_period="2025年报"):
@@ -74,44 +97,64 @@ def _run_evidence(monkeypatch, facts):
     return cache.main(["--confirm-write", "regulatory-evidence", "600900"])
 
 
-def test_command_merges_runtime_evaluated_gate_and_fetch_preserves_it(
+def _stored(database):
+    with sqlite3.connect(database) as conn:
+        raw, updated_at = conn.execute(
+            "SELECT data, updated_at FROM stock_fundamentals WHERE code='600900'"
+        ).fetchone()
+    return json.loads(raw), updated_at
+
+
+def _refresh(period):
+    # What fetch writes: a fresh payload whose P0 gate is the unavailable default.
+    default = risk_gates.regulatory_gate(
+        {"code": "600900", "report_period": period, "as_of": period,
+         "sources": ["unavailable"]}
+    )
+    data = {"data_period": period, "null_reasons": {}, "field_provenance": {}}
+    store.apply_regulatory_gate(data, default)
+    store.set_fundamentals("600900", "长江电力", "水电", data, ttl=168)
+
+
+def test_command_merges_gate_and_refresh_rejudges_latest_stored_evidence(
     isolated_cache_database, monkeypatch
 ):
     _seed_fundamentals(isolated_cache_database)
     assert _run_evidence(monkeypatch, FACTS) == 0
-    with sqlite3.connect(isolated_cache_database) as conn:
-        raw, updated_at = conn.execute(
-            "SELECT data, updated_at FROM stock_fundamentals WHERE code='600900'"
-        ).fetchone()
-    stored = json.loads(raw)["regulatory_gate"]
-    assert stored == risk_gates.regulatory_gate({**FACTS, "code": "600900"})
+    data, updated_at = _stored(isolated_cache_database)
+    gate = data["regulatory_gate"]
+    assert gate["evidence_facts"] == FACTS
+    assert gate["status"] == risk_gates.regulatory_gate({**FACTS, "code": "600900"})["status"]
     assert updated_at == "2026-10-15T03:33:00+00:00"
 
-    results = {}
-    fetcher._cache_gate_defaults("600900", results, "2025年报", "水电")
-    assert results["regulatory_gate"]["checks"] == stored["checks"]
-    results = {}
-    fetcher._cache_gate_defaults("600900", results, "2026年报", "水电")
-    assert results["regulatory_gate"]["status"] == "incomplete"
+    # Evidence written after a fetch started is read inside the refresh's write.
+    blocked = {**FACTS, "investigation_status": "正式立案"}
+    assert _run_evidence(monkeypatch, blocked) == 0
+    _refresh("2025年报")
+    assert _stored(isolated_cache_database)[0]["regulatory_gate"]["status"] == "blocked"
+    _refresh("2026年报")
+    assert _stored(isolated_cache_database)[0]["regulatory_gate"]["status"] == "incomplete"
 
 
-@pytest.mark.parametrize("period", ["2024年报", None])
-def test_command_rejects_evidence_for_another_period(
-    period, isolated_cache_database, monkeypatch
+@pytest.mark.parametrize(
+    "facts",
+    [
+        {**FACTS, "report_period": "2024年报"},
+        {**FACTS, "report_period": None},
+        {**FACTS, "listing_risk": {"status": "clear", "sources": ["上交所公司公告"],
+                                   "as_of": "2026-10-22T10:00:00+08:00"}},
+    ],
+)
+def test_command_rejects_wrong_period_or_preset_checks(
+    facts, isolated_cache_database, monkeypatch
 ):
     _seed_fundamentals(isolated_cache_database)
-    assert _run_evidence(monkeypatch, {**FACTS, "report_period": period}) == 1
+    assert _run_evidence(monkeypatch, facts) == 1
+    assert "regulatory_gate" not in _stored(isolated_cache_database)[0]
 
 
 def test_command_without_confirmation_writes_nothing(isolated_cache_database, monkeypatch):
     _seed_fundamentals(isolated_cache_database)
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(FACTS)))
     assert cache.main(["regulatory-evidence", "600900"]) == 3
-    with sqlite3.connect(isolated_cache_database) as conn:
-        raw = conn.execute("SELECT data FROM stock_fundamentals").fetchone()[0]
-    assert "regulatory_gate" not in json.loads(raw)
-
-
-@pytest.mark.parametrize("field", ["listing_status", "investigation_status"])
-def test_explicit_null_status_is_missing_evidence_not_none_token(field):
-    assert _gate(**{field: None})["status"] == "incomplete"
+    assert "regulatory_gate" not in _stored(isolated_cache_database)[0]

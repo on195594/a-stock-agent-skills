@@ -42,7 +42,8 @@ $CACHE dividend-check [代码]
 $CACHE position-return <代码> [当前价]
 ```
 
-成本对账或用户提供账户截图时先运行 `dividend-check`：命中项向用户确认是否到账后按其命令记账，
+成本对账或用户提供账户截图时先运行 `dividend-check`：命中项向用户确认是否到账后按其给出的命令记账
+（登记日后股数已变时它改给按应收总额的 `record-dividend`，含转增则只提示人工核对），
 不让用户自己查分红；数据获取失败的代码报告“未核对”，不推定无分红。卖出时印花税按成交额×0.5‰计入
 `--tax`，不因回单未列明而记 0。
 
@@ -51,7 +52,7 @@ $CACHE position-return <代码> [当前价]
 `regulatory_gate` 为 incomplete 时，每个年报期补一次官方证据；同一年报期内 `fetch` 刷新会沿用，
 出现新年报期后须重补。只用交易所、证监会、巨潮公司公告与年报原文（审计报告、内控审计报告、
 “处罚及整改/立案调查”一节、母公司报表），不用媒体或数据商转载；“未搜到负面”不能填 clear。
-状态由 runtime 计算，用户确认写入后执行：
+状态由 runtime 计算（只传事实字段，不传 `listing_risk` 等预设子门对象，否则被拒），用户确认写入后执行：
 
 ```bash
 echo '<P0事实JSON>' | $CACHE --confirm-write regulatory-evidence <代码>
