@@ -177,9 +177,14 @@ external log directory. `A_STOCK_NOTIFY_MODE=disabled` is the default for
 tests and smoke runs. Telegram is enabled only by the production config and
 only for a real or explicitly controlled verification event.
 
+The cron script pushes only when `check-holdings` prints `项预警，请及时处理`
+(price or P3 stop alerts); risk-gate freeze lines alone are logged, not pushed.
+
 Do not install a second holdings cron entry. Before changing crontab, save the
 complete current crontab, inspect the candidate diff, and verify that exactly
-one canonical holdings task remains.
+one canonical holdings task remains. Hermes no-agent jobs running read-only
+`stop-alert` (intraday, deduplicated per day), `daily-brief` and
+`benchmark-report` are push supplements, not holdings tasks; they never record alerts.
 
 ## Backup and rollback
 

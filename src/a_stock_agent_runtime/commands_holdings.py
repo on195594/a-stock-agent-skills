@@ -996,6 +996,96 @@ def cmd_dividend_check(args: list[str]) -> None:
         sys.exit(1)
 
 
+STOP_NEAR_PCT = 0.03  # warn once a price is within 3% above the first stop
+_STOP_LEVELS = {"near": 1, "stop1": 2, "stop2": 3}
+
+
+def stop_level(price: float, stop1: float | None, stop2: float | None) -> str | None:
+    """Most severe stop level reached by the price, or None."""
+    if stop2 and price <= stop2:
+        return "stop2"
+    if stop1 and price <= stop1:
+        return "stop1"
+    if stop1 and price <= stop1 * (1 + STOP_NEAR_PCT):
+        return "near"
+    return None
+
+
+def new_stop_alerts(levels: dict[str, str], state: dict, today: str) -> tuple[list, dict]:
+    """Codes whose level worsened since today's last alert, plus the next state."""
+    seen = dict(state.get("levels", {})) if state.get("date") == today else {}
+    alerts = [
+        (code, level)
+        for code, level in levels.items()
+        if _STOP_LEVELS[level] > _STOP_LEVELS.get(seen.get(code), 0)
+    ]
+    seen.update(dict(alerts))
+    return alerts, {"date": today, "levels": seen}
+
+
+def cmd_stop_alert(args: list[str]) -> None:
+    """Intraday stop-line alert for push delivery; silent outside sessions or without news."""
+    if args:
+        print("错误：stop-alert 不接受参数", file=sys.stderr)
+        sys.exit(1)
+    now = domain.cst_now()
+    if not domain.is_a_share_trading_hours(now):
+        return
+    with db.read_only_db_session() as conn:
+        rows = conn.execute(
+            """SELECT code, name, stop_loss_15, stop_loss_20 FROM holdings
+               WHERE exit_date IS NULL ORDER BY code"""
+        ).fetchall()
+    if not rows:
+        return
+    today = now.date().isoformat()
+    quotes = market_quotes.fetch_current_price_quotes([row[0] for row in rows])
+    fresh = {}
+    for code, *_ in rows:
+        quote = quotes.get(code)
+        stamp = quote and risk_gates._parse_time(quote.quote_as_of)
+        # Only same-day quotes at most 15 minutes old may raise a live-looking alert.
+        if risk_budget.valid_quote(quote, today) and stamp and abs(
+            (now - stamp).total_seconds()
+        ) <= 900:
+            fresh[code] = quote
+    if not fresh:
+        print("止损预警：本时段所有持仓行情无效或过期，未能检查", file=sys.stderr)
+        sys.exit(1)
+    levels = {
+        code: level
+        for code, _name, stop1, stop2 in rows
+        if code in fresh and (level := stop_level(fresh[code].price, stop1, stop2))
+    }
+    state_path = paths.state_dir() / "stop-alert-state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        state = {}
+    alerts, state = new_stop_alerts(levels, state, today)
+    if not alerts:
+        return
+    names = {row[0]: row for row in rows}
+    for code, level in alerts:
+        _, name, stop1, stop2 = names[code]
+        quote = fresh[code]
+        where = f"（{quote.quote_time}，{quote.source}）"
+        if level == "near":
+            print(
+                f"⚠️ 接近止损 {name}({code}) 现价{quote.price:.2f}，距第一档{stop1:.3f}"
+                f"仅{(quote.price - stop1) / quote.price:+.1%}{where}"
+            )
+        else:
+            stop = stop2 if level == "stop2" else stop1
+            label = "第二档" if level == "stop2" else "第一档"
+            print(f"🚨 止损预警 {name}({code}) 现价{quote.price:.2f} 已跌破{label}止损{stop:.3f}{where}")
+    print("按 a-stock-monitor 复核止损与 L3；预警不等于自动卖出。")
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = state_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(state_path)
+
+
 BENCHMARKS = (("H00300.CSI", "沪深300全收益"), ("H00922.CSI", "中证红利全收益"))
 
 

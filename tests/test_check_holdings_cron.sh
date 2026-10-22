@@ -26,8 +26,11 @@ FAKE_OUTPUT='无预警' bash "$ROOT/scripts/check-holdings-cron.sh"
 grep -Fq 'check-holdings' "$TMP/calls"
 ! test -e "$TMP/curl_calls"
 grep -Fq '持仓止损检查：无预警' "$TMP/state/logs/check-holdings.log"
+: > "$TMP/state/logs/check-holdings.log"
+FAKE_OUTPUT='三花智控 ✅ 正常 | 🔴 风险门冻结加仓(roe_retention_below_0_75)' bash "$ROOT/scripts/check-holdings-cron.sh"
+grep -Fq '持仓止损检查：无预警' "$TMP/state/logs/check-holdings.log"
 
-FAKE_OUTPUT='招商银行 🔴 已跌破止损线' bash "$ROOT/scripts/check-holdings-cron.sh"
+FAKE_OUTPUT='共 1 项预警，请及时处理： 招商银行 🔴 已跌破止损线' bash "$ROOT/scripts/check-holdings-cron.sh"
 grep -Fq '持仓止损检查：触发预警' "$TMP/state/logs/check-holdings.log"
 ! test -e "$TMP/curl_calls"
 
@@ -64,7 +67,7 @@ A_STOCK_NOTIFY_MODE=telegram
 TELEGRAM_BOT_TOKEN=test-token
 TELEGRAM_CHAT_ID=test-chat
 EOF
-if FAKE_OUTPUT='招商银行 🔴 已跌破止损线' bash "$ROOT/scripts/check-holdings-cron.sh"; then
+if FAKE_OUTPUT='共 1 项预警，请及时处理： 招商银行 🔴 已跌破止损线' bash "$ROOT/scripts/check-holdings-cron.sh"; then
   echo 'failed Telegram request was masked' >&2
   exit 1
 fi

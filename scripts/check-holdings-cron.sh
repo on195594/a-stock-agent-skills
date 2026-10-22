@@ -72,7 +72,8 @@ if ! result=$(timeout -k 10s "$TIMEOUT" a-stock-cache check-holdings 2>>"$LOG");
     alert '持仓止损检查命令失败（check-holdings exit 非0，详见日志）' || true
     status=1
 else
-    if grep -qE '🔴|⚠️' <<<"$result"; then
+    # Only price/P3 stop alerts push; risk-gate freeze lines (also 🔴) do not.
+    if grep -qF '项预警，请及时处理' <<<"$result"; then
         log '持仓止损检查：触发预警'
         tg_send "🚨 持仓止损预警\n\n${result}" || status=1
     else
