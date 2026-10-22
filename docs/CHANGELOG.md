@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.18 — 2026-10-22
 
 - 新增只读 `dividend-check`：按登记日账本持股找出已实施但未记账的分红，并给出 `corporate-action` 记账命令；`sell-holding` 税费为 0 时提示 0.5‰ 印花税估算。不改投资规则。
 - 按[P0 证据按年报期沿用规范](specs/2026-10-22-p0-evidence-annual-carry-forward-spec.md)（用户选择方案 3）：`fetch` 刷新沿用同一年报期已补的 clear/blocked P0 证据（按现行规则重判）；新增 W1 `regulatory-evidence` 合并写入 runtime 计算的 P0 门且不改 `updated_at`；修复显式 null 的上市/立案状态被当作“无风险”的 fail-open。
