@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import re
 import sqlite3
@@ -16,7 +17,6 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = ROOT / "tests/fixtures/agent_behavior_scenarios.json"
-OBSERVED = ROOT / "tests/fixtures/agent_behavior_observed.json"
 SKILLS = "a-stock-research,a-stock-monitor,a-stock-qa"
 SKILL_NAMES = tuple(SKILLS.split(","))
 MODEL = "gpt-5.6-sol-900k"
@@ -69,6 +69,16 @@ def parse_json_response(stdout: str) -> dict[str, Any]:
     return value
 
 
+def parse_session_id(stdout: str, stderr: str) -> str:
+    # Current Hermes emits local-* IDs on stderr in quiet mode; older captures use stdout.
+    match = re.search(
+        r"(?:session_id|Session):\s*([A-Za-z0-9_-]+)", stderr + "\n" + stdout
+    )
+    if match is None:
+        raise ValueError("Hermes returned no session identity")
+    return match.group(1)
+
+
 def loaded_skill_provenance() -> tuple[dict[str, str], dict[str, str]]:
     hashes: dict[str, str] = {}
     paths: dict[str, str] = {}
@@ -81,6 +91,15 @@ def loaded_skill_provenance() -> tuple[dict[str, str], dict[str, str]]:
         loaded_hash = hashlib.sha256(loaded_skill.read_bytes()).hexdigest()
         if loaded_hash != repository_hash:
             raise RuntimeError(f"installed Skill differs from repository: {name}")
+        for source in repository_skill.parent.rglob("*"):
+            if not source.is_file() or source.suffix not in (".md", ".py", ".json"):
+                continue
+            relative = source.relative_to(repository_skill.parent)
+            installed = loaded_skill.parent / relative
+            if not installed.exists() or source.read_bytes() != installed.read_bytes():
+                raise RuntimeError(
+                    f"installed Skill reference differs: {name}/{relative}"
+                )
         hashes[name] = loaded_hash
         paths[name] = str(loaded_skill.resolve())
     return hashes, paths
@@ -107,9 +126,61 @@ def session_provenance(session_id: str) -> dict[str, Any]:
 
 
 def capture(output: Path) -> None:
+    if output.exists():
+        raise FileExistsError(
+            f"preserve prior capture; choose a new --output: {output}"
+        )
+    if output.resolve().is_relative_to(ROOT):
+        raise ValueError("raw capture output must stay outside the repository")
     payload = json.loads(SCENARIOS.read_text(encoding="utf-8"))
     skill_hashes, skill_paths = loaded_skill_provenance()
     records = []
+    artifact = {
+        "schema_version": 1,
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "git_head": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip(),
+        "runtime_version": importlib.metadata.version("a-stock-agent-skills"),
+        "runtime_source_sha256": {
+            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted((ROOT / "src").rglob("*.py"))
+        },
+        "a_stock_lib_version": importlib.metadata.version("a-stock-lib"),
+        "runtime_execution": "injected fixture results; domain CLI not executed",
+        "hermes_version": subprocess.check_output(
+            ["hermes", "--version"], text=True
+        ).splitlines()[0],
+        "capture_source_sha256": {
+            "scripts/capture_agent_behavior_eval.py": hashlib.sha256(
+                Path(__file__).read_bytes()
+            ).hexdigest(),
+            "tests/fixtures/agent_behavior_scenarios.json": hashlib.sha256(
+                SCENARIOS.read_bytes()
+            ).hexdigest(),
+        },
+        "skill_sha256": skill_hashes,
+        "skill_source_sha256": {
+            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted((ROOT / "skills").rglob("*"))
+            if path.is_file() and path.suffix in (".md", ".py", ".json")
+        },
+        "loaded_skill_paths": skill_paths,
+        "hermes_command_policy": {
+            "toolsets": ["vision"],
+            "max_turns": 1,
+            "domain_tools_executed": False,
+            "model": MODEL,
+            "provider": PROVIDER,
+        },
+        "records": records,
+        "completed": False,
+    }
+
+    def save() -> None:
+        output.write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
+
+    save()
     with tempfile.TemporaryDirectory(prefix="a-stock-agent-eval-") as isolated:
         for scenario in payload["scenarios"]:
             command = [
@@ -118,6 +189,7 @@ def capture(output: Path) -> None:
                 "--query-file",
                 "-",
                 "--oneshot",
+                "--quiet",
                 "--model",
                 MODEL,
                 "--provider",
@@ -135,9 +207,12 @@ def capture(output: Path) -> None:
                 "--skills",
                 SKILLS,
             ]
-            raw = ""
-            provenance: dict[str, Any] | None = None
-            for _attempt in range(3):
+            record = {
+                "id": scenario["id"],
+                "prompt_sha256": prompt_sha256(scenario),
+            }
+            records.append(record)
+            try:
                 completed = subprocess.run(
                     command,
                     input=build_prompt(scenario),
@@ -145,67 +220,44 @@ def capture(output: Path) -> None:
                     capture_output=True,
                     cwd=isolated,
                     timeout=150,
-                    check=True,
                 )
                 raw = completed.stdout.strip()
-                session_match = re.search(r"Session:\s+([A-Za-z0-9_]+)", raw)
-                if session_match is None:
-                    continue
-                provenance = session_provenance(session_match.group(1))
-                if (
-                    provenance["model"] == MODEL
-                    and provenance["billing_provider"] == PROVIDER
-                ):
-                    break
-            else:
-                raise ValueError(
-                    f"Hermes session evidence missing after retries: {raw!r}"
+                record.update(
+                    raw_response=raw,
+                    stderr=completed.stderr,
+                    exit_code=completed.returncode,
                 )
-            parsed = parse_json_response(raw)
-            records.append(
-                {
-                    "id": scenario["id"],
-                    "prompt_sha256": prompt_sha256(scenario),
-                    "session_id": session_match.group(1),
-                    "runtime": provenance,
-                    "raw_response": raw,
-                    "output": parsed,
-                }
-            )
-    artifact = {
-        "schema_version": 1,
-        "captured_at": datetime.now(timezone.utc).isoformat(),
-        "git_head": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
-        ).strip(),
-        "hermes_version": subprocess.check_output(
-            ["hermes", "--version"], text=True
-        ).splitlines()[0],
-        "capture_source_sha256": {
-            "scripts/capture_agent_behavior_eval.py": hashlib.sha256(
-                Path(__file__).read_bytes()
-            ).hexdigest(),
-            "tests/fixtures/agent_behavior_scenarios.json": hashlib.sha256(
-                SCENARIOS.read_bytes()
-            ).hexdigest(),
-        },
-        "skill_sha256": skill_hashes,
-        "loaded_skill_paths": skill_paths,
-        "hermes_command_policy": {
-            "toolsets": ["vision"],
-            "max_turns": 1,
-            "domain_tools_executed": False,
-            "model": MODEL,
-            "provider": PROVIDER,
-        },
-        "records": records,
-    }
-    output.write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
+                save()
+                completed.check_returncode()
+                session_id = parse_session_id(raw, completed.stderr)
+                record["session_id"] = session_id
+                provenance = session_provenance(session_id)
+                record["runtime"] = provenance
+                if (
+                    provenance["model"] != MODEL
+                    or provenance["billing_provider"] != PROVIDER
+                ):
+                    raise ValueError(
+                        "Hermes actual model/provider differs from the pinned candidate"
+                    )
+                record["output"] = parse_json_response(raw)
+            except Exception as exc:
+                record["capture_error"] = f"{type(exc).__name__}: {exc}"
+                raise
+            finally:
+                save()
+    artifact["completed"] = True
+    save()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=OBSERVED)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="new capture path outside the repository",
+    )
     args = parser.parse_args()
     capture(args.output)
 

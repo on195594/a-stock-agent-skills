@@ -9,7 +9,13 @@ from typing import Any
 
 import pytest
 
-from scripts.capture_agent_behavior_eval import parse_json_response, prompt_sha256
+from scripts.capture_agent_behavior_eval import (
+    ROOT,
+    capture,
+    parse_json_response,
+    parse_session_id,
+    prompt_sha256,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GOLDEN = FIXTURES / "agent_behavior_scenarios.json"
@@ -168,6 +174,11 @@ def _contains(actual: Any, expected: Any) -> bool:
 
 
 def test_eight_agent_outputs_are_external_and_bound_to_exact_prompts() -> None:
+    # Freeze the whole historical capture, including its original harness hashes.
+    # Evolving the capture helper must not rewrite old evidence as a current run.
+    assert hashlib.sha256(OBSERVED.read_bytes()).hexdigest() == (
+        "4804692356567b39fb2f4da293fe89675cf5e040b51a5107ed155fdf550c466c"
+    )
     artifact = json.loads(OBSERVED.read_text(encoding="utf-8"))
     assert artifact["schema_version"] == 1
     assert artifact["captured_at"].endswith("+00:00")
@@ -179,8 +190,9 @@ def test_eight_agent_outputs_are_external_and_bound_to_exact_prompts() -> None:
     }
     assert set(artifact["capture_source_sha256"]) == expected_sources
     for relative, expected_hash in artifact["capture_source_sha256"].items():
-        source = Path(__file__).parents[1] / relative
-        assert hashlib.sha256(source.read_bytes()).hexdigest() == expected_hash
+        assert re.fullmatch(r"[0-9a-f]{64}", expected_hash)
+        if relative == "tests/fixtures/agent_behavior_scenarios.json":
+            assert hashlib.sha256(GOLDEN.read_bytes()).hexdigest() == expected_hash
     assert artifact["hermes_command_policy"] == {
         "toolsets": ["vision"],
         "max_turns": 1,
@@ -210,6 +222,29 @@ def test_eight_agent_outputs_are_external_and_bound_to_exact_prompts() -> None:
         assert record["runtime"]["source"] == "tool"
         assert record["runtime"]["tool_call_count"] == 0
     assert len({record["session_id"] for record in RECORDS.values()}) == 8
+
+
+def test_capture_reads_current_and_historical_session_headers() -> None:
+    historical = next(iter(RECORDS.values()))
+    assert parse_session_id(historical["raw_response"], "") == historical["session_id"]
+    current = "local-" + "a" * 64
+    assert parse_session_id("{}", f"\nsession_id: {current}\n") == current
+    with pytest.raises(ValueError, match="session identity"):
+        parse_session_id("{}", "")
+
+
+def test_capture_refuses_to_overwrite_previous_evidence(tmp_path: Path) -> None:
+    target = tmp_path / "previous.json"
+    previous = OBSERVED.read_bytes()
+    target.write_bytes(previous)
+    with pytest.raises(FileExistsError, match="preserve prior capture"):
+        capture(target)
+    assert target.read_bytes() == previous
+
+
+def test_raw_capture_stays_outside_repository() -> None:
+    with pytest.raises(ValueError, match="outside the repository"):
+        capture(ROOT / "new-raw-capture.json")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda item: item["id"])
