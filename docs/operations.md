@@ -208,6 +208,18 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Stop-alert recalibration — 2026-10-22
+
+At the user's request to recalibrate stop-loss price alerts, release 0.1.22 (`4fc2879`)
+is active (rollback manifest `~/.local/share/a-stock-agent/rollback-1792635659778563440.json`,
+0.1.21 retained). Hermes no-agent job `a-stock-stop-alert` (`ca568f56d9ef`,
+`*/5 9-15 * * 1-5`, Telegram) runs `~/.hermes/scripts/cron/a-stock-stop-alert.sh` against
+the ledger stop lines of all open holdings. It replaced the user's legacy job
+`华东医药000963低于27.8预警` (`dd0a642416df`, hard-coded 27.80, removed; its script and
+state file are left in `~/.hermes/scripts/` and `~/.hermes/cron/state/`). Job backup
+`~/.hermes/cron/jobs.json.bak.20261022-pre-stop-alert`. The production crontab entry is
+unchanged; its script now pushes only on price/P3 stop alerts.
+
 ### Daily brief job and Hermes router slimming — 2026-10-22
 
 Per the user's request to proceed with B and C, release 0.1.21 (`6ac1663`) is active
