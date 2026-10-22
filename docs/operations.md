@@ -203,6 +203,28 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Ledger checks and P0 carry-forward — 2026-10-22
+
+After user authorization to commit and install, release 0.1.18 (`7082d82`,
+a-stock-lib 0.8.2) is active; the three stable CLI symlinks select
+`runtime/0.1.18-7082d82c84f8/venv/bin` and the same nine Skill links were recreated.
+It adds read-only `dividend-check`, the zero-tax sell warning, W1
+`regulatory-evidence` and P0 carry-forward per the
+[2026-10-22 P0 spec](specs/2026-10-22-p0-evidence-annual-carry-forward-spec.md).
+No database, schema, runtime.env, cron or service change; no P0 evidence has been
+written yet.
+
+`bash scripts/check.sh` passed 1383 tests (2 optional skips). The installed CLI
+lists both commands, `dividend-check` read TuShare through the private config and
+found no unrecorded dividend for the four open holdings, and an unconfirmed
+`regulatory-evidence` exited 3. A pre-open `a-stock-fetch fetch 600900` stopped at
+the Sina quote step before any cache write, so the refresh carry-forward path is
+covered by tests only.
+
+Rollback requires separate authorization: restore CLI entries from
+`~/.local/share/a-stock-agent/rollback-1792631658752677440.json` (0.1.17 retained)
+and revert `d97f1aa`..`7082d82` on master.
+
 ### Risk denominator and breach attribution — 2026-10-22
 
 After user authorization to commit and install, release 0.1.17
