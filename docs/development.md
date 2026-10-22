@@ -95,6 +95,12 @@ Fixture writes are allowed only inside that temporary state. Production W1
 commands still require `--confirm-write` and a separate user decision; a
 Goal or a passing test does not grant that permission.
 
+The autouse fixture isolates `CACHE_DB_PATH` but not `A_STOCK_STATE_DIR`: a test of a
+command that writes state files (e.g. `stop-alert`) sets that variable to a temporary
+path itself. Never undo `monkeypatch` inside a test; it also reverts the database
+isolation, which on 2026-10-22 let a test write to the production ledger (now
+guarded by `test_tests_never_undo_the_autouse_database_isolation`).
+
 ## Documentation and evidence
 
 `cache.py` owns CLI parsing, command dispatch and the write gate; Python callers

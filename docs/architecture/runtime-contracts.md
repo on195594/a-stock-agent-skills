@@ -65,8 +65,9 @@ single-name or portfolio lower-bound breaches survive other missing risks.
 Incomplete `total_stop_risk` and `total_stop_risk_pct` remain null; only the
 explicit `known_stop_risk_lower_bound` may describe the known part. Required
 `account.risk_policy` carries actual limits, policy_id, source and field_sources.
-S1 sources are compatibility defaults (2% / 8%) or explicit CLI overrides,
-not confirmed personal policy. Comparisons are strict `>` before formatting.
+Sources are an effective, confirmed policy file (S3a), compatibility defaults
+(2% / 8%, not a personal policy) or explicit CLI overrides. Comparisons are strict
+`>` before formatting.
 
 A budget escalation is a review candidate; code=null means portfolio scope.
 There is at most one budget escalation per scope/code. Details identify amount,
@@ -74,7 +75,8 @@ its principal/unrealized-gain split (or unknown), ratio, limit, denominator and
 source/scope. `account.denominator_components` splits the denominator into the
 CLI account value and policy-file `off_account_strategy_cash`;
 `manifest.denominator_source` is `cli` or `cli+policy_file`, and
-`holdings[].stop_risk_unrealized_gain` is the gain above `reference_cost`. Proven breaches cannot coexist with
+`holdings[].stop_risk_unrealized_gain` is the gain above `reference_cost`.
+Proven breaches cannot coexist with
 cleared/no_action/clean. Existing valid trade candidates retain precedence;
 stale/unavailable/conflicted data remains blocked. No alert is persisted.
 Clean additionally requires complete risk, quotes, valuation and denominator

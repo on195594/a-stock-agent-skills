@@ -48,10 +48,13 @@ Use the stable commands from any working directory:
 a-stock-cache holdings
 a-stock-cache portfolio-risk
 a-stock-cache check-holdings
+a-stock-cache dividend-check
+a-stock-cache benchmark-report
 a-stock-fetch check <代码>
 ```
 
-`holdings` and `portfolio-risk` are read-only views. `check-holdings` is an
+`holdings` and `portfolio-risk` are read-only views; `dividend-check` and
+`benchmark-report` read TuShare but write nothing. `check-holdings` is an
 R1 routine check: it may refresh market data and record an alert, but it does
 not write holdings, transactions or other W1 investment state.
 
@@ -133,7 +136,7 @@ ledger evidence); 1 unexpected runtime/I/O failure. `exact` is conditional on th
 file's source declarations and flow model, not independent broker authentication,
 GIPS compliance, causal AI attribution or trading permission.
 
-## S3a read-only risk policy (runtime deployed; no personal policy adopted)
+## S3a read-only risk policy (runtime deployed; personal policy in use)
 
 Both risk commands additionally accept `--policy-file`, `--account-scope` and
 `--portfolio-value-as-of`. A shared resolver applies explicit numeric overrides,
@@ -158,8 +161,12 @@ existing-position budget report has a clean fast gate. No default 5% drawdown
 limit or maximum-drawdown guarantee is introduced.
 
 Invalid risk parameters return controlled failure before market/DB reads in the
-handler. Deployment created no real policy file and did not adopt a personal policy;
-client activation and verification boundaries are recorded below.
+handler. The user's own `risk-policy.json` (`personal-risk-policy-20261009`: 6% per
+position, 18% portfolio, confirmed 2026-10-09) is in use and requires an explicit
+matching `--account-scope`; no command created or edited it. An optional
+`off_account_strategy_cash` field adds strategy cash held outside the broker account
+to the denominator ([2026-10-22 spec](specs/2026-10-22-risk-denominator-and-breach-attribution-spec.md));
+it is not configured.
 
 ## Write boundary
 
@@ -208,194 +215,46 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
-### Stop-alert recalibration — 2026-10-22
+State as of 2026-10-22, after user-authorized commits and installs. Step-by-step
+records for 0.1.16–0.1.22 are in `git show 0d7c0a5:docs/operations.md`.
 
-At the user's request to recalibrate stop-loss price alerts, release 0.1.22 (`4fc2879`)
-is active (rollback manifest `~/.local/share/a-stock-agent/rollback-1792635659778563440.json`,
-0.1.21 retained). Hermes no-agent job `a-stock-stop-alert` (`ca568f56d9ef`,
-`*/5 9-15 * * 1-5`, Telegram) runs `~/.hermes/scripts/cron/a-stock-stop-alert.sh` against
-the ledger stop lines of all open holdings. It replaced the user's legacy job
-`华东医药000963低于27.8预警` (`dd0a642416df`, hard-coded 27.80, removed; its script and
-state file are left in `~/.hermes/scripts/` and `~/.hermes/cron/state/`). Job backup
-`~/.hermes/cron/jobs.json.bak.20261022-pre-stop-alert`. The production crontab entry is
-unchanged; its script now pushes only on price/P3 stop alerts.
+**Runtime.** Release 0.1.22 (`4fc2879`, a-stock-lib 0.8.2). The three stable CLI
+symlinks in `~/.local/bin` select `runtime/0.1.22-4fc28792e068/venv/bin`; the nine
+Claude/Codex/Hermes Skill links select this repository's `skills/`. `runtime.env`
+holds the TuShare token and Telegram settings (mode 0600); the database schema is
+unchanged since migration 035. The `current` pointer is historical and owns nothing.
 
-### Daily brief job and Hermes router slimming — 2026-10-22
+**Scheduled jobs.**
 
-Per the user's request to proceed with B and C, release 0.1.21 (`6ac1663`) is active
-(rollback manifest `~/.local/share/a-stock-agent/rollback-1792634285856578400.json`,
-0.1.20 retained) and adds read-only `daily-brief`. Hermes no-agent job
-`a-stock-daily-brief` (`7ab0ded3121c`, `35 15 * * 1-5`, Telegram) runs
-`~/.hermes/scripts/cron/a-stock-daily-brief.sh`; it is silent without same-day quotes.
-Backup `~/.hermes/cron/jobs.json.bak.20261022-pre-daily-brief`; remove with
-`hermes cron remove 7ab0ded3121c`. A local run printed the expected brief; the first
-delivery (2026-10-22 15:35) is not yet observed.
+| Owner | Job | Schedule | Behaviour |
+|---|---|---|---|
+| crontab | `scripts/check-holdings-cron.sh` | 09:35 Mon–Fri | canonical holdings check; pushes only on price/P3 stop alerts |
+| Hermes `ca568f56d9ef` | `a-stock-stop-alert` | every 5 min 09–15 Mon–Fri | read-only `stop-alert`; once per day per worsening level |
+| Hermes `7ab0ded3121c` | `a-stock-daily-brief` | 15:35 Mon–Fri | read-only `daily-brief`; silent without same-day quotes |
+| Hermes `93c4f5a4d0fc` | `a-stock-benchmark-monthly` | 09:00 on the 1st | read-only `benchmark-report` |
 
-Hermes's private router `investment-decision-and-account-workflows` now only routes
-A-share work to the canonical Skills: its conflicting A-share rules (screenshot
-inference ban, per-write external backup, tracker DB, parallel holding alerts) and the
-three legacy watchlist/notification references were removed. Backup
-`~/.hermes/backups/investment-decision-and-account-workflows.bak-20261022`; Hermes's
-loader reads the new file and its skill validator passes. The pre-existing user alert
-job `华东医药000963低于27.8预警` (`dd0a642416df`) was left unchanged.
+Hermes jobs are no-agent scripts in `~/.hermes/scripts/cron/a-stock-*.sh`; remove one
+with `hermes cron remove <id>`. They replaced the user's hard-coded
+`华东医药000963低于27.8预警` job (removed; script and state file left in place).
 
-### Ledger benchmark report and monthly Hermes job — 2026-10-22
+**Hermes configuration.** `skills.external_dirs` points at this repository's
+`skills/` (backup `~/.hermes/backups/config.yaml.pre-skill-dir-20261022`). The private
+router `investment-decision-and-account-workflows` only routes A-share work to the
+canonical Skills (backup `~/.hermes/backups/investment-decision-and-account-workflows.bak-20261022`).
 
-After user authorization, release 0.1.20 (`e122078`) is active (CLI symlinks select
-`runtime/0.1.20-e12207826d46/venv/bin`; rollback manifest
-`~/.local/share/a-stock-agent/rollback-1792633880547816440.json`, 0.1.19 retained). It adds
-read-only `benchmark-report`. The installed CLI reproduced the scratch result
-(ledger +4,874 CNY; excess +16,886 vs CSI 300 TR, +2,529 vs CSI Dividend TR, 2026-05-27
-to 2026-10-21).
+**Production state written on 2026-10-22.** 000963/002050 dividends (corporate-action);
+P0 regulatory evidence for 000963, 002050, 600900, 603606 (2025 annual period, all
+clear). One accidental test write (000963 dividend event 32) was removed; database
+backups are under `~/.local/share/a-stock-agent/backups/cache-pre-*-20261022.db`.
+No personal `off_account_strategy_cash` is configured.
 
-Separately authorized: Hermes no-agent cron job `a-stock-benchmark-monthly`
-(`93c4f5a4d0fc`, `0 9 1 * *`, Telegram delivery) runs
-`~/.hermes/scripts/cron/a-stock-benchmark-monthly.sh`; no model call. Backup
-`~/.hermes/cron/jobs.json.bak.20261022-pre-benchmark`. Remove with
-`hermes cron remove 93c4f5a4d0fc`. The script was run locally without delivery; the
-first scheduled delivery (2026-11-01) is not yet observed.
+**Rollback** requires separate authorization: restore the CLI entries from
+`~/.local/share/a-stock-agent/rollback-1792635659778563440.json` (earlier runtimes are
+retained), revert the commits since `ad51a5d` as needed, and reload Skill sessions.
 
-### Codex review fixes — 2026-10-22
-
-After user authorization to commit and install, release 0.1.19 (`b01b38c`) is
-active: CLI symlinks select `runtime/0.1.19-b01b38cd41ff/venv/bin` and the same nine
-Skill links were recreated. It fixes the two-round Codex review findings recorded in
-the [P0 spec](specs/2026-10-22-p0-evidence-annual-carry-forward-spec.md#独立审查codex2026-10-22).
-No schema, runtime.env, cron or service change; no P0 evidence has been written.
-
-During development a test that undid its monkeypatch reached the production ledger
-and added one 000963 dividend event (id 32, 350 CNY). It was removed after a backup
-(`backups/cache-pre-revert-event32-20261022.db`), integrity check ok; a guard test now
-forbids undoing the database isolation.
-
-`bash scripts/check.sh` passed 1391 tests (2 optional skips). The installed CLI
-reports 0.1.19, `dividend-check` found no unrecorded dividend, an unconfirmed W1
-exited 3, and a preset sub-check sent to `regulatory-evidence` against a scratch
-database copy was rejected with the gate left incomplete.
-
-Rollback requires separate authorization: restore CLI entries from
-`~/.local/share/a-stock-agent/rollback-1792632926354479040.json` (0.1.18 retained)
-and revert `9f4996d`..`b01b38c` on master.
-
-### Ledger checks and P0 carry-forward — 2026-10-22
-
-After user authorization to commit and install, release 0.1.18 (`7082d82`,
-a-stock-lib 0.8.2) is active; the three stable CLI symlinks select
-`runtime/0.1.18-7082d82c84f8/venv/bin` and the same nine Skill links were recreated.
-It adds read-only `dividend-check`, the zero-tax sell warning, W1
-`regulatory-evidence` and P0 carry-forward per the
-[2026-10-22 P0 spec](specs/2026-10-22-p0-evidence-annual-carry-forward-spec.md).
-No database, schema, runtime.env, cron or service change; no P0 evidence has been
-written yet.
-
-`bash scripts/check.sh` passed 1383 tests (2 optional skips). The installed CLI
-lists both commands, `dividend-check` read TuShare through the private config and
-found no unrecorded dividend for the four open holdings, and an unconfirmed
-`regulatory-evidence` exited 3. A pre-open `a-stock-fetch fetch 600900` stopped at
-the Sina quote step before any cache write, so the refresh carry-forward path is
-covered by tests only.
-
-Rollback requires separate authorization: restore CLI entries from
-`~/.local/share/a-stock-agent/rollback-1792631658752677440.json` (0.1.17 retained)
-and revert `d97f1aa`..`7082d82` on master.
-
-### Risk denominator and breach attribution — 2026-10-22
-
-After user authorization to commit and install, release 0.1.17
-(`12d485f`, a-stock-lib 0.8.2) is active: the three stable CLI symlinks select
-`~/.local/share/a-stock-agent/runtime/0.1.17-12d485f45ad9/venv/bin`, and the
-all-client installer recreated the same nine canonical Skill links (Claude,
-Codex, Hermes). Rule basis: the
-[2026-10-22 spec](specs/2026-10-22-risk-denominator-and-breach-attribution-spec.md).
-Per the user, no `off_account_strategy_cash` is configured; the denominator stays
-the broker-screenshot total supplied per run. No database, schema, runtime.env,
-cron or service change.
-
-Hermes `skills.external_dirs` was separately authorized and changed from the stale
-`~/.local/share/a-stock-agent/current/skills` (09-30 release view) to this
-repository's `skills/`; backup `~/.hermes/backups/config.yaml.pre-skill-dir-20261022`.
-Hermes's own loader returns the repository SKILL.md and references unchanged.
-
-`bash scripts/check.sh` passed 1368 tests (2 optional skips). The installed CLI
-reports 0.1.17, emits `denominator_components`, refuses an unconfirmed W1 with
-exit 3, and reads production holdings read-only. A pre-open snapshot had no
-same-day quotes, so live attribution values remain unobserved; fresh model
-behavior replay is NOT_RUN.
-
-Rollback requires separate authorization: restore the CLI entries from
-`~/.local/share/a-stock-agent/rollback-1792630276278475080.json` (runtime 0.1.16
-is retained), revert `12d485f` on master and reload sessions.
-
-### Skill contract publication — 2026-10-21
-
-After user authorization to commit and deploy, the reviewed Skill-only changes
-are published through the six existing Claude/Codex symlinks to this repository.
-All 26 tracked Skill files are compared through both clients (52 comparisons).
-Hermes's three expected discovery entries are absent on this host; they were not
-restored implicitly. The older nine-entry record below is historical, not the
-current client-discovery state. Existing sessions must reload Skills or start a
-new session; native-client reload and fresh model behavior replay are NOT_RUN.
-
-The runtime source, dependency pins and three CLI targets remain unchanged from
-0.1.16 (`1a29d06451e42638e3c97d7c774b563ca84845e8`). No installer activation,
-configuration, database, cron, service or permission change is needed for the
-existing symlink clients. The all-client installer was dry-run only; invoking it
-would unnecessarily reinstall runtime and recreate absent Hermes entries.
-
-`bash scripts/check.sh` passed 1357 tests (2 optional skips), Ruff, Skill and
-regulatory validation, isolated QA and cron smoke. Claude Opus reviewed the exact
-Skill candidate and closed all five findings after fixes. These checks do not
-qualify live model obedience or real-account behavior. Tracker evidence-package
-consumption is cancelled; no Tracker operation was performed.
-
-Commit identity, tracked-file hashes and active link targets are recorded outside
-Git under `~/.local/share/a-stock-agent/deployment-candidates/20261021-skill-contracts/`.
-A rollback requires separate authorization: revert the Skill commit on master,
-verify the same symlink targets and reload sessions. Do not use the older
-credential/CLI rollback to undo this Skill-only publication.
-
-### Explicit credential cutover — 2026-10-08
-
-After explicit user authorization to reuse the existing TuShare token, release
-0.1.16 (`1a29d06451e42638e3c97d7c774b563ca84845e8`) is active with a-stock-lib
-0.8.2. The three stable CLI symlinks now select
-`~/.local/share/a-stock-agent/runtime/0.1.16-1a29d06451e4/venv/bin`.
-All nine client Skill links still select the canonical `skills/` directories;
-78 client file comparisons match the release. The historical `current` pointer
-is unchanged and is not the active CLI or Skill owner.
-
-The existing token was copied into the selected external runtime.env, still
-mode 0600, without changing its other settings or the Tracker credential files.
-Direct commands resolve that private configuration without exporting its other
-secrets. A real TuShare calendar read returned 242 rows through the installed
-fetcher, with no AKShare fallback. The cron configuration export route and the
-actual cron script with the installed CLI passed in isolated, notification-disabled
-state. No production cron job or notification was manually triggered.
-
-Both UTC and Asia/Shanghai repository gates passed all 1356 tests, including
-optional installer checks. Independent reviews and release-commit GitHub CI passed.
-The normal all-client installer passed in an isolated home. The downloaded wheel,
-GitHub asset digest, 25 runtime modules and 13 library modules match their verified
-release artifacts. Stable CLI help, missing-token refusal, W1 exit-3 refusal and
-read-only production holdings checks passed. No investment-rule, schema, scheduler
-or service change occurred; native-client model/reload qualification was NOT_RUN.
-
-The UTC gate exposed old analysis-date fixtures and a host-local holding-duration
-calculation. Version 0.1.16 aligns these with the existing CST ledger date; buy-date
-precedence and return semantics are unchanged. Published 0.1.15 artifacts were
-retained unchanged and that version was never activated.
-
-Private evidence and rollback inputs are retained under
-`~/.local/share/a-stock-agent/deployment-candidates/20261008-skills-token/`.
-Use `rollback.json`, `runtime.env.before` and the old executable runtime
-`runtime/0.1.13-9574b686f910/venv` for a bounded config/CLI rollback. Do not alter
-Skill links, the unrelated `current` pointer, the database or crontab.
-
-The first verification attempt restored the old config/CLI because SQLite's
-read-only open created its WAL/SHM auxiliary files. The main database SHA256 stayed
-identical and the WAL is empty. The retry checks persistent-file hashes and empty
-WAL separately; failed-attempt evidence is retained. No auxiliary file was deleted
-to manufacture a byte-identical state. Existing sessions may reload their Skills.
+**Not yet observed.** First Telegram deliveries of `daily-brief` (2026-10-22 15:35),
+a real `stop-alert` crossing, and `benchmark-report` (2026-11-01); fresh Hermes
+behaviour under the slimmed router.
 
 ## Historical deployment evidence
 
@@ -403,6 +262,7 @@ Superseded deployment and preflight records are retained in Git, not as current
 operating instructions. Read older deployment ledgers from their source snapshots:
 
 ```bash
+git show 0d7c0a5:docs/operations.md  # 2026-10-08 to 10-22 step records
 git show 50c55b2:docs/operations.md  # fc54fb6 copy-install hygiene deployment
 git show f5307f7:docs/operations.md # older complete ledger
 ```
