@@ -203,6 +203,28 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### Codex review fixes — 2026-10-22
+
+After user authorization to commit and install, release 0.1.19 (`b01b38c`) is
+active: CLI symlinks select `runtime/0.1.19-b01b38cd41ff/venv/bin` and the same nine
+Skill links were recreated. It fixes the two-round Codex review findings recorded in
+the [P0 spec](specs/2026-10-22-p0-evidence-annual-carry-forward-spec.md#独立审查codex2026-10-22).
+No schema, runtime.env, cron or service change; no P0 evidence has been written.
+
+During development a test that undid its monkeypatch reached the production ledger
+and added one 000963 dividend event (id 32, 350 CNY). It was removed after a backup
+(`backups/cache-pre-revert-event32-20261022.db`), integrity check ok; a guard test now
+forbids undoing the database isolation.
+
+`bash scripts/check.sh` passed 1391 tests (2 optional skips). The installed CLI
+reports 0.1.19, `dividend-check` found no unrecorded dividend, an unconfirmed W1
+exited 3, and a preset sub-check sent to `regulatory-evidence` against a scratch
+database copy was rejected with the gate left incomplete.
+
+Rollback requires separate authorization: restore CLI entries from
+`~/.local/share/a-stock-agent/rollback-1792632926354479040.json` (0.1.18 retained)
+and revert `9f4996d`..`b01b38c` on master.
+
 ### Ledger checks and P0 carry-forward — 2026-10-22
 
 After user authorization to commit and install, release 0.1.18 (`7082d82`,
