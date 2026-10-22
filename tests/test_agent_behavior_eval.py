@@ -3,15 +3,22 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from scripts import capture_agent_behavior_eval as capture_module
 from scripts.capture_agent_behavior_eval import (
     ROOT,
+    FOLLOWUPS,
+    MODEL,
+    PROVIDER,
     capture,
+    followup_turns,
     parse_json_response,
     parse_session_id,
     prompt_sha256,
@@ -160,6 +167,176 @@ def evaluate(scenario: dict[str, Any], output: dict[str, Any]) -> list[str]:
 
 
 SCENARIOS, RECORDS = _load()
+FOLLOWUP_CASES = json.loads(FOLLOWUPS.read_text())["scenarios"]
+
+
+def validate_candidate(artifact: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    assert artifact.get("completed") is True, "capture is incomplete"
+    records = {record["id"]: record for record in artifact["records"]}
+    assert len(records) == len(artifact["records"]), "duplicate case IDs"
+    turns = [turn for case in FOLLOWUP_CASES for turn in followup_turns(case)]
+    required = {case["id"] for case in SCENARIOS}
+    followup = artifact.get("followup_case")
+    if followup is not None:
+        matching = [case for case in FOLLOWUP_CASES if case["id"] == followup]
+        assert len(matching) == 1, "unknown follow-up group"
+        expected = followup_turns(matching[0])
+    elif set(records) == required:
+        expected = SCENARIOS
+    else:
+        expected = SCENARIOS + turns
+    assert set(records) == {case["id"] for case in expected}, "missing or unknown cases"
+    for case in expected:
+        record = records[case["id"]]
+        assert not record.get("capture_error"), case["id"]
+        assert record.get("exit_code") == 0, case["id"]
+        assert record["prompt_sha256"] == prompt_sha256(case), case["id"]
+        assert parse_json_response(record["raw_response"]) == record["output"], case[
+            "id"
+        ]
+        assert (
+            parse_session_id(record["raw_response"], record.get("stderr", ""))
+            == record["session_id"]
+        )
+        runtime = record["runtime"]
+        assert runtime["model"] == MODEL and runtime["billing_provider"] == PROVIDER, (
+            case["id"]
+        )
+        assert runtime["source"] == "tool" and runtime["tool_call_count"] == 0, case[
+            "id"
+        ]
+    if followup is not None:
+        assert len({record["session_id"] for record in records.values()}) == 1, followup
+        return records
+    sessions = [records[case["id"]]["session_id"] for case in SCENARIOS]
+    if len(expected) > len(SCENARIOS):
+        for case in FOLLOWUP_CASES:
+            same_session = {
+                records[turn["id"]]["session_id"] for turn in followup_turns(case)
+            }
+            assert len(same_session) == 1, case["id"]
+            sessions.extend(same_session)
+    assert len(sessions) == len(set(sessions)), "independent cases reused a session"
+    return records
+
+
+@pytest.fixture(scope="module")
+def candidate_records():
+    path = os.environ.get("A_STOCK_BEHAVIOR_ARTIFACT")
+    if not path:
+        pytest.skip("set A_STOCK_BEHAVIOR_ARTIFACT to score an external candidate")
+    return validate_candidate(json.loads(Path(path).read_text()))
+
+
+def test_candidate_provenance(candidate_records):
+    assert candidate_records  # The fixture validates before any behavior scoring.
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda item: item["id"])
+def test_candidate_artifact(scenario, candidate_records):
+    if scenario["id"] not in candidate_records:
+        pytest.skip("single follow-up group: behavior uses its manual rubric")
+    output = candidate_records[scenario["id"]]["output"]
+    violations = evaluate(scenario, output)
+    if not _contains(output, scenario["expected_output"]):
+        violations.append("expected_output")
+    assert not violations, f"{scenario['id']}: {violations}"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "incomplete",
+        "capture_error",
+        "exit_code",
+        "prompt",
+        "model",
+        "provider",
+        "tools",
+        "missing",
+        "duplicate",
+        "unknown",
+        "session",
+        "output",
+    ],
+)
+def test_candidate_validation_rejects_invalid_evidence(failure):
+    artifact = json.loads(OBSERVED.read_text())
+    artifact["completed"] = True
+    for record in artifact["records"]:
+        record["exit_code"] = 0
+    validate_candidate(artifact)
+    first = artifact["records"][0]
+    if failure == "incomplete":
+        artifact["completed"] = False
+    elif failure == "capture_error":
+        first["capture_error"] = "timeout"
+    elif failure == "exit_code":
+        first["exit_code"] = 1
+    elif failure == "prompt":
+        first["prompt_sha256"] = "0" * 64
+    elif failure == "model":
+        first["runtime"]["model"] = "other"
+    elif failure == "provider":
+        first["runtime"]["billing_provider"] = "other"
+    elif failure == "tools":
+        first["runtime"]["tool_call_count"] = 1
+    elif failure == "missing":
+        artifact["records"].pop()
+    elif failure == "duplicate":
+        artifact["records"].append(first)
+    elif failure == "unknown":
+        first["id"] = "unknown"
+    elif failure == "session":
+        first["session_id"] = "other"
+    elif failure == "output":
+        first["output"]["stopped"] = False
+    with pytest.raises(AssertionError):
+        validate_candidate(artifact)
+
+
+def test_followup_inputs_keep_evidence_fixed():
+    assert len(FOLLOWUP_CASES) == 4
+    assert sum(len(followup_turns(case)) for case in FOLLOWUP_CASES) == 9
+    for case in FOLLOWUP_CASES:
+        assert case["manual_rubric"]
+        turns = followup_turns(case)
+        assert turns[0]["prompt_state"] == case["prompt_state"]
+        for turn, question in zip(turns[1:], case["followups"], strict=True):
+            assert turn["prompt_state"] == case["prompt_state"] | {
+                "user_request": question
+            }
+
+
+@pytest.mark.parametrize(
+    "failure", [None, "session", "prompt", "missing", "unknown_group", "extra"]
+)
+def test_single_followup_artifact_validation(failure):
+    case = FOLLOWUP_CASES[-1]
+    records = []
+    for turn in followup_turns(case):
+        record = copy.deepcopy(next(iter(RECORDS.values())))
+        record.update(id=turn["id"], prompt_sha256=prompt_sha256(turn), exit_code=0)
+        records.append(record)
+    artifact = {"completed": True, "followup_case": case["id"], "records": records}
+    if failure == "session":
+        records[-1]["raw_response"] = records[-1]["raw_response"].replace(
+            records[-1]["session_id"], "other-session"
+        )
+        records[-1]["session_id"] = "other-session"
+    elif failure == "prompt":
+        records[-1]["prompt_sha256"] = "0" * 64
+    elif failure == "missing":
+        records.pop()
+    elif failure == "unknown_group":
+        artifact["followup_case"] = "unknown"
+    elif failure == "extra":
+        records.append(copy.deepcopy(next(iter(RECORDS.values()))))
+    if failure:
+        with pytest.raises(AssertionError):
+            validate_candidate(artifact)
+    else:
+        assert len(validate_candidate(artifact)) == len(records)
 
 
 def _contains(actual: Any, expected: Any) -> bool:
@@ -245,6 +422,62 @@ def test_capture_refuses_to_overwrite_previous_evidence(tmp_path: Path) -> None:
 def test_raw_capture_stays_outside_repository() -> None:
     with pytest.raises(ValueError, match="outside the repository"):
         capture(ROOT / "new-raw-capture.json")
+
+
+@pytest.mark.parametrize("failure", [None, "resume", "model", "timeout"])
+def test_followup_capture_resumes_or_preserves_failure(tmp_path, monkeypatch, failure):
+    sample = next(iter(RECORDS.values()))
+    session = sample["session_id"]
+    commands = []
+    monkeypatch.setattr(capture_module, "loaded_skill_provenance", lambda: ({}, {}))
+    monkeypatch.setattr(
+        capture_module.subprocess, "check_output", lambda *a, **kw: "test\n"
+    )
+
+    def invoke(command, **kwargs):
+        commands.append(command)
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(
+                command,
+                150,
+                output=b"partial output",
+                stderr=f"session_id: {session}".encode(),
+            )
+        returned = (
+            "wrong-session" if failure == "resume" and len(commands) > 1 else session
+        )
+        return subprocess.CompletedProcess(
+            command, 0, json.dumps(sample["output"]), f"session_id: {returned}"
+        )
+
+    monkeypatch.setattr(capture_module.subprocess, "run", invoke)
+    runtime = sample["runtime"] | (
+        {"model": "wrong-model"} if failure == "model" else {}
+    )
+    monkeypatch.setattr(capture_module, "session_provenance", lambda _: runtime)
+    target = tmp_path / "candidate.json"
+    if failure:
+        with pytest.raises(
+            subprocess.TimeoutExpired if failure == "timeout" else ValueError
+        ):
+            capture(target, "unsupported_margin")
+    else:
+        capture(target, "unsupported_margin")
+    artifact = json.loads(target.read_text())
+    assert artifact["completed"] is (failure is None)
+    if failure in ("timeout", "model"):
+        assert len(commands) == 1  # no automatic retry or next turn after failure
+    else:
+        assert len(commands) == 2
+        assert "--resume" not in commands[0]
+        assert commands[1][-3:] == ["--resume", session, "--no-restore-cwd"]
+    if failure:
+        assert artifact["records"][-1]["capture_error"]
+    if failure == "timeout":
+        record = artifact["records"][0]
+        assert record["raw_response"] == "partial output"
+        assert record["stderr"] == f"session_id: {session}"
+        assert record["session_id"] == session and record["runtime"] == runtime
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda item: item["id"])

@@ -17,6 +17,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = ROOT / "tests/fixtures/agent_behavior_scenarios.json"
+FOLLOWUPS = ROOT / "tests/fixtures/agent_behavior_followups.json"
 SKILLS = "a-stock-research,a-stock-monitor,a-stock-qa"
 SKILL_NAMES = tuple(SKILLS.split(","))
 MODEL = "gpt-5.6-sol-900k"
@@ -51,6 +52,17 @@ Scenario input:
 
 def prompt_sha256(scenario: dict[str, Any]) -> str:
     return hashlib.sha256(build_prompt(scenario).encode()).hexdigest()
+
+
+def followup_turns(case: dict[str, Any]) -> list[dict[str, Any]]:
+    state = case["prompt_state"]
+    return [{"id": case["id"] + ":initial", "prompt_state": state}] + [
+        {
+            "id": f"{case['id']}:followup{index}",
+            "prompt_state": state | {"user_request": question},
+        }
+        for index, question in enumerate(case["followups"], 1)
+    ]
 
 
 def parse_json_response(stdout: str) -> dict[str, Any]:
@@ -125,7 +137,7 @@ def session_provenance(session_id: str) -> dict[str, Any]:
     return provenance
 
 
-def capture(output: Path) -> None:
+def capture(output: Path, followup: str | None = None) -> None:
     if output.exists():
         raise FileExistsError(
             f"preserve prior capture; choose a new --output: {output}"
@@ -133,6 +145,14 @@ def capture(output: Path) -> None:
     if output.resolve().is_relative_to(ROOT):
         raise ValueError("raw capture output must stay outside the repository")
     payload = json.loads(SCENARIOS.read_text(encoding="utf-8"))
+    scenarios = payload["scenarios"]
+    if followup is not None:
+        case = next(
+            case
+            for case in json.loads(FOLLOWUPS.read_text())["scenarios"]
+            if case["id"] == followup
+        )
+        scenarios = followup_turns(case)
     skill_hashes, skill_paths = loaded_skill_provenance()
     records = []
     artifact = {
@@ -141,6 +161,12 @@ def capture(output: Path) -> None:
         "git_head": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),
+        "git_dirty": bool(
+            subprocess.check_output(
+                ["git", "status", "--porcelain"], cwd=ROOT, text=True
+            ).strip()
+        ),
+        "followup_case": followup,
         "runtime_version": importlib.metadata.version("a-stock-agent-skills"),
         "runtime_source_sha256": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -157,6 +183,9 @@ def capture(output: Path) -> None:
             ).hexdigest(),
             "tests/fixtures/agent_behavior_scenarios.json": hashlib.sha256(
                 SCENARIOS.read_bytes()
+            ).hexdigest(),
+            "tests/fixtures/agent_behavior_followups.json": hashlib.sha256(
+                FOLLOWUPS.read_bytes()
             ).hexdigest(),
         },
         "skill_sha256": skill_hashes,
@@ -182,7 +211,8 @@ def capture(output: Path) -> None:
 
     save()
     with tempfile.TemporaryDirectory(prefix="a-stock-agent-eval-") as isolated:
-        for scenario in payload["scenarios"]:
+        resume = None
+        for scenario in scenarios:
             command = [
                 "hermes",
                 "chat",
@@ -207,6 +237,8 @@ def capture(output: Path) -> None:
                 "--skills",
                 SKILLS,
             ]
+            if followup and resume:
+                command += ["--resume", resume, "--no-restore-cwd"]
             record = {
                 "id": scenario["id"],
                 "prompt_sha256": prompt_sha256(scenario),
@@ -240,7 +272,32 @@ def capture(output: Path) -> None:
                     raise ValueError(
                         "Hermes actual model/provider differs from the pinned candidate"
                     )
+                if followup and resume and session_id != resume:
+                    raise ValueError("follow-up did not resume the same Hermes session")
                 record["output"] = parse_json_response(raw)
+                resume = session_id
+            except subprocess.TimeoutExpired as exc:
+                streams = {
+                    key: value.decode(errors="replace")
+                    if isinstance(value, bytes)
+                    else value or ""
+                    for key, value in (
+                        ("raw_response", exc.stdout),
+                        ("stderr", exc.stderr),
+                    )
+                }
+                record.update(streams, capture_error=f"TimeoutExpired: {exc}")
+                try:
+                    session_id = parse_session_id(
+                        streams["raw_response"], streams["stderr"]
+                    )
+                    record["session_id"] = session_id
+                    record["runtime"] = session_provenance(session_id)
+                except Exception as provenance_error:
+                    record["provenance_error"] = (
+                        f"{type(provenance_error).__name__}: {provenance_error}"
+                    )
+                raise
             except Exception as exc:
                 record["capture_error"] = f"{type(exc).__name__}: {exc}"
                 raise
@@ -258,8 +315,13 @@ def main() -> None:
         required=True,
         help="new capture path outside the repository",
     )
+    parser.add_argument(
+        "--followup",
+        choices=[case["id"] for case in json.loads(FOLLOWUPS.read_text())["scenarios"]],
+        help="capture one fixed multi-turn group instead of the eight single-turn cases",
+    )
     args = parser.parse_args()
-    capture(args.output)
+    capture(args.output, args.followup)
 
 
 if __name__ == "__main__":
