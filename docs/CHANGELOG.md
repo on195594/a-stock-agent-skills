@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.20 — 2026-10-22
 
 - 新增只读 `benchmark-report [--end YYYY-MM-DD]`：把账本全部买卖与分红现金流按同日同额镜像到沪深300全收益、中证红利全收益（TuShare H00300.CSI/H00922.CSI），在共同估值日比较净盈亏与超额；含推断事件时标为近似值。a-stock-lib 0.8.2 指数接口返回 SCHEMA_CHANGED，暂直接调 TuShare（代码内 shortcut 注释）。
 
