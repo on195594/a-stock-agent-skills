@@ -202,20 +202,19 @@ manifest outside the repository; retain it with the external runtime backup.
 
 For the current schema-compatible release, use the installer manifest and saved
 Skill contents identified in the deployment record after rollback authorization.
-Verify the active entries and source hashes still match that release, retain both
-runtimes, then atomically restore the recorded previous CLI targets and affected
-Skill contents. The nine Skill links retain their source paths; restoring those
-links alone cannot restore old text. The historical `current` pointer owns nothing.
-This release did not change runtime.env, model configuration, the database or cron;
-do not restore or rewrite them. Validate stable CLI entries using isolated state
-and disabled notifications, and reload Skills in existing sessions.
+Retain both runtimes, then restore the recorded CLI/Skill targets and matching
+canonical Skill contents; links alone cannot restore text in a mutable source tree.
+The historical `current` pointer owns nothing. This release adds only the Research
+URL and short-lived API token to runtime.env. A rollback must preserve unrelated
+configuration changes, account state, model settings and cron. Reload Skills in
+existing sessions after either activation or rollback.
 
 Schema/configuration/cron rollbacks are separate operations requiring their own
 authorization and matching evidence. If writes used an incompatible schema or
 state contract, pointer-only rollback is not sufficient: stop affected writers
 under explicit authorization and reconcile compatibility before proceeding.
 
-## Research integration candidate (2026-10-23)
+## Research integration validation before activation (2026-10-23)
 
 Runtime 0.1.23 adds `a-stock-cache research` and on-demand Research/Monitor routing.
 The candidate was developed separately because current client Skill links resolve
@@ -235,20 +234,35 @@ passed on rerun. Ruff, Skill validation, regulatory freshness, standalone QA and
 isolated cron smoke passed. Eleven optional capture/source-dependent cases skipped.
 No new multi-host model capture or real-account action was performed.
 
-This is candidate evidence, not active-client or production deployment evidence.
-The deployment record below remains authoritative until explicit paired activation.
+This section records candidate evidence. The separately authorized paired
+activation and production acceptance are recorded below.
 
 ## Current deployment record
 
-State as of 2026-10-23, after user-authorized quality publication and activation. Step-by-step
-records for 0.1.16–0.1.22 are in `git show 0d7c0a5:docs/operations.md`.
+State as of 2026-10-23, after explicit paired-release authorization. Earlier
+0.1.22 activation evidence is retained in `git show 7340a21:docs/operations.md`.
 
-**Runtime.** Release 0.1.22 (`992f5a5`, a-stock-lib 0.8.2). The three stable CLI
-symlinks in `~/.local/bin` select `runtime/0.1.22-992f5a5ca71d/venv/bin`; the nine
-Claude/Codex/Hermes Skill links select this repository's matching committed `skills/`.
-The previous runtime `0.1.22-4fc28792e068` remains available for rollback. `runtime.env`
-holds the TuShare token and Telegram settings (mode 0600); the database schema is
-unchanged since migration 035. The `current` pointer is historical and owns nothing.
+**Runtime.** Release 0.1.23 (`7340a21`, a-stock-lib 0.8.2, Python 3.13.5).
+The three stable CLI symlinks in `~/.local/bin` select
+`runtime/0.1.23-7340a2141bb2/venv/bin`. The six Claude/Codex Skill entries select
+`~/.local/share/a-stock-agent/releases/0.1.23-7340a2141bb2/skills/`; the three Hermes
+entries retain the canonical repository target to satisfy its existing
+`skills.external_dirs` resolved-path allowlist. Both source trees contain the same
+committed Skills. The canonical checkout was fast-forwarded to `7340a21`.
+Previous runtime `0.1.22-992f5a5ca71d` and saved old Skill contents remain available.
+The historical `current` pointer owns nothing.
+
+**Research connection.** The existing mode-0600
+`~/.config/a-stock-agent/runtime.env` now includes
+`A_STOCK_RESEARCH_URL=https://stock.keyi.win` and a short-lived
+`A_STOCK_RESEARCH_TOKEN`. TuShare/Telegram and all other existing settings were
+preserved. This token expires at **2026-10-24 02:19 Asia/Shanghai**; the current
+contract allows at most eight hours and has no automatic renewal. The Research
+owner can issue a new token with
+`docker exec a-share-research-web python -m a_share_research.login_token --agent --minutes 480`
+and replace only the token field in that private config; keep its output private.
+The CLI does not mint or renew credentials. Database schema remains at migration
+035; account state, investment policy, model configuration and cron were unchanged.
 
 **Scheduled jobs.**
 
@@ -274,32 +288,40 @@ clear). One accidental test write (000963 dividend event 32) was removed; databa
 backups are under `~/.local/share/a-stock-agent/backups/cache-pre-*-20261022.db`.
 No personal `off_account_strategy_cash` is configured.
 
-**Rollback.** Failure rollback was included in this deployment's approval and was
-not needed; a later operational rollback requires its corresponding authorization.
-The installer manifest is
-`~/.local/share/a-stock-agent/rollback-1792721384779766840.json`. The prior Skill
-contents, source hashes and entry targets are saved under
-`~/.local/share/a-stock-agent-evaluations/2026-10-22-quality/2026-10-23-input-repair/deployment/`
-as `source-before/` and `deployment-before.json`. Restore those contents as well as
-the previous CLI targets, preserving unrelated source edits, and reload sessions.
+**Rollback.** The installer manifest is
+`~/.local/share/a-stock-agent/rollback-1792750754888760200.json`.
+Paired release evidence is in
+`~/.local/share/a-share-research-evaluations/2026-10-23-paired-942a58d/` (0700;
+files 0600). `before.json` records all prior entry targets; `skills-before/`
+preserves the previous canonical Skill text. A later authorized rollback must
+restore both that text and the recorded nine Skill/three CLI targets, preserving
+unrelated edits; restoring links alone is insufficient after the canonical
+fast-forward. Restore the old runtime as a complete pair and reload sessions.
+The pre-release config is separately protected at
+`~/.local/share/a-stock-agent/backups/runtime-pre-r3-20261023.env`; it is not in
+the evidence archive. Only remove/revoke this release's Research connection if
+required, preserving later unrelated config changes. Do not restore account data.
+Research's compatible read-only recovery and database backup are documented in
+its [deployment record](https://github.com/on195594/a-share-research/blob/main/docs/implementation-plan.md#当前部署).
 
 **Not yet observed.** First Telegram deliveries of `daily-brief` (2026-10-22 15:35),
 a real `stop-alert` crossing, and `benchmark-report` (2026-11-01); fresh Hermes
 behaviour under the slimmed router.
 
-**2026-10-23 activation verified.** Commit `992f5a5` was pushed to `master`, and its
-[GitHub CI passed](https://github.com/on195594/a-stock-agent-skills/actions/runs/39887832134).
-After the isolated rehearsal and explicit approval, the existing installer
-installed the committed runtime offline and refreshed all three clients. All nine
-Skill trees match the evaluated candidate; all 25 installed runtime Python files
-match the release source, and all three stable CLI entrypoints pass their help
-checks. Both complete monitor fixtures validate. An unconfirmed W1 command exits
-3 without creating the isolated database; project Skill validation and standalone
-QA pass. Production account state, runtime.env, model configuration and cron were
-not changed. No additional model call or real notification was made. Private
-installation logs and verification results are saved in the deployment directory
-above; the [behavior acceptance](agent-behavior-eval.md#approved-contract-and-offline-acceptance-2026-10-23)
-retains its original captures and limits.
+**2026-10-23 paired activation verified.** The existing installer installed
+0.1.23 offline, with the hash-pinned Lib wheel. All nine Skill trees match the
+release, all 26 installed runtime Python files match source, and all three stable
+CLI entrypoints pass their help checks. The installed CLI used the actual private
+connection config to read report 11, then submit feedback run 18 → report 12.
+The research passed in 98 seconds with four model calls and produced two cited
+methods. A real 390×844 browser opened the same result through the parent report,
+expanded method evidence and logged out; its test session was revoked. The
+configured Agent token remains usable until the expiry above. The selected
+nonexistent account DB was not created. Historical Research rows were unchanged.
+Research Web/worker run `942a58d`; full identities, logs and screenshots are in
+the private evidence directory. No evaluation suite, independent model review or
+client-host behavior capture was repeated for this deployment. No notification
+or real-account action was performed.
 
 Hermes currently selects `openai-codex/gpt-6.1-sol-900k`. Its installed transport
 strips the context-window alias to the evaluated `gpt-6.1-sol` wire model;
