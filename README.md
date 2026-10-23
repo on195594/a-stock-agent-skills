@@ -21,9 +21,13 @@ QA checks report compliance, not factual truth or investment effectiveness.
 owns holdings, risk and decision-v1/monitor-v1 application contracts.
 `a-share-research` is an independent peer application for cited financial-report
 research, history and price references; it also consumes `a-stock-lib`. The two
-applications keep separate state and releases. Skills do not currently consume
-its reports. A future read-only evidence interface requires a concrete use case;
-it cannot replace runtime risk gates or grant account-write authorization.
+applications keep separate state and releases. `a-stock-cache research` consumes
+its `research-v1` HTTP API: reuse reports and source evidence, then submit focused
+research, follow-ups or corrections when needed. It never opens the holdings database
+and cannot replace runtime risk gates or grant account-write authorization.
+Configure `A_STOCK_RESEARCH_URL` and `A_STOCK_RESEARCH_TOKEN` in the environment
+or the selected owner-only `runtime.env`; tokens are issued by the Research owner.
+See the [workflow](skills/a-stock-research/references/research-service.md).
 
 The shared [project contract](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md),
 [roadmap](https://github.com/on195594/a-share-research/blob/main/docs/roadmap.md) and
@@ -80,6 +84,7 @@ The installer exposes these stable commands through `PATH`:
 
 ```text
 a-stock-cache    shared cache, holdings and portfolio-risk CLI
+a-stock-cache research            versioned report/evidence reads and focused research/feedback tasks
 a-stock-cache score-fundamentals  read-only deterministic A—F fundamental scorer
 a-stock-cache performance-report  file-only account performance, optional read-only ledger check
 a-stock-cache benchmark-report    read-only ledger cash flows vs the same flows into total-return indices

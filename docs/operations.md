@@ -215,6 +215,29 @@ authorization and matching evidence. If writes used an incompatible schema or
 state contract, pointer-only rollback is not sufficient: stop affected writers
 under explicit authorization and reconcile compatibility before proceeding.
 
+## Research integration candidate (2026-10-23)
+
+Runtime 0.1.23 adds `a-stock-cache research` and on-demand Research/Monitor routing.
+The candidate was developed separately because current client Skill links resolve
+into the canonical source tree; copying candidate Skill text there would activate
+it immediately. No active entries, runtime.env, account database, cron, investment
+policy or provider/model settings were changed by this candidate validation.
+
+The candidate CLI used the real Research service to read reports 9/11 and submit
+run 17 with parent report 9. The follow-up passed in 103 seconds; repeating the
+same request ID returned run 17. The explicitly selected nonexistent account
+DB remained absent. Candidate Research feedback and method revisions were also
+submitted through this CLI to an isolated real Web/worker instance.
+
+The full automated run passed 1,439 tests and found two release-contract omissions
+(version assertion and CLI argument registry). Both were fixed; 83 affected tests
+passed on rerun. Ruff, Skill validation, regulatory freshness, standalone QA and
+isolated cron smoke passed. Eleven optional capture/source-dependent cases skipped.
+No new multi-host model capture or real-account action was performed.
+
+This is candidate evidence, not active-client or production deployment evidence.
+The deployment record below remains authoritative until explicit paired activation.
+
 ## Current deployment record
 
 State as of 2026-10-23, after user-authorized quality publication and activation. Step-by-step

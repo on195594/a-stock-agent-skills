@@ -38,7 +38,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 ### Level 2：按升级项展开
 
-只加载与 runtime 升级原因或上述账户差异相符的资料：
+只加载与 runtime 升级原因或上述账户差异相符的资料。升级项需要公司公开证据时，按 [Research 服务](references/research-service.md) 先读已有报告，仅对关键缺口发起追问/纠错；结果返回父级复核，不直接改变账户动作：
 
 | 升级原因 | Reference |
 |---|---|

@@ -14,9 +14,14 @@ belong in the [operations record](../operations.md#current-deployment-record).
 
 The cross-project [contract](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md)
 defines `a-share-research` as an independent peer consuming the same Lib. It owns
-its report format, source documents and research state. A read-only report
-interface is planned but not implemented or consumed here; its future evidence
-does not replace decision-v1/monitor-v1 or their authorization boundaries.
+its report format, source documents and research state. `a-stock-cache research`
+uses its versioned HTTP API for report/evidence reads and research/follow-up/feedback
+submission. This R1 namespace bypasses the local investment database entirely;
+remote research records do not grant W1 account writes. Explicit HTTPS configuration
+(local HTTP is allowed), short-lived bearer authentication, no redirects and preserved
+request IDs keep retries and credentials bounded. Errors remain visible; there is no
+automatic provider fallback or polling loop. Evidence does not replace decision-v1/
+monitor-v1 or their authorization boundaries.
 `a-stock-qa` continues to check only the Research Skill's text rubric, not the
 peer application's report format or Monitor output.
 

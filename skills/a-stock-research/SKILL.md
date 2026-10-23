@@ -9,9 +9,11 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 
 ## 路由
 
+用户明确只问公司公开证据、报告追问或纠错，不涉及配置、买卖、仓位和账户时，按 [Research 服务](references/research-service.md) 先复用报告、再补关键缺口，直接交付有出处的回答；无需先完成 A—F 评分。以下流程用于完整首次配置研究。
+
 1. 确认股票代码、研究目标；未指定时交付简洁首版。
 2. 先只读运行 `a-stock-cache holdings <股票代码> --active-only`。确认已持仓后立即终止本 Skill，改用 `a-stock-monitor`；账本不可用时可继续公开研究，但仅限用户已明确要求的研究任务，不得声称新仓或给账户级动作。用户仅要求核对持仓、且查询结果不完整时，说明缺口并停止澄清，不擅自启动首次研究。
-3. 串行运行：
+3. 已配置 Research 服务时，先按 [Research 服务](references/research-service.md) 复用相关报告与证据；只有新的关键问题才发起研究。账户机器状态仍由以下 runtime 提供。串行运行：
    ```bash
    a-stock-fetch fetch <股票代码>
    a-stock-cache check <股票代码>

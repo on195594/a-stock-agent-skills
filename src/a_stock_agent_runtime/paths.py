@@ -67,6 +67,11 @@ def tushare_token() -> str:
     return _setting("TUSHARE_TOKEN", "")
 
 
+def research_connection() -> tuple[str, str]:
+    """Resolve only the explicitly configured peer service and its API token."""
+    return _setting("A_STOCK_RESEARCH_URL", ""), _setting("A_STOCK_RESEARCH_TOKEN", "")
+
+
 def _data_home() -> Path:
     return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
 

@@ -17,9 +17,11 @@ from a_stock_agent_runtime import (
     db,
     paths,
     performance,
+    research_client,
 )
 
 COMMANDS = {
+    "research": research_client.cmd_research,
     "check": commands_analysis.cmd_check,
     "get": commands_analysis.cmd_get,
     "set": commands_analysis.cmd_set,
@@ -97,6 +99,7 @@ COMMAND_CLASSIFICATION = {
     **dict.fromkeys(
         (
             "check",
+            "research",
             "check-holdings",
             "portfolio-risk",
             "monitor-snapshot",
@@ -149,6 +152,7 @@ class _CLIParser(argparse.ArgumentParser):
 
 
 _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
+    "research": (),
     "check": (("代码", "?"),),
     "get": (("代码", "?"),),
     "set": (
@@ -281,6 +285,8 @@ def _build_cli_parser() -> argparse.ArgumentParser:
             if handler_doc
             else None,
         )
+        if command == "research":
+            research_client.configure_parser(command_parser)
         for index, (metavar, nargs) in enumerate(positionals, start=1):
             if nargs is None:
                 command_parser.add_argument(f"arg{index}", metavar=metavar)
@@ -354,6 +360,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.parse_args(args)
     except SystemExit as exc:
         return int(exc.code or 0)
+    if command == "research":
+        return int(COMMANDS[command](remaining) or 0)
     if command == "performance-report":
         try:
             return int(COMMANDS[command](remaining) or 0)
