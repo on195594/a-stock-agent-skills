@@ -200,13 +200,15 @@ Backup API and records integrity, schema and count invariants. Never copy a
 production database into the repository. The installer creates its rollback
 manifest outside the repository; retain it with the external runtime backup.
 
-For the current schema-compatible release, follow its external `rollback.json`
-after explicit rollback authorization. Verify the three active CLI targets still
-match that release, retain both runtimes, then atomically restore the recorded
-previous CLI targets and the private runtime.env backup. The historical `current`
-pointer does not own these entries. Do not restore a database, change `CACHE_DB_PATH`,
-rewrite Skill links or alter cron. Validate stable CLI entries using isolated
-state and disabled notifications, and reload Skills in existing sessions.
+For the current schema-compatible release, use the installer manifest and saved
+Skill contents identified in the deployment record after rollback authorization.
+Verify the active entries and source hashes still match that release, retain both
+runtimes, then atomically restore the recorded previous CLI targets and affected
+Skill contents. The nine Skill links retain their source paths; restoring those
+links alone cannot restore old text. The historical `current` pointer owns nothing.
+This release did not change runtime.env, model configuration, the database or cron;
+do not restore or rewrite them. Validate stable CLI entries using isolated state
+and disabled notifications, and reload Skills in existing sessions.
 
 Schema/configuration/cron rollbacks are separate operations requiring their own
 authorization and matching evidence. If writes used an incompatible schema or
@@ -215,12 +217,13 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
-State as of 2026-10-22, after user-authorized commits and installs. Step-by-step
+State as of 2026-10-23, after user-authorized quality publication and activation. Step-by-step
 records for 0.1.16–0.1.22 are in `git show 0d7c0a5:docs/operations.md`.
 
-**Runtime.** Release 0.1.22 (`4fc2879`, a-stock-lib 0.8.2). The three stable CLI
-symlinks in `~/.local/bin` select `runtime/0.1.22-4fc28792e068/venv/bin`; the nine
-Claude/Codex/Hermes Skill links select this repository's `skills/`. `runtime.env`
+**Runtime.** Release 0.1.22 (`992f5a5`, a-stock-lib 0.8.2). The three stable CLI
+symlinks in `~/.local/bin` select `runtime/0.1.22-992f5a5ca71d/venv/bin`; the nine
+Claude/Codex/Hermes Skill links select this repository's matching committed `skills/`.
+The previous runtime `0.1.22-4fc28792e068` remains available for rollback. `runtime.env`
 holds the TuShare token and Telegram settings (mode 0600); the database schema is
 unchanged since migration 035. The `current` pointer is historical and owns nothing.
 
@@ -248,29 +251,38 @@ clear). One accidental test write (000963 dividend event 32) was removed; databa
 backups are under `~/.local/share/a-stock-agent/backups/cache-pre-*-20261022.db`.
 No personal `off_account_strategy_cash` is configured.
 
-**Rollback** requires separate authorization: restore the CLI entries from
-`~/.local/share/a-stock-agent/rollback-1792635659778563440.json` (earlier runtimes are
-retained), revert the commits since `ad51a5d` as needed, and reload Skill sessions.
+**Rollback.** Failure rollback was included in this deployment's approval and was
+not needed; a later operational rollback requires its corresponding authorization.
+The installer manifest is
+`~/.local/share/a-stock-agent/rollback-1792721384779766840.json`. The prior Skill
+contents, source hashes and entry targets are saved under
+`~/.local/share/a-stock-agent-evaluations/2026-10-22-quality/2026-10-23-input-repair/deployment/`
+as `source-before/` and `deployment-before.json`. Restore those contents as well as
+the previous CLI targets, preserving unrelated source edits, and reload sessions.
 
 **Not yet observed.** First Telegram deliveries of `daily-brief` (2026-10-22 15:35),
 a real `stop-alert` crossing, and `benchmark-report` (2026-11-01); fresh Hermes
 behaviour under the slimmed router.
 
-**2026-10-23 candidate preparation; not activated.** The quality candidate passed
-its [approved behavior evaluation](agent-behavior-eval.md#approved-contract-and-offline-acceptance-2026-10-23)
-and an offline installation/rollback rehearsal in an isolated target root. The
-nine live Skill entries still point to this repository, so applying the candidate
-Skill files activates Claude, Codex and Hermes together. The installed CLI targets
-above remain unchanged. Publish the reviewed candidate, install its matching
-committed runtime with the existing installer, and record the resulting identities
-only after authorization. Preserve the current Skill contents as well as CLI
-targets for rollback: retaining these same source symlinks alone cannot restore
-the old Skill text.
+**2026-10-23 activation verified.** Commit `992f5a5` was pushed to `master`, and its
+[GitHub CI passed](https://github.com/on195594/a-stock-agent-skills/actions/runs/39887832134).
+After the isolated rehearsal and explicit approval, the existing installer
+installed the committed runtime offline and refreshed all three clients. All nine
+Skill trees match the evaluated candidate; all 25 installed runtime Python files
+match the release source, and all three stable CLI entrypoints pass their help
+checks. Both complete monitor fixtures validate. An unconfirmed W1 command exits
+3 without creating the isolated database; project Skill validation and standalone
+QA pass. Production account state, runtime.env, model configuration and cron were
+not changed. No additional model call or real notification was made. Private
+installation logs and verification results are saved in the deployment directory
+above; the [behavior acceptance](agent-behavior-eval.md#approved-contract-and-offline-acceptance-2026-10-23)
+retains its original captures and limits.
 
 Hermes currently selects `openai-codex/gpt-6.1-sol-900k`. Its installed transport
 strips the context-window alias to the evaluated `gpt-6.1-sol` wire model;
-configuration was not changed. Long-context compaction, new client sessions and
-real-account flows have not been verified by this candidate evaluation.
+configuration was not changed. Existing sessions may retain cached Skill content
+and must reload or restart. Long-context compaction, new client sessions and
+real-account flows have not been verified by this deployment check.
 
 ## Historical deployment evidence
 

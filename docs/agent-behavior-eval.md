@@ -423,8 +423,8 @@ nine Skill links, three CLI entrypoints, all 25 installed runtime Python files,
 and both complete monitor fixtures. An unconfirmed W1 command returned exit 3
 without creating a database; the installer rollback restored all 12 fixture
 links. Runtime remains 0.1.22 with Lib 0.8.2. Its only source difference from the
-currently installed runtime is removal of unused checklist aliases. The final
-release must be built from the approved commit; the uncommitted rehearsal's
+then-installed runtime was removal of unused checklist aliases. The final
+release had to be built from the approved commit; the uncommitted rehearsal's
 release identifier is not a production identity.
 
 The configured Hermes model is `openai-codex/gpt-6.1-sol-900k`. Inspection of the
@@ -436,7 +436,19 @@ actual Claude/Codex/Hermes account flows remain outside this acceptance.
 
 The publication patch, activation patch, reverse patch, source identities and
 installation logs are retained under the private evidence directory's
-`2026-10-23-input-repair/release-preflight/`. No additional model call, commit,
-push or active-client update was made. Publication and activation are ready for
-their corresponding authorization; current activation remains recorded in
-[operations](operations.md#current-deployment-record).
+`2026-10-23-input-repair/release-preflight/`. At preparation completion, no
+additional model call, commit, push or active-client update had been made.
+
+### Publication and activation: 2026-10-23
+
+After explicit user approval, the exact 13-file candidate was committed as
+`992f5a5` and pushed to `master`; its GitHub CI passed. The three clients now
+resolve the matching Skill source, and the existing installer activated runtime
+`0.1.22-992f5a5ca71d` with the unchanged hash-pinned Lib 0.8.2. Installation checks
+verified nine Skill trees, three CLI entrypoints, 25 runtime Python files, both
+complete monitor fixtures, the unconfirmed W1 gate and standalone QA. Existing
+sessions need to reload their Skills. These installation checks made no model
+calls and do not extend the earlier behavior evidence to long-context compaction
+or real-account flows. Model configuration and production state were unchanged;
+no rollback was needed. Actual entry targets, rollback sources and verification
+limits are maintained in [operations](operations.md#current-deployment-record).
