@@ -256,6 +256,22 @@ retained), revert the commits since `ad51a5d` as needed, and reload Skill sessio
 a real `stop-alert` crossing, and `benchmark-report` (2026-11-01); fresh Hermes
 behaviour under the slimmed router.
 
+**2026-10-23 candidate preparation; not activated.** The quality candidate passed
+its [approved behavior evaluation](agent-behavior-eval.md#approved-contract-and-offline-acceptance-2026-10-23)
+and an offline installation/rollback rehearsal in an isolated target root. The
+nine live Skill entries still point to this repository, so applying the candidate
+Skill files activates Claude, Codex and Hermes together. The installed CLI targets
+above remain unchanged. Publish the reviewed candidate, install its matching
+committed runtime with the existing installer, and record the resulting identities
+only after authorization. Preserve the current Skill contents as well as CLI
+targets for rollback: retaining these same source symlinks alone cannot restore
+the old Skill text.
+
+Hermes currently selects `openai-codex/gpt-6.1-sol-900k`. Its installed transport
+strips the context-window alias to the evaluated `gpt-6.1-sol` wire model;
+configuration was not changed. Long-context compaction, new client sessions and
+real-account flows have not been verified by this candidate evaluation.
+
 ## Historical deployment evidence
 
 Superseded deployment and preflight records are retained in Git, not as current

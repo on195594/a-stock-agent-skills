@@ -54,12 +54,24 @@ uv run pytest tests/test_cli_contract.py tests/test_command_classification.py -q
 uv run pytest tests/test_installation.py tests/test_state_migration.py -q
 uv run pytest tests/test_l3_thesis_versioning.py tests/test_cli_contract.py -q
 uv run pytest tests/test_risk_policy.py tests/test_performance.py -q
+uv run pytest tests/test_agent_behavior_eval.py -q
 uv run pytest tests/monitor tests/qa tests/research -q
 bash tests/test_check_holdings_cron.sh
 ```
 
 Run `uv run ruff format --check <changed Python files>` for Python files touched by
 the patch. Full-repository formatting is not part of the automated matrix.
+
+The Agent behavior suite scores immutable historical responses by default.
+[Candidate capture and scoring](agent-behavior-eval.md#re-capture) uses an external
+artifact; without `A_STOCK_BEHAVIOR_ARTIFACT`, the nine candidate/provenance tests
+skip. Multi-turn behavior still needs manual scoring. Required-field and
+forbidden-action mutation tests cover every configured entry; the other four
+constraint categories have separate mutation cases.
+
+Check active client links before editing canonical Skill files: symlinked entries
+activate source edits immediately. Use an isolated checkout and `HERMES_HOME` for
+candidate behavior checks until client activation is explicitly authorized.
 
 The checked-in Agent tool fixture comes from one fixed
 `openai-codex/gpt-5.6-sol` session using an isolated `HOME`, read-only Pi
@@ -125,7 +137,8 @@ portable backtest helper there. Copy installs and their `source_hash` exclude
 `.git`, `__pycache__`, `*.pyc` and `*.pyo`. Symlink installs still expose the
 source tree; Git ignores do not filter copied files or symlink targets.
 
-The following are disposable and ignored by Git: `__pycache__/`, `.pytest_cache/`,
-`.ruff_cache/` and `*.egg-info/`. Remove only those generated
-paths when cleaning a worktree; keep `.venv/` if it is the active development
-environment.
+Generated caches `__pycache__/`, `.pytest_cache/` and `.ruff_cache/` are disposable
+and ignored by Git. Keep the active `.venv/`; remove `*.egg-info/` only after
+confirming that no editable installation uses it for package metadata. Raw
+captures and database copies in a temporary directory need a verified archive
+before cleanup; historical evidence is not a cache.

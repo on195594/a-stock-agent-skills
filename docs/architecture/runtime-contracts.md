@@ -147,6 +147,15 @@ hidden behind an unchanged policy identity.
 
 ## Agent behavior evidence
 
+`scripts/capture_agent_behavior_eval.py` captures the eight behavior scenarios or
+one fixed same-session follow-up group on Hermes. It binds candidate source,
+Skill and runtime identities, preserves failures and verifies zero executed tools.
+The offline scorer accepts historical or external candidate artifacts; follow-up
+behavior is manually scored. Commands, baseline failures and validation limits
+are maintained in [Agent behavior eval](../agent-behavior-eval.md).
+
+### Historical tool-execution capture
+
 `scripts/capture_agent_tool_e2e.mjs` runs one fixed
 `openai-codex/gpt-5.6-sol` session with an isolated home, read-only model
 credentials and in-process fake tools. The capture records its source commit,

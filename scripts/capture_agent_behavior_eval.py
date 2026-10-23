@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import importlib.metadata
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -22,6 +24,46 @@ SKILLS = "a-stock-research,a-stock-monitor,a-stock-qa"
 SKILL_NAMES = tuple(SKILLS.split(","))
 MODEL = "gpt-5.6-sol-900k"
 PROVIDER = "openai-codex"
+INPUT_VERSION = 2
+MONITOR_INPUTS = ROOT / "tests/fixtures/monitor/agent-behavior-snapshots.json"
+QA_REPORT = ROOT / "tests/fixtures/qa/behavior-report.md"
+QA_RUBRIC = ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
+
+
+def complete_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
+    """Expand the current replay's inputs without changing historical fixtures."""
+    result = copy.deepcopy(scenario)
+    state = result["prompt_state"]
+    runtime = state.get("simulated_runtime_results", {})
+    if "monitor_snapshot" in runtime:
+        from a_stock_agent_runtime.monitor_contract import validate_monitor_snapshot
+
+        snapshots = json.loads(MONITOR_INPUTS.read_text())
+        snapshot = snapshots[runtime["monitor_snapshot"]["action_status"]]
+        validate_monitor_snapshot(snapshot)
+        if snapshot["account"]["portfolio_value"] != state["portfolio_value"]:
+            raise ValueError("fixture portfolio value differs from the scenario")
+        runtime["monitor_snapshot"] = snapshot
+    if scenario["id"] == "qa_uses_immutable_snapshot":
+        report = QA_REPORT.read_bytes()
+        state.pop("simulated_rubric_results")
+        state["immutable_snapshot"].update(
+            content=report.decode(), sha256=hashlib.sha256(report).hexdigest()
+        )
+        state["simulated_reference_results"] = {
+            "qa_rubric": {
+                "resource": "a-stock-qa/references/rubrics/a-stock-research.md",
+                "content": QA_RUBRIC.read_text(),
+            }
+        }
+        state["qa_host_context"] = (
+            "This is an independent QA invocation, separate from the frozen report's "
+            "author. The complete snapshot and rubric are supplied inline as read "
+            "results. Perform all rubric checks; no verdict has been supplied. "
+            "The host computed the snapshot SHA-256 and will verify the same file "
+            "again after this response, rejecting the capture if it changed."
+        )
+    return result
 
 
 def build_prompt(scenario: dict[str, Any]) -> str:
@@ -91,14 +133,16 @@ def parse_session_id(stdout: str, stderr: str) -> str:
     return match.group(1)
 
 
+def hermes_home() -> Path:
+    return Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes")).expanduser()
+
+
 def loaded_skill_provenance() -> tuple[dict[str, str], dict[str, str]]:
     hashes: dict[str, str] = {}
     paths: dict[str, str] = {}
     for name in SKILL_NAMES:
         repository_skill = ROOT / "skills" / name / "SKILL.md"
-        loaded_skill = (
-            Path.home() / ".hermes" / "skills" / "research" / name / "SKILL.md"
-        )
+        loaded_skill = hermes_home() / "skills" / "research" / name / "SKILL.md"
         repository_hash = hashlib.sha256(repository_skill.read_bytes()).hexdigest()
         loaded_hash = hashlib.sha256(loaded_skill.read_bytes()).hexdigest()
         if loaded_hash != repository_hash:
@@ -118,7 +162,7 @@ def loaded_skill_provenance() -> tuple[dict[str, str], dict[str, str]]:
 
 
 def session_provenance(session_id: str) -> dict[str, Any]:
-    state_db = Path.home() / ".hermes" / "state.db"
+    state_db = hermes_home() / "state.db"
     connection = sqlite3.connect(f"file:{state_db}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     try:
@@ -137,7 +181,7 @@ def session_provenance(session_id: str) -> dict[str, Any]:
     return provenance
 
 
-def capture(output: Path, followup: str | None = None) -> None:
+def capture(output: Path, followup: str | None = None, *, model: str = MODEL) -> None:
     if output.exists():
         raise FileExistsError(
             f"preserve prior capture; choose a new --output: {output}"
@@ -153,10 +197,12 @@ def capture(output: Path, followup: str | None = None) -> None:
             if case["id"] == followup
         )
         scenarios = followup_turns(case)
+    scenarios = [complete_scenario(scenario) for scenario in scenarios]
     skill_hashes, skill_paths = loaded_skill_provenance()
     records = []
     artifact = {
         "schema_version": 1,
+        "input_version": INPUT_VERSION,
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "git_head": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
@@ -178,6 +224,12 @@ def capture(output: Path, followup: str | None = None) -> None:
             ["hermes", "--version"], text=True
         ).splitlines()[0],
         "capture_source_sha256": {
+            **{
+                str(path.relative_to(ROOT)): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in (MONITOR_INPUTS, QA_REPORT, QA_RUBRIC)
+            },
             "scripts/capture_agent_behavior_eval.py": hashlib.sha256(
                 Path(__file__).read_bytes()
             ).hexdigest(),
@@ -199,7 +251,7 @@ def capture(output: Path, followup: str | None = None) -> None:
             "toolsets": ["vision"],
             "max_turns": 1,
             "domain_tools_executed": False,
-            "model": MODEL,
+            "model": model,
             "provider": PROVIDER,
         },
         "records": records,
@@ -221,7 +273,7 @@ def capture(output: Path, followup: str | None = None) -> None:
                 "--oneshot",
                 "--quiet",
                 "--model",
-                MODEL,
+                model,
                 "--provider",
                 PROVIDER,
                 "-t",
@@ -245,6 +297,14 @@ def capture(output: Path, followup: str | None = None) -> None:
             }
             records.append(record)
             try:
+                if scenario["id"] == "qa_uses_immutable_snapshot":
+                    expected_hash = scenario["prompt_state"]["immutable_snapshot"][
+                        "sha256"
+                    ]
+                    before_hash = hashlib.sha256(QA_REPORT.read_bytes()).hexdigest()
+                    record["qa_snapshot_verification"] = {"before_sha256": before_hash}
+                    if before_hash != expected_hash:
+                        raise ValueError("QA snapshot changed before invocation")
                 completed = subprocess.run(
                     command,
                     input=build_prompt(scenario),
@@ -261,12 +321,17 @@ def capture(output: Path, followup: str | None = None) -> None:
                 )
                 save()
                 completed.check_returncode()
+                if scenario["id"] == "qa_uses_immutable_snapshot":
+                    after_hash = hashlib.sha256(QA_REPORT.read_bytes()).hexdigest()
+                    record["qa_snapshot_verification"]["after_sha256"] = after_hash
+                    if after_hash != expected_hash:
+                        raise ValueError("QA snapshot changed during invocation")
                 session_id = parse_session_id(raw, completed.stderr)
                 record["session_id"] = session_id
                 provenance = session_provenance(session_id)
                 record["runtime"] = provenance
                 if (
-                    provenance["model"] != MODEL
+                    provenance["model"] != model
                     or provenance["billing_provider"] != PROVIDER
                 ):
                     raise ValueError(
@@ -320,8 +385,9 @@ def main() -> None:
         choices=[case["id"] for case in json.loads(FOLLOWUPS.read_text())["scenarios"]],
         help="capture one fixed multi-turn group instead of the eight single-turn cases",
     )
+    parser.add_argument("--model", default=MODEL, help="explicit candidate model")
     args = parser.parse_args()
-    capture(args.output, args.followup)
+    capture(args.output, args.followup, model=args.model)
 
 
 if __name__ == "__main__":

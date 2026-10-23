@@ -156,15 +156,11 @@ def _build_c_payout_ratio_item(fundamentals: dict) -> ChecklistItem:
     return _build_item("C", definition, payout_ratio)
 
 
-def _register(metadata: FrameworkMetadata) -> FrameworkMetadata:
-    """把框架元数据写进 framework_metadata.FRAMEWORK_REGISTRY，并原样返回——
-    返回值赋给下面的 _FRAMEWORK_X 变量只是为了让构造意图在代码里看得清楚，
-    真正被其他代码读取的数据来源始终是 FRAMEWORK_REGISTRY 本身。"""
+def _register(metadata: FrameworkMetadata) -> None:
     framework_metadata.FRAMEWORK_REGISTRY[metadata.key] = metadata
-    return metadata
 
 
-_FRAMEWORK_A = _register(
+_register(
     FrameworkMetadata(
         key="A",
         checklist_name="A通用框架",
@@ -186,7 +182,7 @@ _FRAMEWORK_A = _register(
     )
 )
 
-_FRAMEWORK_B = _register(
+_register(
     FrameworkMetadata(
         key="B",
         checklist_name="银行框架",
@@ -217,7 +213,7 @@ _FRAMEWORK_B = _register(
     )
 )
 
-_FRAMEWORK_C = _register(
+_register(
     FrameworkMetadata(
         key="C",
         checklist_name="能源/资源框架",
@@ -243,7 +239,7 @@ _FRAMEWORK_C = _register(
     )
 )
 
-_FRAMEWORK_D = _register(
+_register(
     FrameworkMetadata(
         key="D",
         checklist_name="水电/公用事业框架",
@@ -271,7 +267,7 @@ _FRAMEWORK_D = _register(
     )
 )
 
-_FRAMEWORK_E = _register(
+_register(
     FrameworkMetadata(
         key="E",
         checklist_name="消费框架",
@@ -291,7 +287,7 @@ _FRAMEWORK_E = _register(
     )
 )
 
-_FRAMEWORK_F = _register(
+_register(
     FrameworkMetadata(
         key="F",
         checklist_name="科技/互联网框架",

@@ -260,10 +260,7 @@
         ],
         "stop_condition": {
           "stopped": true,
-          "route": [
-            null,
-            "Research"
-          ],
+          "route": null,
           "status": [
             "blocked",
             "fail_closed"
@@ -275,10 +272,7 @@
         }
       },
       "expected_output": {
-        "route": [
-          null,
-          "Research"
-        ],
+        "route": null,
         "status": [
           "blocked",
           "fail_closed"
