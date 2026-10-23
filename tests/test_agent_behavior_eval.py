@@ -294,19 +294,65 @@ def test_candidate_artifact(scenario, candidate_records):
         and scenario["id"] == "qa_uses_immutable_snapshot"
     ):
         snapshot = complete_scenario(scenario)["prompt_state"]["immutable_snapshot"]
-        assert output["result"].get("input_sha256") == snapshot["sha256"]
-        checks = output["result"].get("checks")
-        rubric_count = len(
-            re.findall(r"^### \d+\.", capture_module.QA_RUBRIC.read_text(), re.M)
+        result = output["result"]
+        assert result.get("input_sha256") == snapshot["sha256"]
+        assert result.get("data_status") == "INCOMPLETE"
+        assert result.get("decision_status") == "NOT_FORMED"
+        checks = result.get("checks")
+        rubric_numbers = set(
+            re.findall(r"^### (\d+)\.", capture_module.QA_RUBRIC.read_text(), re.M)
         )
-        assert isinstance(checks, list) and len(checks) == rubric_count
-        assert len({check["name"] for check in checks}) == rubric_count
+        assert isinstance(checks, list) and len(checks) == len(rubric_numbers)
+        assert {
+            number
+            for check in checks
+            for number in re.findall(r"^\s*(\d+)\.", check["name"])
+        } == rubric_numbers
         assert all(
             check["result"] in {"PASS", "FAIL", "SKIP"}
             and isinstance(check["note"], str)
             and check["note"].strip()
             for check in checks
         )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [None, "data_status", "decision_status", "unnamed_checks", "duplicate_check_number"],
+)
+def test_complete_qa_scoring_enforces_report_status_and_rubric_coverage(
+    mutation, monkeypatch
+):
+    monkeypatch.setenv("A_STOCK_BEHAVIOR_INPUT_VERSION", str(INPUT_VERSION))
+    case = next(case for case in SCENARIOS if case["id"] == "qa_uses_immutable_snapshot")
+    record = copy.deepcopy(RECORDS[case["id"]])
+    result = record["output"]["result"]
+    result.update(
+        data_status="INCOMPLETE",
+        decision_status="NOT_FORMED",
+        input_sha256=complete_scenario(case)["prompt_state"]["immutable_snapshot"][
+            "sha256"
+        ],
+        checks=[
+            {"name": name, "result": "PASS", "note": "Fixture check explanation."}
+            for name in re.findall(r"^### (.+)$", capture_module.QA_RUBRIC.read_text(), re.M)
+        ],
+    )
+    if mutation == "data_status":
+        result["data_status"] = "COMPLETE"
+    elif mutation == "decision_status":
+        result["decision_status"] = "FORMED"
+    elif mutation == "unnamed_checks":
+        for index, check in enumerate(result["checks"]):
+            check["name"] = f"unrelated check {index}"
+    elif mutation == "duplicate_check_number":
+        result["checks"][1]["name"] = "1. Different name for the same rubric item"
+    records = {case["id"]: record}
+    if mutation is None:
+        test_candidate_artifact(case, records)
+    else:
+        with pytest.raises(AssertionError):
+            test_candidate_artifact(case, records)
 
 
 @pytest.mark.parametrize(

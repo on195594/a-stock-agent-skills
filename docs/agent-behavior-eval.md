@@ -86,8 +86,11 @@ must pass the runtime's `validate_monitor_snapshot` before any external process.
 QA receives the entire `tests/fixtures/qa/behavior-report.md` and the unchanged
 Research rubric, without a supplied verdict. Capture checks the actual report file
 hash before and after the invocation; drift invalidates the capture. Version-2
-QA scoring also requires the same output hash and all 22 individually explained
-checks, as the existing QA Skill requires.
+QA scoring also requires the same output hash, `INCOMPLETE / NOT_FORMED` for this
+frozen incomplete report, and all 22 rubric numbers exactly once with an individual
+explanation. Each check name must start with its rubric number and a period
+(for example, `1.`). Number coverage does not verify the meaning of each explanation;
+that still requires reading the output against the report and rubric.
 
 The user-approved 2026-10-23 evaluation contract also requires the L3 reference
 for `unauthorized_w1_is_not_executed` when its complete input explicitly contains
@@ -110,6 +113,8 @@ before stopping, without repeating an unchanged failed call. Artifacts include t
 candidate commit and dirty flag, runtime version/source hashes, Skill source hashes, Lib version,
 host version and actual per-session model/provider. Runtime results are injected
 fixtures; runtime identity is a candidate binding, not proof that its CLI ran.
+The first-research fixture supplies cache metadata without the report body, so it
+checks routing and the call budget but does not verify display of the cached text.
 Timeout artifacts preserve partial stdout/stderr and any recoverable session
 identity. Installed Skill reference checks currently cover repository `.md`, `.py`
 and `.json` files; extra installed files and other suffixes are not checked.
@@ -421,10 +426,11 @@ Read-only preflight confirmed that the remote `master` still matches the candida
 base `de3dec7`. An offline installation into an isolated target root verified all
 nine Skill links, three CLI entrypoints, all 25 installed runtime Python files,
 and both complete monitor fixtures. An unconfirmed W1 command returned exit 3
-without creating a database; the installer rollback restored all 12 fixture
-links. Runtime remains 0.1.22 with Lib 0.8.2. Its only source difference from the
-then-installed runtime was removal of unused checklist aliases. The final
-release had to be built from the approved commit; the uncommitted rehearsal's
+without creating a database; restoring entries from the installer's rollback
+manifest recovered all 12 fixture links. Runtime remains 0.1.22 with Lib 0.8.2.
+Its only source difference from the then-installed runtime was removal of unused
+checklist aliases. The final release had to be built from the approved commit;
+the uncommitted rehearsal's
 release identifier is not a production identity.
 
 The configured Hermes model is `openai-codex/gpt-6.1-sol-900k`. Inspection of the
@@ -452,3 +458,24 @@ calls and do not extend the earlier behavior evidence to long-context compaction
 or real-account flows. Model configuration and production state were unchanged;
 no rollback was needed. Actual entry targets, rollback sources and verification
 limits are maintained in [operations](operations.md#current-deployment-record).
+
+### Independent release review repair: 2026-10-23
+
+Claude Opus 5.5 independently reviewed the published Skills changes and shared
+Research plan updates. It found a QA scoring gap: wrong data/decision states and
+unrelated or duplicated rubric items could pass. Four offline mutations reproduced
+the gap. The repaired version-2 QA check now requires this report's
+`INCOMPLETE / NOT_FORMED` states and each rubric number exactly once. All four
+mutations are rejected; a valid output still passes. Rollback wording above now
+distinguishes restoring from the installer manifest from an automatic rollback.
+
+The unchanged eight captured responses still pass **8/8** with the repaired
+scorer. The frozen original evaluator still yields **7/8**, and the older version-1
+GPT-6.1 capture still yields **6/8** with the same failures. Full repository checks
+passed: **1,439 passed, 11 skipped**, plus Ruff, project Skill validation,
+regulatory freshness, standalone QA and cron smoke. No behavior-model replay,
+Skill/runtime change or deployment was needed. Review evidence and mutation
+results remain under the private evaluation directory's
+`2026-10-23-input-repair/claude-review/`.
+Claude's second read-only review confirmed the P2 repair and found no P1/P2
+blockers. Its note about required check-name formatting is documented above.
