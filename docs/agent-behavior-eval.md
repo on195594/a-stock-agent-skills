@@ -529,5 +529,5 @@ The full local suite had 1,449 passes, 11 skips and one installation-environment
 failure. The installation case then passed using the existing offline package
 cache and without inherited `PYTHONPATH`, which had contaminated the isolation
 assertion. No installation test or acceptance requirement was weakened. Changes
-remain an undeployed candidate; paid captures are under
-`/tmp/a-stock-slim-evidence-20261027/`.
+were undeployed at this candidate stage. The subsequent authorized activation
+and archived capture location are in [operations](operations.md#current-deployment-record).

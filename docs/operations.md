@@ -1,7 +1,8 @@
 # Operations runbook
 
 This runbook covers the currently installed runtime after the M7 cutover and
-later coordinated releases. Claude, Codex and Hermes remain supported clients.
+later coordinated releases. Claude, Codex and Hermes remain supported installer clients. On this host, Pi
+and AGY also discover the shared Codex Skill directory.
 Nothing here authorizes investment decisions or unattended W1 writes.
 
 ## Configuration and state
@@ -204,11 +205,9 @@ For the current schema-compatible release, use the installer manifest and saved
 Skill contents identified in the deployment record after rollback authorization.
 Retain both runtimes, then restore the recorded CLI/Skill targets and matching
 canonical Skill contents; links alone cannot restore text in a mutable source tree.
-The historical `current` pointer owns nothing. This release replaces only the
-Research credential in runtime.env with a named,
-revocable long-lived API key. The previous 0.1.23 CLI accepts the same key; a
-Research-server rollback to a version without key support needs a newly minted
-short-lived Agent token, not restoration of an expired credential.
+The historical `current` pointer owns nothing. The current release does not
+change Research credentials. Preserve the named, revocable long-lived API key;
+do not restore an old runtime.env containing an expired or revoked token.
 A rollback must preserve unrelated
 configuration changes, account state, model settings and cron. Reload Skills in
 existing sessions after either activation or rollback.
@@ -262,16 +261,22 @@ and active links were untouched during that candidate stage.
 ## Current deployment record
 
 State as of **2026-10-27**, after explicit paired-release authorization.
-Previous activation and rollback evidence remains in `git show 5154986:docs/operations.md`.
+Previous activation and rollback evidence remains in `git show 638a0eb:docs/operations.md`.
 
-**Runtime.** Release **0.1.24 (`5154986`, a-stock-lib 0.8.2)**.
-The three stable CLI links select `runtime/0.1.24-515498634fe3/venv/bin`.
-The six Claude/Codex entries select `releases/0.1.24-515498634fe3/skills/`;
-the three Hermes entries retain the canonical repository target to satisfy the
-existing resolved-path allowlist. All nine Skill trees and 26 runtime files match
-the committed release. The canonical checkout was fast-forwarded to `5154986`;
-subsequent documentation-only commits do not change the deployed code or Skills.
-Previous 0.1.23 runtime and release contents remain available.
+**Runtime.** Release **0.1.25 (`04dbc6c`, a-stock-lib 0.8.2)**.
+The three stable CLI links select `runtime/0.1.25-04dbc6c0c455/venv/bin`.
+Claude/Codex entries select `releases/0.1.25-04dbc6c0c455/skills/`;
+Hermes retains canonical repository targets for its resolved-path allowlist.
+All nine direct Skill entries and 26 runtime files match the committed release.
+Previous 0.1.24 runtime and release contents remain available.
+
+**Other local clients.** Pi 1.4.0 natively discovers `~/.agents/skills`; its actual
+resource loader found all three Skills without relevant diagnostics. AGY's
+`~/.gemini/antigravity-cli/skills` links through `~/.gemini/config/skills` to the
+same `~/.agents/skills`. All 15 client/Skill views match the release. No extra
+Skill copy, host-specific instruction, or client setting was needed. Future
+`--client all` updates also reach Pi and AGY through these existing paths.
+Do not replace these shared directory links with a stale independent copy.
 
 **Research connection.** The existing mode-0600 `~/.config/a-stock-agent/runtime.env`
 uses `A_STOCK_RESEARCH_URL=https://stock.keyi.win` and the persistent
@@ -302,8 +307,10 @@ with `hermes cron remove <id>`. They replaced the user's hard-coded
 
 **Hermes configuration.** `skills.external_dirs` points at this repository's
 `skills/` (backup `~/.hermes/backups/config.yaml.pre-skill-dir-20261022`). The private
-router `investment-decision-and-account-workflows` only routes A-share work to the
-canonical Skills (backup `~/.hermes/backups/investment-decision-and-account-workflows.bak-20261022`).
+router `investment-decision-and-account-workflows` now covers non-A-share decisions
+and explicitly requested standalone alerts. A-share research/account work goes
+directly to the canonical Skills; user-threshold standalone alerts remain supported.
+Its previous content is saved as `router-before.md` in the evidence directory below.
 
 **Production state written on 2026-10-22.** 000963/002050 dividends (corporate-action);
 P0 regulatory evidence for 000963, 002050, 600900, 603606 (2025 annual period, all
@@ -311,44 +318,39 @@ clear). One accidental test write (000963 dividend event 32) was removed; databa
 backups are under `~/.local/share/a-stock-agent/backups/cache-pre-*-20261022.db`.
 No personal `off_account_strategy_cash` is configured.
 
-**Rollback.** Installer manifest: `/home/lin/.local/share/a-stock-agent/rollback-1793087094379715040.json`.
-Evidence: `/home/lin/.local/share/a-share-research-evaluations/api-key-20261027-154133` (0700). `before.json` records the prior nine Skill/three
-CLI targets; `skills-before/` preserves the previous canonical Skill content.
-Restore both content and links as a complete pair, preserving unrelated later edits.
-The protected pre-release config is `/home/lin/.local/share/a-stock-agent/backups/runtime-pre-api-key-20261027-154133.env`; it contains an
-expired/revoked temporary credential and must not be restored wholesale. Skills
-0.1.23 works with the new long-lived key. If Research is also rolled back to its
-old server, mint a fresh temporary Agent token and update only that field.
-Do not restore account data. Research backups and image rollback are in its
-[deployment record](https://github.com/on195594/a-share-research/blob/main/docs/implementation-plan.md#当前部署).
+**Rollback.** Installer manifest: `/home/lin/.local/share/a-stock-agent/rollback-1793091694724515240.json`.
+Evidence and candidate model captures: `~/.local/share/a-stock-agent/deployments/slimming-20261027/` (0700).
+`before.json` records the prior nine Skill/three CLI targets; `skills-before/`
+preserves canonical Skill contents and `router-before.md` preserves the private
+Hermes router. Restore matching contents and links together after rollback
+authorization, preserving unrelated edits. Pi and AGY follow the restored shared
+Skill directory. Do not restore account data, credentials or cron.
 
 **Not yet observed.** First Telegram deliveries of `daily-brief` (2026-10-22 15:35),
 a real `stop-alert` crossing, and `benchmark-report` (2026-11-01); fresh Hermes
 behaviour under the slimmed router.
 
-**2026-10-27 paired activation verified.** The existing installer installed
-0.1.24 offline using the hash-pinned Lib wheel. Three CLI help checks, all nine
-Skill trees and all 26 installed runtime files matched the release. The production
-CLI read reports 12/10, then submitted follow-up run 56 → report 39 using the
-new key. The report passed review and its evidence was read through the CLI;
-repeating the same request ID returned the same run. The selected nonexistent
-account DB remained absent. Old and revoked credentials produced the explicit
-401 stop-and-update message. A temporary revocation-check key was removed.
-Research Web/worker run `042a4ad`; historical research rows were unchanged during
-cutover. No notification, account write or model/provider change was performed.
+**2026-10-27 slimming activation verified.** The existing installer installed
+0.1.25 offline using the hash-pinned Lib wheel. All three stable CLI help checks,
+15 client/Skill views and 26 runtime files passed. Hermes's actual catalog and
+Skill reader found the three canonical Skills and updated private router; Pi's
+actual resource loader found the three shared Skills. Claude/Codex/AGY were
+verified through discovery paths and matching content, without fresh model turns.
+`activation-verification.json`, `hermes-discovery.json` and `pi-discovery.json`
+record these checks. Credentials, account state, investment rules, client models
+and scheduled jobs were not changed.
 
-Release gates: the initial full run passed 1,439 tests and skipped 11 optional
-cases. Two environment failures (missing candidate venv and a read-only uv cache)
-were diagnosed; both passed after provisioning the isolated environment. Ruff,
-Skill validation, regulatory freshness, standalone QA and isolated cron smoke
-passed. No model evaluation suite or fresh Claude/Codex/Hermes session capture was
-repeated; existing sessions may cache old Skill text and need reloading.
+The committed release passed **1,450 tests, 11 skipped**, Ruff, Skill validation,
+regulatory freshness, standalone QA and isolated cron smoke. Candidate paid
+GPT-6.1-sol evaluations and their failures remain archived; the affected L3 case
+passed after its existing review prerequisite was clarified. These partial
+captures are not a final eight-case or multi-client behavior pass. No additional
+paid evaluation or real-account flow was run during activation.
 
-Hermes currently selects `openai-codex/gpt-6.1-sol-900k`. Its installed transport
-strips the context-window alias to the evaluated `gpt-6.1-sol` wire model;
-configuration was not changed. Existing sessions may retain cached Skill content
-and must reload or restart. Long-context compaction, new client sessions and
-real-account flows have not been verified by this deployment check.
+Hermes currently selects `openai-codex/gpt-6.1-sol-900k`; configuration was not
+changed. Existing client sessions may cache old Skill text: reload Skills or
+start a new session (Pi supports `/reload`). Installation and discovery checks
+do not prove a running conversation has refreshed its context.
 
 ## Historical deployment evidence
 
