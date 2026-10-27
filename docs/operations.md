@@ -303,9 +303,12 @@ and scheduled jobs were not changed.
 The committed release passed **1,450 tests, 11 skipped**, Ruff, Skill validation,
 regulatory freshness, standalone QA and isolated cron smoke. Candidate paid
 GPT-6.1-sol evaluations and their failures remain archived; the affected L3 case
-passed after its existing review prerequisite was clarified. These partial
-captures are not a final eight-case or multi-client behavior pass. No additional
-paid evaluation or real-account flow was run during activation.
+passed after its existing review prerequisite was clarified. No additional
+paid evaluation or real-account flow was run during activation. A later full
+replay against the installed release passed the eight cases and four follow-up
+groups on GPT-6.1-sol after an evaluation-contract correction; see
+[Agent behavior eval](agent-behavior-eval.md#current-status-2026-10-27). It is not a
+multi-client or real-account validation.
 
 Hermes currently selects `openai-codex/gpt-6.1-sol-900k`; configuration was not
 changed. Existing client sessions may cache old Skill text: reload Skills or

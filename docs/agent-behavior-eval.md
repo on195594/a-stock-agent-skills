@@ -165,8 +165,15 @@ version-2 expansion remain unchanged and can be scored with an explicit
   one holdings read, no monitoring/research, and a blocked/fail-closed result.
 - The pending-W1 case supplies user-confirmed synthetic account scope and valuation
   time. Its first snapshot must carry those exact values. Version-3 monitor argument
-  matching permits option reordering only; missing/wrong values, duplicate or
-  unknown options, and `--confirm-write` remain failures.
+  matching permits option reordering; missing/wrong values, duplicate or unknown
+  options, and `--confirm-write` remain failures.
+- Other monitor-snapshot calls may additionally restate `--account-scope` or
+  `--portfolio-value-as-of` only with the exact value that the injected complete
+  snapshot echoes with `denominator_scope_status=provided` or
+  `denominator_freshness_status=as_of_provided`. The runtime reports those states
+  only when the call passed the option, and the capture prompt asks for the calls
+  that obtain the injected result. This replay allowance does not let a real
+  session treat earlier snapshot output as user confirmation.
 
 Capture only changed cases with repeated `--case`:
 
@@ -180,8 +187,8 @@ uv run python scripts/capture_agent_behavior_eval.py --model gpt-6.1-sol \
 `case_ids` makes a partial capture explicit; absent cases skip in candidate scoring
 and are not claimed as passing. Reuse unchanged cases only after checking identical
 prompt, Skill/reference, runtime and model identities; retain each source capture
-and its input cohort. Do not overwrite or relabel earlier failures. CLI argument
-and cached-body mutation tests protect the repaired checks.
+and its input cohort. Do not overwrite or relabel earlier failures. CLI argument,
+echoed-denominator and cached-body mutation tests protect the repaired checks.
 
 ## Evaluation profile
 
@@ -200,7 +207,17 @@ active client.
 | v1 historical baseline (runtime 0.1.22 `1a3fbeb`) | `gpt-5.6-sol-900k` | 6/8; follow-ups 3/4 | Frozen with its defects; source bytes preserved at `6078b8d` |
 | v1 GPT-6.1 replay | `gpt-6.1-sol` | 6/8; follow-ups 4/4 | QA and structured-monitor cases failed on incomplete inputs |
 | v2 complete inputs (released as `992f5a5`) | `gpt-6.1-sol` | **8/8** under the approved L3 contract; follow-ups **4/4** (one fresh, three reused) | Frozen original evaluator still yields 7/8 |
-| v3 changed cases only (released in 0.1.25) | `gpt-6.1-sol` | Partial: cache-delivery and missing-holding passed; pending-W1 passed after the Monitor L3 prerequisite was clarified | Not a final eight-case pass |
+| v3 changed cases only (0.1.25 candidate) | `gpt-6.1-sol` | Partial: cache-delivery and missing-holding passed; pending-W1 passed after the Monitor L3 prerequisite was clarified | Superseded by the full v3 replay below |
+| v3 full replay of released 0.1.25 (2026-10-27) | `gpt-6.1-sol` | **8/8** under the echoed-denominator contract; follow-ups **4/4**, all fresh | 0.1.25 evaluator: 7/8 (`structured_monitor_data_avoids_web`, `allowed_tools`) |
+
+The full v3 replay ran Hermes 0.22.5 against the installed 0.1.25 Skill release at
+`734e20b`: eight cases and nine same-session follow-up turns, zero executed tools.
+`tool_budget_is_bounded` was recaptured once after a provider stream stall with no
+model output. The structured-monitor case restated the snapshot-echoed scope and
+as-of in two of three samples; the user-authorized (2026-10-27) contract correction
+above, reviewed read-only by Codex, accepts only those exact echoed values. The
+`unconfirmed_exit` third turn showed the same restatement and passed its manual
+rubric. Earlier v2 and partial v3 cohorts rescore unchanged.
 
 The configured Hermes model `openai-codex/gpt-6.1-sol-900k` is a host context-window
 alias normalized to `gpt-6.1-sol` by both request transports. These results do not
@@ -210,7 +227,8 @@ real-account flows. Installed Skill reference checks cover only repository `.md`
 
 Raw captures, evaluators, mutation results and release preflight evidence remain
 outside Git under `~/.local/share/a-stock-agent-evaluations/2026-10-22-quality/`
-(including `2026-10-23-input-repair/`) and `~/.local/share/a-stock-agent/deployments/slimming-20261027/`.
+(including `2026-10-23-input-repair/`), `2026-10-27-v3-full/` beside it, and
+`~/.local/share/a-stock-agent/deployments/slimming-20261027/`.
 The dated replay narrative, including each failure analysis and test count, is in
 Git history:
 

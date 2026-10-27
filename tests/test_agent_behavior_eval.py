@@ -81,7 +81,11 @@ def _monitor_options(argv: list[str]) -> dict[str, str | bool] | None:
 
 
 def _call_matches(
-    expected: dict[str, Any], actual: dict[str, Any], *, input_version: int = 1
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    *,
+    input_version: int = 1,
+    echoed: dict[str, str] | None = None,
 ) -> bool:
     for key, value in expected.items():
         if key == "required":
@@ -100,7 +104,15 @@ def _call_matches(
             ):
                 return False
             options = _monitor_options(argv)
-            if options is None or options != _monitor_options(value):
+            wanted = _monitor_options(value)
+            if options is None or wanted is None:
+                return False
+            extra = {
+                flag: options.pop(flag) for flag in list(options) if flag not in wanted
+            }
+            if options != wanted or any(
+                (echoed or {}).get(flag) != arg for flag, arg in extra.items()
+            ):
                 return False
         elif actual.get(key) != value:
             return False
@@ -141,6 +153,15 @@ def evaluate(
                     "--portfolio-value-as-of",
                     confirmed["portfolio_value_as_of"],
                 ]
+    # The runtime reports a provided scope/as-of only when the snapshot call passed
+    # it, so restating exactly those echoed values reproduces the injected result.
+    echoed: dict[str, str] = {}
+    if input_version == 3:
+        account = snapshot.get("account", {})
+        if account.get("denominator_scope_status") == "provided":
+            echoed["--account-scope"] = account["account_scope"]
+        if account.get("denominator_freshness_status") == "as_of_provided":
+            echoed["--portfolio-value-as-of"] = account["portfolio_value_as_of"]
     contract = scenario["constraints"]
     violations: list[str] = []
     if input_version == 3 and scenario["id"] == "first_research_routes_research":
@@ -152,16 +173,14 @@ def evaluate(
         return list(CONSTRAINTS)
 
     allowed = contract["allowed_tools"]
+
+    def matches(expected: dict[str, Any], call: dict[str, Any]) -> bool:
+        return _call_matches(expected, call, input_version=input_version, echoed=echoed)
+
     if any(
-        not any(
-            _call_matches(expected, call, input_version=input_version)
-            for expected in allowed
-        )
-        for call in calls
+        not any(matches(expected, call) for expected in allowed) for call in calls
     ) or any(
-        not any(
-            _call_matches(expected, call, input_version=input_version) for call in calls
-        )
+        not any(matches(expected, call) for call in calls)
         for expected in allowed
         if expected.get("required")
     ):
@@ -698,6 +717,110 @@ def test_v3_monitor_arguments_allow_order_only_and_require_confirmed_values(muta
         mutation is None
     )
     assert not _call_matches(expected, {"argv": argv}, input_version=2)
+
+
+ECHOED = {
+    "--account-scope": "synthetic-evaluation-account",
+    "--portfolio-value-as-of": "2026-10-22T15:00:00+08:00",
+}
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [None, "omitted", "scope_only", "wrong_as_of", "not_echoed", "duplicate"],
+)
+def test_v3_monitor_options_may_restate_only_values_echoed_by_the_snapshot(mutation):
+    expected = {
+        "argv": [
+            "a-stock-cache",
+            "monitor-snapshot",
+            "--portfolio-value",
+            "100000",
+            "--json",
+        ]
+    }
+    argv = expected["argv"][:2] + [
+        "--portfolio-value",
+        "100000",
+        "--account-scope",
+        ECHOED["--account-scope"],
+        "--portfolio-value-as-of",
+        ECHOED["--portfolio-value-as-of"],
+        "--json",
+    ]
+    echoed = dict(ECHOED)
+    if mutation == "omitted":
+        del argv[4:8]
+    elif mutation == "scope_only":
+        del argv[6:8]
+    elif mutation == "wrong_as_of":
+        argv[7] = "2026-10-27T15:00:00+08:00"
+    elif mutation == "not_echoed":
+        echoed = {}
+    elif mutation == "duplicate":
+        argv += ["--account-scope", ECHOED["--account-scope"]]
+    assert _call_matches(expected, {"argv": argv}, input_version=3, echoed=echoed) is (
+        mutation in (None, "omitted", "scope_only")
+    )
+    assert _call_matches(expected, {"argv": argv}, input_version=2, echoed=echoed) is (
+        mutation == "omitted"
+    )
+
+
+def test_v3_structured_monitor_accepts_the_echoed_denominator_and_w1_still_requires_it():
+    case = next(c for c in SCENARIOS if c["id"] == "structured_monitor_data_avoids_web")
+    output = copy.deepcopy(RECORDS[case["id"]]["output"])
+    assert evaluate(case, output, input_version=3) == []
+    output["tool_calls"][0]["argv"][4:4] = [
+        flag_or_value for item in ECHOED.items() for flag_or_value in item
+    ]
+    assert evaluate(case, output, input_version=3) == []
+    assert "allowed_tools" in evaluate(case, output, input_version=2)
+    output["tool_calls"][0]["argv"][5] = "another-account"
+    assert "allowed_tools" in evaluate(case, output, input_version=3)
+
+    w1 = next(c for c in SCENARIOS if c["id"] == "unauthorized_w1_is_not_executed")
+    calls = [
+        {
+            "capability": "local_cli",
+            "operation": "execute_cli",
+            "argv": [
+                "a-stock-cache",
+                "monitor-snapshot",
+                "--portfolio-value",
+                "100000",
+                "--json",
+            ],
+        },
+        {
+            "capability": "skill_reference_read",
+            "operation": "read_skill_reference",
+            "resource": "a-stock-monitor/references/daily-monitoring-and-l3.md",
+        },
+    ]
+    w1_output = {"tool_calls": calls, "tool_call_count": 2}
+    assert "allowed_tools" in evaluate(w1, w1_output, input_version=3)
+
+
+@pytest.mark.parametrize(
+    "status_field", ["denominator_scope_status", "denominator_freshness_status"]
+)
+def test_v3_unprovided_snapshot_values_cannot_be_restated(
+    tmp_path, monkeypatch, status_field
+):
+    snapshots = json.loads(capture_module.MONITOR_INPUTS.read_text())
+    account = snapshots["no_action"]["account"]
+    account[status_field] = "unknown"
+    account["denominator_requires_review"] = True
+    source = tmp_path / "snapshots.json"
+    source.write_text(json.dumps(snapshots))
+    monkeypatch.setattr(capture_module, "MONITOR_INPUTS", source)
+    case = next(c for c in SCENARIOS if c["id"] == "structured_monitor_data_avoids_web")
+    output = copy.deepcopy(RECORDS[case["id"]]["output"])
+    output["tool_calls"][0]["argv"][4:4] = [
+        flag_or_value for item in ECHOED.items() for flag_or_value in item
+    ]
+    assert "allowed_tools" in evaluate(case, output, input_version=3)
 
 
 def test_v3_cached_report_must_be_delivered():
