@@ -26,7 +26,10 @@ its `research-v1` HTTP API: reuse reports and source evidence, then submit focus
 research, follow-ups or corrections when needed. It never opens the holdings database
 and cannot replace runtime risk gates or grant account-write authorization.
 Configure `A_STOCK_RESEARCH_URL` and `A_STOCK_RESEARCH_TOKEN` in the environment
-or the selected owner-only `runtime.env`; tokens are issued by the Research owner.
+or the selected owner-only `runtime.env`. Use a named, revocable long-lived API
+key issued by the Research owner; short-lived tokens remain suitable for temporary
+checks. Environment variables override the file. On HTTP 401, update the credential
+before retrying, then reuse the original request ID for submissions.
 See the [workflow](skills/a-stock-research/references/research-service.md).
 
 The shared [project contract](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md),

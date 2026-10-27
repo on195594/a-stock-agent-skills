@@ -237,6 +237,23 @@ No new multi-host model capture or real-account action was performed.
 This section records candidate evidence. The separately authorized paired
 activation and production acceptance are recorded below.
 
+## Long-lived Research credential candidate (2026-10-27)
+
+Prepared in an isolated checkout; this is not an activation record. Research now
+has a candidate named, revocable API key stored separately from browser sessions.
+The client keeps `A_STOCK_RESEARCH_TOKEN` and `research-v1`; HTTP 401 explicitly
+requires a credential update before retrying with the original request ID.
+Use the selected mode-0600 `runtime.env`, and remove stale environment overrides.
+Rotate by creating a new key, verifying report access with it, then revoking the
+old key through the Research owner's local CLI. Do not put keys in prompts or logs.
+
+An isolated real Web/worker run verified credential rotation during submission,
+both revocation paths, CLI 401, service restart, and reading the passed report for
+a new Maotai research task. The installed 0.1.23 CLI also read a report using the
+new key. No account database was created. Candidate CLI checks (18), Research and
+Monitor tests (1,018), Ruff and Skill validation passed. Candidate changes do not
+update private configuration, active links or the deployment record below.
+
 ## Current deployment record
 
 State as of 2026-10-23, after explicit paired-release authorization. Earlier

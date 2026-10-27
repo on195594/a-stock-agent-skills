@@ -109,6 +109,12 @@ def cmd_research(argv: list[str]) -> int:
             timeout=(10, 30),
             allow_redirects=False,
         )
+        if response.status_code == 401:
+            raise ValueError(
+                "Research HTTP 401：研究凭据无效、已撤销或临时令牌已过期；"
+                "请由 Research owner 更新 A_STOCK_RESEARCH_TOKEN，检查环境变量是否覆盖 runtime.env。"
+                "更新前不要重试；更新后沿用原 request-id，不要重复创建任务"
+            )
         if not 200 <= response.status_code < 300:
             raise ValueError(
                 f"Research HTTP {response.status_code}；检查配置/请求，用原 request-id 查询或重试，勿重复创建任务"

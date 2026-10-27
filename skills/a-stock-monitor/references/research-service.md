@@ -1,6 +1,8 @@
 # Research 服务：先复用，再补证据
 
-服务使用 `research-v1`，通过 `a-stock-cache research` 调用。URL 和短期 Agent 令牌通过环境变量或所选的 0600 `runtime.env` 提供：`A_STOCK_RESEARCH_URL`、`A_STOCK_RESEARCH_TOKEN`。不读取其他项目 `.env`；令牌由 Research owner 签发，配置与使用沿用当前任务授权。未配置时说明不可用，继续原有已授权公开取证；服务错误必须保留，不把失败当作没有报告。
+服务使用 `research-v1`，通过 `a-stock-cache research` 调用。URL 和具名、可撤销的长期研究 API Key 通过环境变量或所选的 0600 `runtime.env` 提供：`A_STOCK_RESEARCH_URL`、`A_STOCK_RESEARCH_TOKEN`。不读取其他项目 `.env`；Key 由 Research owner 签发，持续有效直到撤销；短期 Agent 令牌仅用于临时验收。环境变量优先于文件。配置与使用沿用当前任务授权。未配置时说明不可用，继续原有已授权公开取证；服务错误必须保留，不把失败当作没有报告。
+
+收到 HTTP 401 时停止重复尝试，由 owner 更新凭据并检查旧环境变量覆盖；恢复后提交沿用原 request-id。轮换时先配置新 Key、验证报告读取，再撤销旧 Key。Key 仅由 CLI 读取，不写入提示词、日志或命令参数，不赋予网页登录或账户写权限。
 
 1. 先运行 `a-stock-cache research reports <六位代码>`，再按问题读取相关的 `research report <报告ID>`。已在会话提供完整报告与证据时直接复用，不重复查询。
 2. 检查 `status`、`passed`、`question`、`coverage.periods/missing/limits`、`evidence.market_date` 和各来源披露/取得时间。`created_at` 不是证据日期，历史结果不自动更新。失败报告只用 `facts` 并保留 `problems`。
