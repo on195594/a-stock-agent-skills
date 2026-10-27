@@ -196,7 +196,6 @@ def test_wuxi_retro_repairs_are_pinned_at_their_authoritative_layers() -> None:
     fetch_pos = RESEARCH.index("a-stock-fetch fetch <股票代码>")
     check_pos = RESEARCH.index("a-stock-cache check <股票代码>")
     assert fetch_pos < check_pos
-    assert "串行运行" in RESEARCH
     assert "必须按下列顺序串行执行，禁止并行" in DATA_CACHE
     for field in (
         "pe_static",

@@ -18,7 +18,7 @@ its report format, source documents and research state. `a-stock-cache research`
 uses its versioned HTTP API for report/evidence reads and research/follow-up/feedback
 submission. This R1 namespace bypasses the local investment database entirely;
 remote research records do not grant W1 account writes. Explicit HTTPS configuration
-(local HTTP is allowed), short-lived bearer authentication, no redirects and preserved
+(local HTTP is allowed), revocable long-lived API keys (temporary bearer tokens for checks), no redirects and preserved
 request IDs keep retries and credentials bounded. Errors remain visible; there is no
 automatic provider fallback or polling loop. Evidence does not replace decision-v1/
 monitor-v1 or their authorization boundaries.

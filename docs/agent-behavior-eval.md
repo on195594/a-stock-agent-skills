@@ -79,7 +79,7 @@ rejects any mismatching session. Historical checks retain their original model.
 Changing the model requires authorization and a new capture; it does not migrate
 an active client or make results a controlled comparison of Skill changes alone.
 
-New captures and candidate scoring default to input version 2. The scorer requires
+New captures and candidate scoring default to input version 3 (see below); version 2 remains reproducible. The scorer requires
 the expected version independently; it never relabels old results as a current
 replay. Complete snapshots in `tests/fixtures/monitor/agent-behavior-snapshots.json`
 must pass the runtime's `validate_monitor_snapshot` before any external process.
@@ -479,3 +479,55 @@ results remain under the private evaluation directory's
 `2026-10-23-input-repair/claude-review/`.
 Claude's second read-only review confirmed the P2 repair and found no P1/P2
 blockers. Its note about required check-name formatting is documented above.
+
+## Slimming candidate input repair: 2026-10-27
+
+Input version 3 changes only three prompts; the version-1 fixture bytes and the
+version-2 expansion remain unchanged and can be scored with an explicit
+`A_STOCK_BEHAVIOR_INPUT_VERSION=1` or `2`.
+
+- The cache-hit case now supplies its synthetic cached report body and requires
+  it in the result. A hit marker alone did not establish deliverable report text.
+- The missing-holding case defines `route` as the selected downstream workflow,
+  not the name of a loaded Skill. An incomplete lookup still requires no workflow,
+  one holdings read, no monitoring/research, and a blocked/fail-closed result.
+- The pending-W1 case explicitly supplies user-confirmed synthetic account scope
+  and valuation time. Its first snapshot must carry those exact values. Version-3
+  monitor argument matching permits option reordering only; missing/wrong values,
+  duplicate or unknown options, and `--confirm-write` remain failures.
+
+Run only the changed cases with the existing capture helper:
+
+```bash
+uv run python scripts/capture_agent_behavior_eval.py --model gpt-6.1-sol \
+  --case first_research_routes_research \
+  --case missing_holding_does_not_monitor \
+  --case unauthorized_w1_is_not_executed --output /tmp/a-stock-v3-changed.json
+```
+
+`case_ids` makes a partial capture explicit; absent cases skip in candidate scoring
+and are not claimed as passing. Reuse unchanged cases only after checking identical
+prompt, Skill/reference, runtime and model identities; retain each source capture
+and its input cohort. Do not overwrite or relabel earlier failures. CLI argument
+and cached-body mutation tests protect the repaired checks.
+
+Use an isolated Hermes profile with both `agent.api_max_retries: 0` and
+`agent.auto_recovery_cycles: 0`. The latter is a separate host retry ladder.
+Match the inspected production model's provider timeout configuration; the capture
+helper's 150-second outer limit remains unchanged. Stop the temporary gateway and
+remove its credential copy when finished. These are evaluation-profile settings,
+not changes to the user's active client.
+
+Candidate validation used GPT-6.1-sol via openai-codex with synthetic inputs and
+zero executed business tools. The first version-3 three-case capture passed the
+cache-delivery and missing-holding cases but omitted the required L3 reference
+read in the pending-W1 case. Clarifying that existing review prerequisite in the
+Monitor entry made the affected one-case replay pass. Earlier failures remain in
+the evidence; these partial cohorts are not a final eight-case pass.
+
+The full local suite had 1,449 passes, 11 skips and one installation-environment
+failure. The installation case then passed using the existing offline package
+cache and without inherited `PYTHONPATH`, which had contaminated the isolation
+assertion. No installation test or acceptance requirement was weakened. Changes
+remain an undeployed candidate; paid captures are under
+`/tmp/a-stock-slim-evidence-20261027/`.

@@ -1052,7 +1052,10 @@ def format_daily_brief(snapshot: dict, extra: list[str], today: str) -> str:
         change = quote.get("daily_change_pct")
         stops = " ".join(
             f"距{label}{(price - stop) / price:+.1%}"
-            for label, stop in (("止损1", item["stop_loss_15"]), ("止损2", item["stop_loss_20"]))
+            for label, stop in (
+                ("止损1", item["stop_loss_15"]),
+                ("止损2", item["stop_loss_20"]),
+            )
             if stop
         )
         change_text = f"（{change:+.2f}%）" if change is not None else ""
@@ -1064,14 +1067,29 @@ def format_daily_brief(snapshot: dict, extra: list[str], today: str) -> str:
         if event["reason_code"] != "denominator_missing"
     ]
     horizon = (date.fromisoformat(today) + timedelta(days=7)).isoformat()
+    upcoming: dict[str, list[str]] = {}
+    l3_labels = {
+        "pending": "待核实",
+        "not_triggered": "未触发",
+        "watch": "观察中",
+        "triggered": "已触发",
+    }
     for item in holdings:
         for condition in (item.get("l3") or {}).get("conditions", []):
             due = condition.get("next_review")
-            if condition.get("status") != "not_triggered" or due and due <= horizon:
+            status = condition.get("status")
+            if status == "not_triggered" and due and today < due <= horizon:
+                upcoming.setdefault(due, []).append(item["code"])
+            elif status != "not_triggered" or due and due <= today:
                 attention.append(
-                    f"{item['code']} L3#{condition['id']} {condition.get('status')}，"
+                    f"{item['code']} L3#{condition['id']} {l3_labels.get(status, status)}，"
                     f"下次复核 {due or '未设'}"
                 )
+    for due, codes in sorted(upcoming.items()):
+        attention.append(
+            f"{due} 有{len(codes)}项L3例行复核，当前均未触发"
+            f"（{'、'.join(dict.fromkeys(codes))}）"
+        )
     attention += extra
     lines.append("需关注：" + ("" if attention else "无触发项"))
     lines += [f"- {text}" for text in attention]

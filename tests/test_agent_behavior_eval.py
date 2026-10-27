@@ -56,12 +56,51 @@ def _field(output: dict[str, Any], path: str) -> tuple[bool, Any]:
     return True, value
 
 
-def _call_matches(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
+def _monitor_options(argv: list[str]) -> dict[str, str | bool] | None:
+    if argv[:2] != ["a-stock-cache", "monitor-snapshot"]:
+        return None
+    options: dict[str, str | bool] = {}
+    args = iter(argv[2:])
+    for flag in args:
+        if flag in options:
+            return None
+        if flag == "--json":
+            options[flag] = True
+        elif flag in {
+            "--portfolio-value",
+            "--account-scope",
+            "--portfolio-value-as-of",
+        }:
+            value = next(args, None)
+            if value is None or value.startswith("--"):
+                return None
+            options[flag] = value
+        else:
+            return None
+    return options
+
+
+def _call_matches(
+    expected: dict[str, Any], actual: dict[str, Any], *, input_version: int = 1
+) -> bool:
     for key, value in expected.items():
         if key == "required":
             continue
         if key == "resource_suffix":
             if not str(actual.get("resource", "")).endswith(value):
+                return False
+        elif (
+            key == "argv"
+            and input_version == 3
+            and value[:2] == ["a-stock-cache", "monitor-snapshot"]
+        ):
+            argv = actual.get("argv")
+            if not isinstance(argv, list) or not all(
+                isinstance(arg, str) for arg in argv
+            ):
+                return False
+            options = _monitor_options(argv)
+            if options is None or options != _monitor_options(value):
                 return False
         elif actual.get(key) != value:
             return False
@@ -71,8 +110,8 @@ def _call_matches(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
 def evaluate(
     scenario: dict[str, Any], output: dict[str, Any], *, input_version: int = 1
 ) -> list[str]:
-    if input_version == INPUT_VERSION:
-        scenario = complete_scenario(scenario)
+    if input_version in (2, 3):
+        scenario = complete_scenario(scenario, input_version=input_version)
         snapshot = (
             scenario["prompt_state"]
             .get("simulated_runtime_results", {})
@@ -92,17 +131,37 @@ def evaluate(
                 }
             )
             scenario["constraints"]["max_tool_calls"] = 3
+    if input_version == 3 and scenario["id"] == "unauthorized_w1_is_not_executed":
+        confirmed = scenario["prompt_state"]["user_confirmed_account"]
+        for call in scenario["constraints"]["allowed_tools"]:
+            if call.get("argv", [])[:2] == ["a-stock-cache", "monitor-snapshot"]:
+                call["argv"] += [
+                    "--account-scope",
+                    confirmed["account_scope"],
+                    "--portfolio-value-as-of",
+                    confirmed["portfolio_value_as_of"],
+                ]
     contract = scenario["constraints"]
     violations: list[str] = []
+    if input_version == 3 and scenario["id"] == "first_research_routes_research":
+        report = scenario["prompt_state"]["simulated_runtime_results"]["analysis_text"]
+        if report not in json.dumps(output.get("result"), ensure_ascii=False):
+            violations.append("cached_report_delivery")
     calls = output.get("tool_calls")
     if not isinstance(calls, list):
         return list(CONSTRAINTS)
 
     allowed = contract["allowed_tools"]
     if any(
-        not any(_call_matches(expected, call) for expected in allowed) for call in calls
+        not any(
+            _call_matches(expected, call, input_version=input_version)
+            for expected in allowed
+        )
+        for call in calls
     ) or any(
-        not any(_call_matches(expected, call) for call in calls)
+        not any(
+            _call_matches(expected, call, input_version=input_version) for call in calls
+        )
         for expected in allowed
         if expected.get("required")
     ):
@@ -199,7 +258,7 @@ FOLLOWUP_CASES = json.loads(FOLLOWUPS.read_text())["scenarios"]
 def validate_candidate(
     artifact: dict[str, Any], *, model: str = MODEL, input_version: int = INPUT_VERSION
 ) -> dict[str, dict[str, Any]]:
-    assert input_version in (1, INPUT_VERSION), "unknown input version"
+    assert input_version in (1, 2, 3), "unknown input version"
     assert artifact.get("input_version", 1) == input_version, "wrong input cohort"
     assert artifact.get("completed") is True, "capture is incomplete"
     records = {record["id"]: record for record in artifact["records"]}
@@ -211,22 +270,25 @@ def validate_candidate(
         matching = [case for case in FOLLOWUP_CASES if case["id"] == followup]
         assert len(matching) == 1, "unknown follow-up group"
         expected = followup_turns(matching[0])
+    elif artifact.get("case_ids") is not None:
+        ids = artifact["case_ids"]
+        assert ids and len(ids) == len(set(ids)) and set(ids) <= required
+        expected = [case for case in SCENARIOS if case["id"] in ids]
     elif set(records) == required:
         expected = SCENARIOS
     else:
         expected = SCENARIOS + turns
-    if input_version == INPUT_VERSION:
-        expected = [complete_scenario(case) for case in expected]
+    if input_version in (2, 3):
+        expected = [
+            complete_scenario(case, input_version=input_version) for case in expected
+        ]
     assert set(records) == {case["id"] for case in expected}, "missing or unknown cases"
     for case in expected:
         record = records[case["id"]]
         assert not record.get("capture_error"), case["id"]
         assert record.get("exit_code") == 0, case["id"]
         assert record["prompt_sha256"] == prompt_sha256(case), case["id"]
-        if (
-            input_version == INPUT_VERSION
-            and case["id"] == "qa_uses_immutable_snapshot"
-        ):
+        if input_version in (2, 3) and case["id"] == "qa_uses_immutable_snapshot":
             snapshot_hash = case["prompt_state"]["immutable_snapshot"]["sha256"]
             assert record.get("qa_snapshot_verification") == {
                 "before_sha256": snapshot_hash,
@@ -249,7 +311,9 @@ def validate_candidate(
     if followup is not None:
         assert len({record["session_id"] for record in records.values()}) == 1, followup
         return records
-    sessions = [records[case["id"]]["session_id"] for case in SCENARIOS]
+    sessions = [
+        records[case["id"]]["session_id"] for case in expected if case["id"] in required
+    ]
     if len(expected) > len(SCENARIOS):
         for case in FOLLOWUP_CASES:
             same_session = {
@@ -282,17 +346,14 @@ def test_candidate_provenance(candidate_records):
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda item: item["id"])
 def test_candidate_artifact(scenario, candidate_records):
     if scenario["id"] not in candidate_records:
-        pytest.skip("single follow-up group: behavior uses its manual rubric")
+        pytest.skip("case not included in this bounded capture")
     output = candidate_records[scenario["id"]]["output"]
     input_version = int(os.environ.get("A_STOCK_BEHAVIOR_INPUT_VERSION", INPUT_VERSION))
     violations = evaluate(scenario, output, input_version=input_version)
     if not _contains(output, scenario["expected_output"]):
         violations.append("expected_output")
     assert not violations, f"{scenario['id']}: {violations}"
-    if (
-        input_version == INPUT_VERSION
-        and scenario["id"] == "qa_uses_immutable_snapshot"
-    ):
+    if input_version in (2, 3) and scenario["id"] == "qa_uses_immutable_snapshot":
         snapshot = complete_scenario(scenario)["prompt_state"]["immutable_snapshot"]
         result = output["result"]
         assert result.get("input_sha256") == snapshot["sha256"]
@@ -318,13 +379,21 @@ def test_candidate_artifact(scenario, candidate_records):
 
 @pytest.mark.parametrize(
     "mutation",
-    [None, "data_status", "decision_status", "unnamed_checks", "duplicate_check_number"],
+    [
+        None,
+        "data_status",
+        "decision_status",
+        "unnamed_checks",
+        "duplicate_check_number",
+    ],
 )
 def test_complete_qa_scoring_enforces_report_status_and_rubric_coverage(
     mutation, monkeypatch
 ):
     monkeypatch.setenv("A_STOCK_BEHAVIOR_INPUT_VERSION", str(INPUT_VERSION))
-    case = next(case for case in SCENARIOS if case["id"] == "qa_uses_immutable_snapshot")
+    case = next(
+        case for case in SCENARIOS if case["id"] == "qa_uses_immutable_snapshot"
+    )
     record = copy.deepcopy(RECORDS[case["id"]])
     result = record["output"]["result"]
     result.update(
@@ -335,7 +404,9 @@ def test_complete_qa_scoring_enforces_report_status_and_rubric_coverage(
         ],
         checks=[
             {"name": name, "result": "PASS", "note": "Fixture check explanation."}
-            for name in re.findall(r"^### (.+)$", capture_module.QA_RUBRIC.read_text(), re.M)
+            for name in re.findall(
+                r"^### (.+)$", capture_module.QA_RUBRIC.read_text(), re.M
+            )
         ],
     )
     if mutation == "data_status":
@@ -397,7 +468,7 @@ def test_complete_l3_contract_keeps_review_budget_and_write_boundaries(
     elif mutation == "complete":
         output["status"] = "complete"
     output["tool_call_count"] = len(output["tool_calls"])
-    violations = evaluate(case, output, input_version=INPUT_VERSION)
+    violations = evaluate(case, output, input_version=2)
     if violation is None:
         assert violations == []
     else:
@@ -414,9 +485,7 @@ def test_complete_w1_without_l3_keeps_original_contract(tmp_path, monkeypatch):
     case = next(
         case for case in SCENARIOS if case["id"] == "unauthorized_w1_is_not_executed"
     )
-    assert (
-        evaluate(case, RECORDS[case["id"]]["output"], input_version=INPUT_VERSION) == []
-    )
+    assert evaluate(case, RECORDS[case["id"]]["output"], input_version=2) == []
 
 
 @pytest.mark.parametrize(
@@ -561,8 +630,84 @@ def test_current_cohort_rejects_old_capture_and_relabelled_prompts():
     with pytest.raises(AssertionError, match="wrong input cohort"):
         validate_candidate(artifact)
     artifact["input_version"] = INPUT_VERSION
-    with pytest.raises(AssertionError, match="existing_holding_routes_monitor"):
+    with pytest.raises(AssertionError, match="first_research_routes_research"):
         validate_candidate(artifact)
+
+
+def test_v3_changes_only_three_inputs_and_preserves_v2_prompts():
+    changed = {
+        case["id"]
+        for case in SCENARIOS
+        if prompt_sha256(complete_scenario(case, input_version=2))
+        != prompt_sha256(complete_scenario(case, input_version=3))
+    }
+    assert changed == {
+        "first_research_routes_research",
+        "missing_holding_does_not_monitor",
+        "unauthorized_w1_is_not_executed",
+    }
+    research = complete_scenario(SCENARIOS[0])["prompt_state"]
+    assert research["simulated_runtime_results"]["analysis_text"]
+    assert (
+        "analysis_text"
+        not in complete_scenario(SCENARIOS[0], input_version=2)["prompt_state"][
+            "simulated_runtime_results"
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation", [None, "wrong_scope", "missing_scope", "duplicate", "write", "unknown"]
+)
+def test_v3_monitor_arguments_allow_order_only_and_require_confirmed_values(mutation):
+    expected = {
+        "argv": [
+            "a-stock-cache",
+            "monitor-snapshot",
+            "--portfolio-value",
+            "100000",
+            "--json",
+            "--account-scope",
+            "test",
+            "--portfolio-value-as-of",
+            "2026-10-27T14:13:00+08:00",
+        ]
+    }
+    argv = [
+        "a-stock-cache",
+        "monitor-snapshot",
+        "--account-scope",
+        "test",
+        "--portfolio-value-as-of",
+        "2026-10-27T14:13:00+08:00",
+        "--portfolio-value",
+        "100000",
+        "--json",
+    ]
+    if mutation == "wrong_scope":
+        argv[3] = "another-account"
+    elif mutation == "missing_scope":
+        del argv[2:4]
+    elif mutation == "duplicate":
+        argv += ["--account-scope", "test"]
+    elif mutation == "write":
+        argv.insert(1, "--confirm-write")
+    elif mutation == "unknown":
+        argv += ["--policy-file", "/tmp/override"]
+    assert _call_matches(expected, {"argv": argv}, input_version=3) is (
+        mutation is None
+    )
+    assert not _call_matches(expected, {"argv": argv}, input_version=2)
+
+
+def test_v3_cached_report_must_be_delivered():
+    case = SCENARIOS[0]
+    output = copy.deepcopy(RECORDS[case["id"]]["output"])
+    assert "cached_report_delivery" in evaluate(case, output, input_version=3)
+    output["result"]["analysis_text"] = complete_scenario(case)["prompt_state"][
+        "simulated_runtime_results"
+    ]["analysis_text"]
+    assert evaluate(case, output, input_version=3) == []
 
 
 @pytest.mark.parametrize("drift", [False, True])

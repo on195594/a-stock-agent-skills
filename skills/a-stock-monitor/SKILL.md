@@ -1,6 +1,6 @@
 ---
 name: a-stock-monitor
-description: "Use for held A-shares only (A股持仓). New: a-stock-research."
+description: "用于 A股持仓、账户截图与成交对账、止损/L3/仓位复核。首次配置或纯公开证据问答用 a-stock-research。"
 license: Proprietary
 compatibility: Requires local command execution, the installed a-stock-agent runtime and a-stock-lib, plus network access for live monitoring.
 ---
@@ -15,7 +15,7 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 
 ### Level 1：默认快照
 
-先取得用户明确的账户总资产，再只读运行一次：
+先取得用户明确的账户总资产，并把本会话或截图已确认的账户范围、资产估值时点随首次调用传入，再只读运行一次：
 
 现金余额、单只持仓市值不能替代账户总资产。缺少总资产时请求补充，不调用快照，也不把现金填入建议命令的 `--portfolio-value`；继续复用已提供的持仓、成交和截图说明对账缺口。
 
@@ -25,7 +25,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 `monitor-snapshot --json` 输出是 `monitor-v1` machine contract；状态、动作、缺口和停止条件只从结构化字段读取，不从自然语言重建。
 
-可附用户提供的 `--policy-file`、`--account-scope`、`--portfolio-value-as-of`，不得生成政策或确认引用。估值时点须用户或截图明确确认日期与时间，格式 `YYYY-MM-DDTHH:MM:SS+08:00`；手机设备状态栏时间不能替代资产估值时间，缺日期/时点则保持缺省并请求补充。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时即使 clean 也不授予加仓权限。2%/8% 是兼容默认，不是个人回撤目标；非法政策不得静默回退，确认元数据不是 W1 令牌。
+已确认账户范围时在上述命令追加 `--account-scope <账户范围>`；已知政策要求范围但用户尚未确认时先请求补充，不从政策文件反推账户、不先执行必然失败的无范围调用。可附用户提供的 `--policy-file`，不得生成政策或确认引用。`--portfolio-value-as-of` 须用户或截图明确确认资产估值日期与时间，格式 `YYYY-MM-DDTHH:MM:SS+08:00`；手机设备状态栏时间不能替代资产估值时间，缺日期/时点则保持缺省并请求补充。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时即使 clean 也不授予加仓权限。2%/8% 是兼容默认，不是个人回撤目标；非法政策不得静默回退，确认元数据不是 W1 令牌。
 
 通过宿主的命令执行工具调用 runtime CLI，保留 stdout、stderr 和退出码；不要在有硬超时的临时代码内核中包裹整轮监控。
 
@@ -38,7 +38,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 ### Level 2：按升级项展开
 
-只加载与 runtime 升级原因或上述账户差异相符的资料。升级项需要公司公开证据时，按 [Research 服务](references/research-service.md) 先读已有报告，仅对关键缺口发起追问/纠错；结果返回父级复核，不直接改变账户动作：
+只加载与 runtime 升级原因或上述账户差异相符的资料。L3 触发或候选必须先读下表的日常监控与 L3 资料完成复核；写入待确认不替代这一步。升级项需要公司公开证据时，按 [Research 服务](references/research-service.md) 先读已有报告，仅对关键缺口发起追问/纠错；结果返回父级复核，不直接改变账户动作：
 
 | 升级原因 | Reference |
 |---|---|

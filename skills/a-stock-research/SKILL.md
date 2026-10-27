@@ -1,6 +1,6 @@
 ---
 name: a-stock-research
-description: "Use for A股首次投研 (new A-shares). Held: a-stock-monitor."
+description: "用于 A股首次配置研究、公司公开证据、报告追问与纠错。已有持仓的交易或账户操作用 a-stock-monitor。"
 license: Proprietary
 compatibility: Requires local command execution, the installed a-stock-agent runtime and a-stock-lib, plus network access for live research.
 ---
@@ -13,12 +13,12 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 
 1. 确认股票代码、研究目标；未指定时交付简洁首版。
 2. 先只读运行 `a-stock-cache holdings <股票代码> --active-only`。确认已持仓后立即终止本 Skill，改用 `a-stock-monitor`；账本不可用时可继续公开研究，但仅限用户已明确要求的研究任务，不得声称新仓或给账户级动作。用户仅要求核对持仓、且查询结果不完整时，说明缺口并停止澄清，不擅自启动首次研究。
-3. 已配置 Research 服务时，先按 [Research 服务](references/research-service.md) 复用相关报告与证据；只有新的关键问题才发起研究。账户机器状态仍由以下 runtime 提供。串行运行：
+3. 先串行运行本地命令，取得 `check` 结果前不调用 Research 服务：
    ```bash
    a-stock-fetch fetch <股票代码>
    a-stock-cache check <股票代码>
    ```
-   `fetch` 失败即停止；不得用网页报价替代。`ANALYSIS_HIT` 输出已包含当日结论正文，直接展示当日缓存并停止，不再单独读取缓存/快照、调用 `get-analysis` 或重新 QA。其他状态只补运行时指出的缺口。
+   `fetch` 失败即停止；不得用网页报价替代。`ANALYSIS_HIT` 输出已包含当日结论正文，直接展示当日缓存并停止，不再单独读取缓存/快照、调用 `get-analysis` 或重新 QA。其他状态只补运行时指出的缺口；已配置 Research 服务时按上述服务资料先复用相关报告与证据，只有新的关键问题才发起研究。
 4. 依据最新正式披露确认主营并选择 A—F 框架；无法确定时询问用户。量化框架不适用时只给定性摘要并停止评分。
 5. 需要评分时依次调用 `a-stock-cache checklist <股票代码> <框架>` 和 `a-stock-cache score-fundamentals ...`。枚举、阈值、红线、完整性、规则版本与计算结果只服从命令输出和 `a-stock-lib`，不得在 Skill 中复算或覆盖。
 6. 把完整机器状态作为 decision-v1 JSON 经 stdin 交给 `a-stock-cache --confirm-write set-analysis`；仅在用户确认具体写入后执行。Markdown 只用于展示，不得反推或充当机器状态。
@@ -36,7 +36,7 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 - 结构化状态缺失、过期、冲突或命令失败时 fail-closed：明确缺口，保持 `incomplete/not_formed`，不得补造分数、评级、矩阵或可交易结论。
 - 分数、分类、风险门、估值冲突、组合风险、L3、建议动作和来源时效均以 runtime 的结构化合同为准；不得从自然语言标签重建。
 - 持仓、分析、预警、L3/Tier 与交易账本写入均属 W1。只有用户确认具体动作后才可追加全局 `--confirm-write`；读操作不得携带该参数。
-- 本 Skill 只给首次配置研究；止损、减仓、补仓、L3 与已有持仓操作由 `a-stock-monitor` 处理。本框架基于公开信息，不构成投资建议。
+- 本 Skill 提供首次配置研究和公开证据问答；止损、减仓、补仓、L3 与已有持仓操作由 `a-stock-monitor` 处理。本框架基于公开信息，不构成投资建议。
 
 ## 按需资料
 

@@ -24,14 +24,18 @@ SKILLS = "a-stock-research,a-stock-monitor,a-stock-qa"
 SKILL_NAMES = tuple(SKILLS.split(","))
 MODEL = "gpt-5.6-sol-900k"
 PROVIDER = "openai-codex"
-INPUT_VERSION = 2
+INPUT_VERSION = 3
 MONITOR_INPUTS = ROOT / "tests/fixtures/monitor/agent-behavior-snapshots.json"
 QA_REPORT = ROOT / "tests/fixtures/qa/behavior-report.md"
 QA_RUBRIC = ROOT / "skills/a-stock-qa/references/rubrics/a-stock-research.md"
 
 
-def complete_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
+def complete_scenario(
+    scenario: dict[str, Any], *, input_version: int = INPUT_VERSION
+) -> dict[str, Any]:
     """Expand the current replay's inputs without changing historical fixtures."""
+    if input_version not in (2, 3):
+        raise ValueError("unsupported complete-input version")
     result = copy.deepcopy(scenario)
     state = result["prompt_state"]
     runtime = state.get("simulated_runtime_results", {})
@@ -63,6 +67,22 @@ def complete_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
             "The host computed the snapshot SHA-256 and will verify the same file "
             "again after this response, rejecting the capture if it changed."
         )
+    if input_version == 3:
+        if scenario["id"] == "first_research_routes_research":
+            runtime["analysis_text"] = (
+                "600000 离线测试缓存报告：示例企业主营为银行业务，报告期为2026年中报，"
+                "来源为合成测试材料。该报告不包含真实行情或投资建议。"
+            )
+        elif scenario["id"] == "missing_holding_does_not_monitor":
+            state["replay_field_definition"] = (
+                "route 表示核对持仓后选定的业务流程，不是已加载的 Skill。"
+                "尚无法选择后续业务流程时用 null；仅读取核对指引不算启动该业务流程。"
+            )
+        elif scenario["id"] == "unauthorized_w1_is_not_executed":
+            state["user_confirmed_account"] = {
+                "account_scope": "synthetic-evaluation-account",
+                "portfolio_value_as_of": "2026-10-22T15:00:00+08:00",
+            }
     return result
 
 
@@ -181,7 +201,13 @@ def session_provenance(session_id: str) -> dict[str, Any]:
     return provenance
 
 
-def capture(output: Path, followup: str | None = None, *, model: str = MODEL) -> None:
+def capture(
+    output: Path,
+    followup: str | None = None,
+    *,
+    model: str = MODEL,
+    case_ids: list[str] | None = None,
+) -> None:
     if output.exists():
         raise FileExistsError(
             f"preserve prior capture; choose a new --output: {output}"
@@ -190,6 +216,12 @@ def capture(output: Path, followup: str | None = None, *, model: str = MODEL) ->
         raise ValueError("raw capture output must stay outside the repository")
     payload = json.loads(SCENARIOS.read_text(encoding="utf-8"))
     scenarios = payload["scenarios"]
+    if case_ids is not None:
+        if followup or not case_ids or len(set(case_ids)) != len(case_ids):
+            raise ValueError("select unique cases or a follow-up group")
+        if not set(case_ids) <= {case["id"] for case in scenarios}:
+            raise ValueError("unknown case")
+        scenarios = [case for case in scenarios if case["id"] in case_ids]
     if followup is not None:
         case = next(
             case
@@ -213,6 +245,7 @@ def capture(output: Path, followup: str | None = None, *, model: str = MODEL) ->
             ).strip()
         ),
         "followup_case": followup,
+        "case_ids": case_ids,
         "runtime_version": importlib.metadata.version("a-stock-agent-skills"),
         "runtime_source_sha256": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -386,8 +419,14 @@ def main() -> None:
         help="capture one fixed multi-turn group instead of the eight single-turn cases",
     )
     parser.add_argument("--model", default=MODEL, help="explicit candidate model")
+    parser.add_argument(
+        "--case",
+        action="append",
+        dest="case_ids",
+        help="capture only a named scenario; repeat for affected cases",
+    )
     args = parser.parse_args()
-    capture(args.output, args.followup, model=args.model)
+    capture(args.output, args.followup, model=args.model, case_ids=args.case_ids)
 
 
 if __name__ == "__main__":

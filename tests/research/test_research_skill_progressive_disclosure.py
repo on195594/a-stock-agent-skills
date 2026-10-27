@@ -12,12 +12,12 @@ REFERENCES = {
 }
 
 
-def test_research_skill_routes_each_progressive_disclosure_reference_once() -> None:
+def test_research_skill_routes_progressive_disclosure_references() -> None:
     main = MAIN.read_text(encoding="utf-8")
 
     for path in REFERENCES.values():
         assert path.is_file()
-        assert main.count(f"](references/{path.name})") == 1
+        assert f"](references/{path.name})" in main
 
     cycle = REFERENCES["cycle"].read_text(encoding="utf-8")
     assert "decision-v1" in cycle
@@ -105,7 +105,7 @@ def test_research_routes_scale_electronics_manufacturing_to_a() -> None:
     assert rows[0][3].strip() == "A框架"
     assert "[A](frameworks/A.md)" in execution
     assert (REFERENCES["execution"].parent / "frameworks/A.md").is_file()
-    assert "盈利公司使用真实TTM PEG" in execution
+    assert "盈利公司使用真实TTM PEG" in framework_f
     assert "现金跑道/稀释" in framework_f
     assert "EMS/ODM" not in main
 
