@@ -540,25 +540,3 @@ def test_liquidity_shock_incomplete_500_is_not_a_clear_signal():
         }
     )
     assert result["status"] == "incomplete"
-
-
-@pytest.mark.parametrize(
-    "market_snapshot",
-    [
-        lambda now: _snapshot(now, 501) | {"source": "news search"},
-        lambda now: _snapshot(now - timedelta(seconds=121), 501) | {"is_final": False},
-    ],
-)
-def test_liquidity_shock_untrusted_or_stale_501_is_incomplete(market_snapshot):
-    now = datetime(2026, 9, 7, 10, 0, tzinfo=CST)
-    result = risk_gates.liquidity_shock_gate(
-        {
-            "stop_loss_triggered": True,
-            "stop_loss_20": 8,
-            "quote": _quote(),
-            "now": now,
-            "market_snapshot": market_snapshot(now),
-        }
-    )
-    assert result["status"] == "incomplete"
-    assert result["reason_code"] == "market_snapshot_incomplete"

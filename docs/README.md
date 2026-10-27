@@ -6,7 +6,7 @@
 - [development](development.md)：本地验证；[operations](operations.md)：配置、部署与回滚。
 - [runtime contracts](architecture/runtime-contracts.md)：decision-v1 / monitor-v1、owner 和版本合同。
 - 三项目共用正文：[项目契约](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md)、[路线图](https://github.com/on195594/a-share-research/blob/main/docs/roadmap.md)、[实施计划](https://github.com/on195594/a-share-research/blob/main/docs/implementation-plan.md)，统一维护在 `a-share-research/docs/`。报告消费接口 `research-v1` 已接入，本仓运行时、Skill 和部署状态继续由本仓文档维护。
-- [Agent 行为验证](agent-behavior-eval.md)：历史捕获、当前基线、候选验证入口和已知失败。下一批质量修复的顺序与验收见共用[实施计划](https://github.com/on195594/a-share-research/blob/main/docs/implementation-plan.md#下一批推进顺序)。
+- [Agent 行为验证](agent-behavior-eval.md)：评测方法、输入版本、候选捕获入口与当前状态。下一批质量修复的顺序与验收见共用[实施计划](https://github.com/on195594/a-share-research/blob/main/docs/implementation-plan.md#下一批推进顺序)。
 - `skills/*/references/`：Agent 当前执行规则；`specs/`：仍需追溯的投资/风险规则依据。规则变更须显式授权，不能用整理文档绕过。
 
 ## 历史只从 Git 追溯
@@ -36,6 +36,13 @@ QA 当前输入、输出和独立调用边界只维护在其 `SKILL.md`，检查
 ```bash
 git show f5307f7:docs/operations.md
 git show f5307f7:docs/reviews/a-stock-codex-plan-agy-review.md
+```
+
+0.1.23/0.1.24 的激活前候选验证记录与行为评测逐日回放叙述（6/8 → 8/8 的每轮失败分析）已于 2026-10-27 移出活动文档，原文保留于 `d14d6ff`：
+
+```bash
+git show d14d6ff:docs/operations.md
+git show d14d6ff:docs/agent-behavior-eval.md
 ```
 
 当前部署及适用回滚只以 `operations.md` 的当前记录为准。

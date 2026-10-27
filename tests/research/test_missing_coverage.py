@@ -571,21 +571,6 @@ class TestWatchlistRows:
 
 
 class TestFetchCurrentPrice:
-    def _make_mock_get(self, monkeypatch, price_field: str, captured: dict):
-        class MockResp:
-            encoding = "gbk"
-            # Sina format: "name,yesterday,open,current,high,low,..."
-            text = f'var hq_str_sh000000="{price_field}"'
-
-        def mock_get(url, **kwargs):
-            captured["url"] = url
-            r = MockResp()
-            r.text = r.text.replace("hq_str_sh000000", f"hq_str_{url.split('=')[1]}")
-            r.text = f'var hq_str_x="{price_field}"'
-            return r
-
-        monkeypatch.setattr(market_quotes.requests, "get", mock_get)
-
     def test_sh_prefix_for_6xx_codes(self, monkeypatch):
         captured = {}
 

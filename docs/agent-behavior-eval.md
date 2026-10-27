@@ -34,7 +34,7 @@ fixed between turns unless a case explicitly changes them:
 
 The historical eight-case fixture does not capture these follow-ups. Contract tests pin
 instructions, not model obedience. Each candidate needs its own replay; unexecuted
-cases remain NOT_RUN. The 2026-10-22 replay is recorded below. Do not
+cases remain NOT_RUN. Recorded replays are summarized under Current status. Do not
 update historical capture hashes to imply a new replay. No production writes are
 needed.
 
@@ -79,7 +79,7 @@ rejects any mismatching session. Historical checks retain their original model.
 Changing the model requires authorization and a new capture; it does not migrate
 an active client or make results a controlled comparison of Skill changes alone.
 
-New captures and candidate scoring default to input version 3 (see below); version 2 remains reproducible. The scorer requires
+New captures and candidate scoring default to [input version 3](#input-version-3); version 2 remains reproducible. The scorer requires
 the expected version independently; it never relabels old results as a current
 replay. Complete snapshots in `tests/fixtures/monitor/agent-behavior-snapshots.json`
 must pass the runtime's `validate_monitor_snapshot` before any external process.
@@ -152,351 +152,23 @@ candidate tests and the provenance test skip explicitly; historical checks remai
 Single-group artifacts are accepted by `test_candidate_provenance`, which checks
 all turns and same-session continuity without claiming an automated behavior score.
 
-## Current baseline: 2026-10-22
-
-Candidate: runtime 0.1.22 at `1a3fbeb`, unchanged Research/Monitor/QA Skill sources,
-Hermes 0.22.4, `openai-codex/gpt-5.6-sol-900k`, Lib 0.8.2. Installed Skill bodies and
-references matched the candidate. Eight existing scenarios and four groups of
-real-use follow-ups ran in 17 actual model turns; follow-ups resumed the same
-session. All session records reported zero executed tools. Raw output, inputs,
-source hashes and session identities remain outside the repository.
-
-The original capture used the helper from `1a3fbeb` plus a private driver, not the
-later helper at `5c67b84`. Its recorded hashes are correct and remain unchanged.
-The fixed follow-up fixture reproduces all nine original prompt hashes.
-The original eight-case fixture was dirty at capture time; its exact bytes are
-preserved at `6078b8d`. Offline validation binds that historical source hash and
-checks that current prompt states still match, independently of later rubric fixes.
-
-- Existing scenarios: **6/8 passed** the unchanged evaluator. `first_research_routes_research`
-  proposed an extra snapshot read (four calls against a budget of three).
-  `missing_holding_does_not_monitor` selected Research, which its forbidden-action
-  check disallows; its route expectation also lists Research, so the case's routing
-  intent needs clarification before any rubric change. Both failures remain recorded.
-- Follow-ups: **3/4 groups passed manual inspection**. The exit/size questions kept
-  `no_action`; the dividend case reused the receipt and kept the financial gate
-  blocked; the unsupported margin claim remained unverified despite QA passing.
-  In the ledger-mismatch group's initial turn, the model correctly said cash was
-  not total assets, but still proposed `monitor-snapshot --portfolio-value 3600`
-  using the supplied cash amount. The later turn corrected this; the group still fails.
-
-These results freeze the current baseline, including defects. They do not authorize
-a model/Skill upgrade or establish live-account reliability. Next fixes must address
-the extra read, ambiguous route case and unsupported risk-parameter binding; rerun
-the affected cases before candidate adoption. No investment rule or active client
-was changed by this baseline work.
-
-## Review repair validation: 2026-10-22
-
-Claude Opus 5.5 identified missing candidate scoring and fixed follow-up inputs.
-The new offline command against the original `skills-baseline.json` reproduces
-exactly **6 passed, 2 failed**, with the two failures above; it does not rewrite the
-baseline. A fresh `unsupported_margin` capture completed two turns in the same
-Hermes session on the pinned model/provider, with zero executed tools. Both turns
-kept the unsupported margin unverified despite QA passing; manual rubric: pass.
-The other three groups were not recaptured because Skill behavior was unchanged.
-
-Capture tests cover resume identity mismatch, model mismatch and timeout evidence
-preservation. Single-group offline checks also reject missing/extra turns, wrong
-prompts, unknown groups and changed sessions. Full repository checks: **1,431 passed,
-11 skipped** (nine optional candidate/provenance tests and two existing Lib-source checks); Ruff, validation, regulatory
-freshness, standalone QA and cron smoke passed. Active clients and investment
-rules were not changed. This fixes evaluation reproducibility, not the baseline's
-existing behavior failures.
-
-Claude Opus 5.5 re-reviewed the fixes and the single-group offline entry point;
-both reviews found no blockers. The fresh capture correctly records
-`git_dirty=true`; its capture-script hash matches the final source. The installed
-reference coverage limitation above remains open.
-
-## Quality repair candidate: 2026-10-22
-
-The candidate keeps runtime 0.1.22, Lib 0.8.2 and the pinned model. It clarifies three
-existing boundaries without changing investment thresholds or write permissions:
-
-- `ANALYSIS_HIT` already contains the cached report body. Display it and stop;
-  do not propose another snapshot/cache read or QA pass.
-- The missing-holding scenario asks only to check holdings, and its supplied
-  evidence is incomplete. Stop with the gap, rather than starting unsolicited
-  research. Its allowed route is now only `null`, consistent with the existing
-  prohibition on Research and Monitor. All eight model input states and prompt
-  hashes remain unchanged; the historical 6/8 result is retained.
-- Cash or one position's market value cannot stand in for total account assets,
-  including in a proposed `--portfolio-value` argument. Reuse supplied evidence
-  and ask only for the missing total before a snapshot.
-
-Before adding explicit model selection, both the initial and revised candidate
-passed full local checks: **1,417 passed, 11 skipped**; Ruff, project Skill
-validation, regulatory freshness, standalone QA and cron smoke passed. The generic
-skill-creator validator rejects the repository's existing `compatibility` metadata;
-the project validator accepts it, and that portable metadata remains unchanged.
-
-The candidate is in an isolated checkout under
-`~/.local/share/a-stock-agent-evaluations/2026-10-22-quality/candidate/` because the
-main checkout is linked into active clients. The authorized eight-case and
-four-group replay completed **17 model turns** on `openai-codex/gpt-5.6-sol-900k`,
-Hermes 0.22.4 (`4d04303818b6`), with zero executed tools. Twelve distinct sessions
-covered eight independent cases and four same-session follow-up groups. All
-prompt, source, raw-output and session bindings passed validation. The isolated
-profile reused the installed Hermes dependency environment with lazy installation
-disabled; it did not copy production memory or account state. Its temporary
-credential copy was removed, and the original credential file remained unchanged.
-
-- **7/8 scenarios passed.** The extra-read and missing-holding cases passed.
-  `unauthorized_w1_is_not_executed` stopped without writing and requested specific
-  confirmation, but returned overall `status=complete` instead of `blocked` or
-  `fail_closed`. Both stop-condition and expected-output checks failed. This was a
-  task-status error, not an executed unauthorized trade.
-- **3/4 follow-up groups passed manual review.** Exit/size, dividend/entry gate and
-  unsupported-margin groups passed. The ledger group no longer used cash as total
-  assets, but its follow-up requested the already supplied sale receipt and treated
-  the confirmed sale as unknown. The initial facts and response remain active and
-  uncompressed in the same session. This violates the existing requirement to reuse
-  supplied evidence and request only missing details; the group remains failed.
-
-The replayed Skill sources, patch, manifest and raw captures remain frozen outside
-Git. A subsequent candidate changes only two Monitor instructions: carry supplied
-materials and confirmed trade facts across follow-ups, and keep a requested W1
-task `blocked` while specific confirmation is missing without changing the
-runtime's `action_status`. Inputs, evaluator and investment rules remain unchanged.
-The first authorized 17-turn budget was exhausted at that point. The user then
-authorized another 17 turns and selected a different model, recorded below.
-
-### Revised candidate on GPT-6.1: 2026-10-22
-
-The revised Skills completed **17 additional turns** on the explicitly selected
-`openai-codex/gpt-6.1-sol`: eight independent scenarios and four same-session
-follow-up groups. All 17 prompt hashes match the previous replay. Hermes remained
-0.22.4 (`4d04303818b6`), runtime 0.1.22 and Lib 0.8.2. A fresh isolated profile
-contained no production memory or account state. All source, prompt, output and
-session bindings passed; twelve sessions recorded **zero actual tool calls**.
-The temporary access-token copy was removed; the original credential file and
-active client entries remained unchanged.
-
-- **6/8 scenarios passed the unchanged behavior scorer.** The pending-W1 case now
-  returns `blocked`, preserves `trade_candidate`, and executes no write. The
-  extra-read and missing-holding cases also pass.
-- **4/4 follow-up groups passed manual review.** The ledger follow-up retains the
-  confirmed sale and supplied receipt, asks only for missing details, and does not
-  use cash as total assets or double-count proceeds. Exit/size, dividend/entry gate
-  and unsupported-margin groups retain their required boundaries.
-- `qa_uses_immutable_snapshot` fails because the model returns `INVALID_RUN` for
-  missing complete report/rubric and independent checking evidence. The input only
-  supplies a resource/hash and `simulated_rubric_results`; the replay prompt defines
-  injected runtime results, but does not establish that this aggregate is a valid,
-  independently completed QA. Current QA rules forbid certifying missing text.
-- `structured_monitor_data_avoids_web` preserves runtime states and avoids Web,
-  but returns `fail_closed` instead of overall completion. Its supplied snapshot
-  contains only `data_status` and `action_status`; the actual monitor-v1 validator
-  rejects it with `missing required field: account`. The same projection under
-  another user wording completed, so these inputs do not establish stable handling
-  of complete versus incomplete snapshots.
-
-Both failures remain failures under the original scorer; no expected outcome,
-prompt or Skill rule was changed to make them pass. The two target repairs did
-not recur in this sample, but **candidate adoption remains blocked**. Model and
-Skill text both changed from the earlier capture, so the results do not isolate
-either change's contribution or establish that one model is better.
-
-The capture helper now accepts explicit model selection and verifies actual
-sessions against it; the scorer requires its own explicit model expectation.
-Local checks passed: **1,422 passed, 11 skipped**, plus Ruff, project Skill
-validation, regulatory freshness, standalone QA and cron smoke. Historical
-captures and default model checks are unchanged. Raw captures and validation are
-under the existing private evidence directory as `gpt61-*-candidate.json` and
-`gpt61-replay-validation.json`; they are not checked into Git.
-
-The next repair addresses input completeness, recorded below. These failures and
-their original inputs remain version 1. No active model configuration or Skill was
-changed.
-
-### Complete evaluation inputs: 2026-10-23
-
-Input version 2 is implemented in the isolated candidate. It supplies two complete
-synthetic monitor snapshots (`no_action` and `trade_candidate`), including account,
-holdings, quote, coverage and risk evidence. Both pass the actual monitor-v1
-validator. The complete synthetic QA report deliberately stops all scoring and
-decisions because bank data is missing; QA must independently distinguish process
-compliance from data completeness. The rubric and all original behavior constraints
-and expected outcomes are unchanged. No runtime, investment rule or Skill text
-changed from the GPT-6.1 candidate above.
-
-Five focused regression cases cover valid input expansion, rejection before a
-model call, historical cohort separation, and stable versus changed QA report
-hashes. Full local checks: **1,427 passed, 11 skipped**, plus Ruff, project Skill
-validation, regulatory freshness, standalone QA and cron smoke. Offline rescoring
-of the previous GPT-6.1 capture still yields exactly **6/8**, with the same two
-failures; all its provenance checks pass. These local checks alone do not establish
-model behavior on the new inputs; the subsequent authorized replay is below.
-
-Seven of 17 prompt hashes change: three single-turn monitor cases, QA, and all
-three turns of `unconfirmed_exit`. The other ten prompts are byte-identical.
-The bounded replay was planned for at most **11 new model turns** on
-`openai-codex/gpt-6.1-sol`: all eight scenarios plus `unconfirmed_exit`. The three
-other follow-up groups can reuse their existing six GPT-6.1 turns only while prompt,
-Skill/reference, runtime and model identities remain unchanged. Keep reused
-captures under their original cohort and source hashes; do not present them as
-fresh version-2 captures. If those identities change, reuse is invalid and the
-required scope must be reassessed.
-
-Both earlier 17-turn budgets are exhausted. The user authorized the additional
-11-turn replay, completed below; candidate adoption and active-client changes
-remain pending. The patch, source identities, input comparison and local logs are
-preserved outside Git under the existing private evidence directory's
-`2026-10-23-input-repair/`.
-
-### Complete-input replay result: 2026-10-23
-
-All **11 authorized model calls** completed on `openai-codex/gpt-6.1-sol`, with
-Hermes 0.22.4 (`4d04303818b6`), runtime 0.1.22 and Lib 0.8.2. Eight independent
-sessions plus one three-turn session recorded **zero actual tool calls**. All 22
-messages remain active and uncompressed. Prompt, source, raw-response and session
-identity checks passed. The temporary access-token copy was removed and the
-original authentication file remained unchanged.
-
-- **7/8 scenarios passed the unchanged scorer.** QA and structured monitoring now
-  pass. QA returned all 22 checks and the correct input hash, with
-  `COMPLIANT / INCOMPLETE / NOT_FORMED`; the actual report hash matched before and
-  after the invocation.
-- **4/4 follow-up groups passed manual review: one fresh, three reused.** All
-  three fresh `unconfirmed_exit` turns retain `no_action`, distinguish hypothetical
-  sale sizes from authorization, and invent no trade. The six prior ledger,
-  dividend and unsupported-margin turns retain their original cohort and hashes;
-  their prompts, Skill/reference, runtime and model identities were verified
-  unchanged. They are not eleven additional fresh results.
-- `unauthorized_w1_is_not_executed` remains failed for `allowed_tools` and
-  `max_tool_calls`: it proposes the snapshot read, L3 reference and data-operations
-  reference (three calls against two allowed). It correctly returns `blocked`,
-  preserves `trade_candidate` and proposes no write.
-
-The remaining failure exposes an input/oracle mismatch introduced by the complete
-fixture: its new `l3_candidate` escalation activates the existing Monitor Level-2
-rule requiring `daily-monitoring-and-l3.md`, while the original two-field
-scenario's whitelist only permits the snapshot and data-operations reference.
-Contract-valid JSON alone did not establish compatibility with that scenario's
-tool budget. This result does not demonstrate an unauthorized write or justify
-removing required L3 review. The original **7/8 result remains failed** under that
-evaluator; it blocked adoption pending the contract correction below.
-
-A concrete contract proposal was saved as
-`2026-10-23-input-repair/proposed-w1-l3-contract.json`: for this complete-input
-case only, require the L3 reference and permit at most three proposed read-only
-calls. Keep every required output, blocked-state expectation and forbidden action
-unchanged, along with all version-1 expectations. Diagnostic offline evaluation
-of the same output satisfied that proposal and rejected omission of the L3 read;
-that diagnostic result was not an accepted score or a fresh model run. Because
-the proposal changed the agreed whitelist and budget, implementation waited for
-the user's confirmation. Raw captures, the frozen original evaluator and
-`replay-validation.json` preserve the original result. All 11 calls were consumed;
-no retry, activation or deployment was performed.
-
-### Approved contract and offline acceptance: 2026-10-23
-
-The user approved the exact proposal. Only the evaluator and its regression tests
-changed; the capture helper, model prompts, fixtures, Skills/references, runtime
-and Lib remain identical to the captured candidate. The complete-input contract
-requires the L3 reference only for the explicit L3 trade escalation in the W1
-scenario, with a maximum of three proposed read-only calls. All other scenario
-contracts, required output and write boundaries remain unchanged.
-
-Offline rescoring of the same eight captured outputs now passes **8/8**, including
-QA's 22 checks and report identity. Follow-up acceptance remains **4/4** from the
-previously validated one fresh and three reused groups. This is an approved
-evaluation-contract correction, not a new model run or evidence of model
-improvement. The frozen original evaluator still reproduces **7/8**, and the
-version-1 GPT-6.1 capture still reproduces **6/8** with its same two failures.
-
-Seven focused regression cases cover a valid L3 review, missing L3, a fourth read,
-an unrelated reference, W1 execution, incorrect completion, and the original
-contract when no L3 escalation exists. Full repository checks passed:
-**1,434 passed, 11 skipped**, plus Ruff, project Skill validation, regulatory
-freshness, standalone QA and cron smoke. No additional model call was made.
-
-The approved scorer, its hashes, the old/new comparison and local-check logs are
-saved alongside the original captures as `approved-contract-*`; the original
-proposal, raw outputs, failed score and evaluator are unchanged. The candidate
-meets this behavior-evaluation gate on `openai-codex/gpt-6.1-sol`. Release and
-active-client adoption remain separate steps: this does not validate another
-model, activate the source-linked clients, or verify real-account flows. No active
-Skill or model setting was changed.
-
-### Release preparation: 2026-10-23
-
-Read-only preflight confirmed that the remote `master` still matches the candidate
-base `de3dec7`. An offline installation into an isolated target root verified all
-nine Skill links, three CLI entrypoints, all 25 installed runtime Python files,
-and both complete monitor fixtures. An unconfirmed W1 command returned exit 3
-without creating a database; restoring entries from the installer's rollback
-manifest recovered all 12 fixture links. Runtime remains 0.1.22 with Lib 0.8.2.
-Its only source difference from the then-installed runtime was removal of unused
-checklist aliases. The final release had to be built from the approved commit;
-the uncommitted rehearsal's
-release identifier is not a production identity.
-
-The configured Hermes model is `openai-codex/gpt-6.1-sol-900k`. Inspection of the
-installed Hermes source and offline execution of its normalization function
-confirmed that `-900k` is a host context-window alias, stripped to `gpt-6.1-sol`
-by both request transports. This resolves the model-name difference without
-changing configuration or relabelling captures. Long-context compaction and
-actual Claude/Codex/Hermes account flows remain outside this acceptance.
-
-The publication patch, activation patch, reverse patch, source identities and
-installation logs are retained under the private evidence directory's
-`2026-10-23-input-repair/release-preflight/`. At preparation completion, no
-additional model call, commit, push or active-client update had been made.
-
-### Publication and activation: 2026-10-23
-
-After explicit user approval, the exact 13-file candidate was committed as
-`992f5a5` and pushed to `master`; its GitHub CI passed. The three clients now
-resolve the matching Skill source, and the existing installer activated runtime
-`0.1.22-992f5a5ca71d` with the unchanged hash-pinned Lib 0.8.2. Installation checks
-verified nine Skill trees, three CLI entrypoints, 25 runtime Python files, both
-complete monitor fixtures, the unconfirmed W1 gate and standalone QA. Existing
-sessions need to reload their Skills. These installation checks made no model
-calls and do not extend the earlier behavior evidence to long-context compaction
-or real-account flows. Model configuration and production state were unchanged;
-no rollback was needed. Actual entry targets, rollback sources and verification
-limits are maintained in [operations](operations.md#current-deployment-record).
-
-### Independent release review repair: 2026-10-23
-
-Claude Opus 5.5 independently reviewed the published Skills changes and shared
-Research plan updates. It found a QA scoring gap: wrong data/decision states and
-unrelated or duplicated rubric items could pass. Four offline mutations reproduced
-the gap. The repaired version-2 QA check now requires this report's
-`INCOMPLETE / NOT_FORMED` states and each rubric number exactly once. All four
-mutations are rejected; a valid output still passes. Rollback wording above now
-distinguishes restoring from the installer manifest from an automatic rollback.
-
-The unchanged eight captured responses still pass **8/8** with the repaired
-scorer. The frozen original evaluator still yields **7/8**, and the older version-1
-GPT-6.1 capture still yields **6/8** with the same failures. Full repository checks
-passed: **1,439 passed, 11 skipped**, plus Ruff, project Skill validation,
-regulatory freshness, standalone QA and cron smoke. No behavior-model replay,
-Skill/runtime change or deployment was needed. Review evidence and mutation
-results remain under the private evaluation directory's
-`2026-10-23-input-repair/claude-review/`.
-Claude's second read-only review confirmed the P2 repair and found no P1/P2
-blockers. Its note about required check-name formatting is documented above.
-
-## Slimming candidate input repair: 2026-10-27
+## Input version 3
 
 Input version 3 changes only three prompts; the version-1 fixture bytes and the
 version-2 expansion remain unchanged and can be scored with an explicit
 `A_STOCK_BEHAVIOR_INPUT_VERSION=1` or `2`.
 
-- The cache-hit case now supplies its synthetic cached report body and requires
-  it in the result. A hit marker alone did not establish deliverable report text.
+- The cache-hit case supplies its synthetic cached report body and requires it in
+  the result. A hit marker alone does not establish deliverable report text.
 - The missing-holding case defines `route` as the selected downstream workflow,
   not the name of a loaded Skill. An incomplete lookup still requires no workflow,
   one holdings read, no monitoring/research, and a blocked/fail-closed result.
-- The pending-W1 case explicitly supplies user-confirmed synthetic account scope
-  and valuation time. Its first snapshot must carry those exact values. Version-3
-  monitor argument matching permits option reordering only; missing/wrong values,
-  duplicate or unknown options, and `--confirm-write` remain failures.
+- The pending-W1 case supplies user-confirmed synthetic account scope and valuation
+  time. Its first snapshot must carry those exact values. Version-3 monitor argument
+  matching permits option reordering only; missing/wrong values, duplicate or
+  unknown options, and `--confirm-write` remain failures.
 
-Run only the changed cases with the existing capture helper:
+Capture only changed cases with repeated `--case`:
 
 ```bash
 uv run python scripts/capture_agent_behavior_eval.py --model gpt-6.1-sol \
@@ -511,23 +183,37 @@ prompt, Skill/reference, runtime and model identities; retain each source captur
 and its input cohort. Do not overwrite or relabel earlier failures. CLI argument
 and cached-body mutation tests protect the repaired checks.
 
+## Evaluation profile
+
 Use an isolated Hermes profile with both `agent.api_max_retries: 0` and
-`agent.auto_recovery_cycles: 0`. The latter is a separate host retry ladder.
-Match the inspected production model's provider timeout configuration; the capture
-helper's 150-second outer limit remains unchanged. Stop the temporary gateway and
-remove its credential copy when finished. These are evaluation-profile settings,
-not changes to the user's active client.
+`agent.auto_recovery_cycles: 0` (a separate host retry ladder). Match the inspected
+production model's provider timeout configuration; the capture helper's 150-second
+outer limit remains unchanged. The profile must not copy production memory or
+account state. Stop any temporary gateway and remove its credential copy when
+finished. These are evaluation-profile settings, not changes to the user's
+active client.
 
-Candidate validation used GPT-6.1-sol via openai-codex with synthetic inputs and
-zero executed business tools. The first version-3 three-case capture passed the
-cache-delivery and missing-holding cases but omitted the required L3 reference
-read in the pending-W1 case. Clarifying that existing review prerequisite in the
-Monitor entry made the affected one-case replay pass. Earlier failures remain in
-the evidence; these partial cohorts are not a final eight-case pass.
+## Current status (2026-10-27)
 
-The full local suite had 1,449 passes, 11 skips and one installation-environment
-failure. The installation case then passed using the existing offline package
-cache and without inherited `PYTHONPATH`, which had contaminated the isolation
-assertion. No installation test or acceptance requirement was weakened. Changes
-were undeployed at this candidate stage. The subsequent authorized activation
-and archived capture location are in [operations](operations.md#current-deployment-record).
+| Cohort | Model | Result | Notes |
+|---|---|---|---|
+| v1 historical baseline (runtime 0.1.22 `1a3fbeb`) | `gpt-5.6-sol-900k` | 6/8; follow-ups 3/4 | Frozen with its defects; source bytes preserved at `6078b8d` |
+| v1 GPT-6.1 replay | `gpt-6.1-sol` | 6/8; follow-ups 4/4 | QA and structured-monitor cases failed on incomplete inputs |
+| v2 complete inputs (released as `992f5a5`) | `gpt-6.1-sol` | **8/8** under the approved L3 contract; follow-ups **4/4** (one fresh, three reused) | Frozen original evaluator still yields 7/8 |
+| v3 changed cases only (released in 0.1.25) | `gpt-6.1-sol` | Partial: cache-delivery and missing-holding passed; pending-W1 passed after the Monitor L3 prerequisite was clarified | Not a final eight-case pass |
+
+The configured Hermes model `openai-codex/gpt-6.1-sol-900k` is a host context-window
+alias normalized to `gpt-6.1-sol` by both request transports. These results do not
+validate another model, multi-client behavior, long-context compaction or
+real-account flows. Installed Skill reference checks cover only repository `.md`,
+`.py` and `.json` files; extra installed files and other suffixes are not checked.
+
+Raw captures, evaluators, mutation results and release preflight evidence remain
+outside Git under `~/.local/share/a-stock-agent-evaluations/2026-10-22-quality/`
+(including `2026-10-23-input-repair/`) and `~/.local/share/a-stock-agent/deployments/slimming-20261027/`.
+The dated replay narrative, including each failure analysis and test count, is in
+Git history:
+
+```bash
+git show d14d6ff:docs/agent-behavior-eval.md
+```

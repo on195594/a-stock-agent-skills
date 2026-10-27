@@ -217,47 +217,6 @@ authorization and matching evidence. If writes used an incompatible schema or
 state contract, pointer-only rollback is not sufficient: stop affected writers
 under explicit authorization and reconcile compatibility before proceeding.
 
-## Research integration validation before activation (2026-10-23)
-
-Runtime 0.1.23 adds `a-stock-cache research` and on-demand Research/Monitor routing.
-The candidate was developed separately because current client Skill links resolve
-into the canonical source tree; copying candidate Skill text there would activate
-it immediately. No active entries, runtime.env, account database, cron, investment
-policy or provider/model settings were changed by this candidate validation.
-
-The candidate CLI used the real Research service to read reports 9/11 and submit
-run 17 with parent report 9. The follow-up passed in 103 seconds; repeating the
-same request ID returned run 17. The explicitly selected nonexistent account
-DB remained absent. Candidate Research feedback and method revisions were also
-submitted through this CLI to an isolated real Web/worker instance.
-
-The full automated run passed 1,439 tests and found two release-contract omissions
-(version assertion and CLI argument registry). Both were fixed; 83 affected tests
-passed on rerun. Ruff, Skill validation, regulatory freshness, standalone QA and
-isolated cron smoke passed. Eleven optional capture/source-dependent cases skipped.
-No new multi-host model capture or real-account action was performed.
-
-This section records candidate evidence. The separately authorized paired
-activation and production acceptance are recorded below.
-
-## Long-lived Research credential validation before activation (2026-10-27)
-
-This validation was performed in an isolated checkout before the separately
-authorized activation recorded below. Research uses a named, revocable API key
-stored separately from browser sessions.
-The client keeps `A_STOCK_RESEARCH_TOKEN` and `research-v1`; HTTP 401 explicitly
-requires a credential update before retrying with the original request ID.
-Use the selected mode-0600 `runtime.env`, and remove stale environment overrides.
-Rotate by creating a new key, verifying report access with it, then revoking the
-old key through the Research owner's local CLI. Do not put keys in prompts or logs.
-
-An isolated real Web/worker run verified credential rotation during submission,
-both revocation paths, CLI 401, service restart, and reading the passed report for
-a new Maotai research task. The installed 0.1.23 CLI also read a report using the
-new key. No account database was created. Candidate CLI checks (18), Research and
-Monitor tests (1,018), Ruff and Skill validation passed. Private configuration
-and active links were untouched during that candidate stage.
-
 ## Current deployment record
 
 State as of **2026-10-27**, after explicit paired-release authorization.
@@ -326,9 +285,10 @@ Hermes router. Restore matching contents and links together after rollback
 authorization, preserving unrelated edits. Pi and AGY follow the restored shared
 Skill directory. Do not restore account data, credentials or cron.
 
-**Not yet observed.** First Telegram deliveries of `daily-brief` (2026-10-22 15:35),
-a real `stop-alert` crossing, and `benchmark-report` (2026-11-01); fresh Hermes
-behaviour under the slimmed router.
+**Observed delivery (checked 2026-10-27).** Hermes recorded `daily-brief` as delivered
+on 2026-10-22, 10-23, 10-26 and 10-27. Every `stop-alert` run so far was suppressed
+(no stop-line crossing). **Not yet observed:** a real `stop-alert` crossing, the
+first `benchmark-report` (2026-11-01), and fresh Hermes behaviour under the slimmed router.
 
 **2026-10-27 slimming activation verified.** The existing installer installed
 0.1.25 offline using the hash-pinned Lib wheel. All three stable CLI help checks,
@@ -358,6 +318,7 @@ Superseded deployment and preflight records are retained in Git, not as current
 operating instructions. Read older deployment ledgers from their source snapshots:
 
 ```bash
+git show d14d6ff:docs/operations.md  # 0.1.23/0.1.24 candidate validation before activation
 git show 0d7c0a5:docs/operations.md  # 2026-10-08 to 10-22 step records
 git show 50c55b2:docs/operations.md  # fc54fb6 copy-install hygiene deployment
 git show f5307f7:docs/operations.md # older complete ledger
