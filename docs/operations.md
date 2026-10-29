@@ -315,6 +315,17 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.26 activation (2026-10-29)
+
+Release `0.1.26` (`e838b7f`) was committed and pushed to `master`. The installer activated
+release `0.1.26-e838b7f6484f` across stable CLI commands (`~/.local/bin/a-stock-*`) and
+client Skill discovery links (`claude`, `codex`, `hermes`, and shared `~/.agents/skills/`).
+Rollback manifest recorded at `~/.local/share/a-stock-agent/rollback-1793249965536683360.json`.
+All 1,483 tests passed (11 skipped), Ruff passed, standalone QA passed. Paired live
+verification: `a-stock-cache research budget` succeeded against the newly deployed
+Research production service (`stock.keyi.win`). No credentials, account state,
+or investment rules were changed.
+
 ## Historical deployment evidence
 
 Superseded deployment and preflight records are retained in Git, not as current
