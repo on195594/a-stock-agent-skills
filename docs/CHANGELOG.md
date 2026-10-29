@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.26 — 2026-10-29
+
+- Research 增加 `resume --request-id` 只读任务找回、`report --compact` 精简视图与 `budget` 调用保护说明；不自动重开研究，费用未知不误报免费。
+- 复用服务端同口径对照，明确基线状态/时效、旧检查点、排除项与缺口；异常失败保留材料缺口及来源，旧服务不支持新接口时明确提示。
+- 新增 R0 `portfolio-scenario`：仅比较用户指定股数和费用下的静态现金、仓位、风险预算变化，复用原风险公式、保留源状态；不生成交易候选、不写账本、不下单。
+- 两轮 Claude Opus 5.5 独立审查与真实记录回归已完成；全量模型多轮 Skill 行为回放仍为 NOT_RUN。投资规则、数据库结构不变；先部署配套 Research，再激活本版本。
+
 ## 0.1.25 — 2026-10-27
 
 - 精简 Research 上下文：格雷厄姆分支、主估值轴表与 C/D 框架门槛从 `research-execution-flow.md` 移入对应 `frameworks/*.md`，只加载已确认框架；先完成本地 `fetch`/`check` 再复用 Research 服务报告；报告 `checkpoints` 只作下期观察条件，可作为纠错位置。投资规则不变。

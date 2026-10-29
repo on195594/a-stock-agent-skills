@@ -1,5 +1,12 @@
 # Agent behavior eval
 
+The 0.1.26 delivery/scenario release adds request lookup,
+compact evidence continuation and explicit user-sized static sell comparisons.
+Its deterministic/runtime and local HTTP tests do not constitute a fresh model
+behavior capture: candidate multi-turn model replay is **NOT_RUN**. The activation
+and captures below remain historical; installation and production verification
+are recorded separately in `docs/operations.md`.
+
 Phase 6 uses eight deterministic scenarios in
 `tests/fixtures/agent_behavior_scenarios.json`. Each scenario defines an input,
 independent expected behavior, and the six required constraints: allowed tools,

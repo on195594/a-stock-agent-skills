@@ -31,6 +31,18 @@ key issued by the Research owner; short-lived tokens remain suitable for tempora
 checks. Environment variables override the file. On HTTP 401, update the credential
 before retrying, then reuse the original request ID for submissions.
 See the [workflow](skills/a-stock-research/references/research-service.md).
+Version 0.1.26 additions (require the matching Research server):
+`research report <id> --compact` reads a bounded report with source directory,
+failure diagnostics and prior checkpoints; omit `--compact` for full evidence.
+`research resume --request-id <original-id>` only looks up an existing task,
+including failed tasks; it never restarts work. `research budget` reports the
+model-call guard, not a monetary cap or bill; unavailable cost stays unknown.
+Global budget reads describe configuration (`scope=configuration`, recorded calls
+unknown), not account usage; only a task lookup reports that task's recorded calls.
+For an authorized rollout, deploy the matching Research server before
+activating the matching runtime and Skills. Until then, a missing new endpoint is
+a compatibility gap: use explicitly requested full report reads where supported,
+never create a replacement research task to work around it.
 
 The shared [project contract](https://github.com/on195594/a-share-research/blob/main/docs/project-contract.md),
 [roadmap](https://github.com/on195594/a-share-research/blob/main/docs/roadmap.md) and
@@ -87,6 +99,8 @@ The installer exposes these stable commands through `PATH`:
 
 ```text
 a-stock-cache    shared cache, holdings and portfolio-risk CLI
+a-stock-cache portfolio-scenario --snapshot <external.json> --sell <code>:<shares> --fees <estimate>
+                local read-only snapshot comparison; optional --cash must match the snapshot
 a-stock-cache research            versioned report/evidence reads and focused research/feedback tasks
 a-stock-cache score-fundamentals  read-only deterministic A—F fundamental scorer
 a-stock-cache performance-report  file-only account performance, optional read-only ledger check

@@ -1,4 +1,7 @@
+import json
+
 import pytest
+import requests
 
 from a_stock_agent_runtime import cache, research_client
 
@@ -36,3 +39,98 @@ def test_research_cli_requires_idempotency_and_does_not_open_account_db(
     assert cache.main(["research", "reports", "600519"]) == 1
     assert "A_STOCK_RESEARCH_URL" in capsys.readouterr().err
     assert not path.exists()
+
+
+def test_compact_budget_and_recovery_are_get_only(monkeypatch, capsys):
+    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("http://127.0.0.1:9000", "test-key"))
+    calls = []
+
+    def request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps({"version": "research-v1", "status": "queued", "view": "compact"}).encode()
+        return response
+
+    monkeypatch.setattr(research_client.requests, "request", request)
+    for args in (["report", "37", "--compact"], ["budget"], ["resume", "--request-id", "lost-response"]):
+        assert research_client.cmd_research(args) == 0
+        assert json.loads(capsys.readouterr().out)["version"] == "research-v1"
+    assert [item[0] for item in calls] == ["GET", "GET", "GET"]
+    assert calls[0][2]["params"] == {"compact": "true"}
+    assert calls[2][2]["params"] == {"request_id": "lost-response"}
+    assert all(item[2]["json"] is None for item in calls)
+
+
+def test_submit_timeout_does_not_auto_retry_or_print_credentials(monkeypatch, capsys):
+    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("http://127.0.0.1:9000", "test-secret"))
+    calls = []
+
+    def timeout(*args, **kwargs):
+        calls.append(args)
+        raise requests.ReadTimeout("test-secret should not be printed")
+
+    monkeypatch.setattr(research_client.requests, "request", timeout)
+    assert research_client.cmd_research(["start", "603606", "--question", "现金流", "--request-id", "original"]) == 1
+    error = capsys.readouterr().err
+    assert "resume --request-id original" in error
+    assert "test-secret" not in error and len(calls) == 1
+
+
+def test_old_server_cannot_silently_return_full_evidence_for_compact(monkeypatch, capsys):
+    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("http://127.0.0.1:9000", "test-key"))
+    response = requests.Response()
+    response.status_code = 200
+    response._content = json.dumps({"version": "research-v1", "report": {"summary": "old"}}).encode()
+    monkeypatch.setattr(research_client.requests, "request", lambda *args, **kwargs: response)
+    assert research_client.cmd_research(["report", "37", "--compact"]) == 1
+    output = capsys.readouterr()
+    assert not output.out and "尚未支持精简视图" in output.err
+
+
+def test_lookup_not_found_keeps_public_diagnostic_and_redacts_key(monkeypatch, capsys):
+    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("http://127.0.0.1:9000", "test-key"))
+    response = requests.Response()
+    response.status_code = 404
+    response._content = json.dumps({"version": "research-v1", "error": "未找到不代表原提交失败；test-key\n不要换编号"}).encode()
+    calls = []
+
+    def request(*args, **kwargs):
+        calls.append(args)
+        return response
+
+    monkeypatch.setattr(research_client.requests, "request", request)
+    assert research_client.cmd_research(["resume", "--request-id", "original"]) == 1
+    output = capsys.readouterr()
+    assert not output.out and "未找到不代表原提交失败" in output.err
+    assert "test-key" not in output.err and "[REDACTED]" in output.err
+    assert "不要换编号" in output.err and len(calls) == 1
+
+
+def test_missing_new_route_is_not_treated_as_a_missing_task(monkeypatch, capsys):
+    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("http://127.0.0.1:9000", "test-key"))
+    response = requests.Response()
+    response.status_code = 404
+    response._content = b'{"detail":"Not Found"}'
+    monkeypatch.setattr(research_client.requests, "request", lambda *args, **kwargs: response)
+    assert research_client.cmd_research(["resume", "--request-id", "original"]) == 1
+    output = capsys.readouterr()
+    assert not output.out and "尚未部署此读取接口" in output.err
+    assert "勿换编号重复提交" in output.err
+
+
+@pytest.mark.parametrize("status", [401, 404, 409, 503])
+def test_http_denials_do_not_retry(monkeypatch, capsys, status):
+    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("http://127.0.0.1:9000", "test-key"))
+    calls = []
+
+    def request(*args, **kwargs):
+        calls.append(args)
+        response = requests.Response()
+        response.status_code = status
+        return response
+
+    monkeypatch.setattr(research_client.requests, "request", request)
+    assert research_client.cmd_research(["resume", "--request-id", "original"]) == 1
+    assert str(status) in capsys.readouterr().err
+    assert len(calls) == 1

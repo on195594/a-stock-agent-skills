@@ -51,6 +51,7 @@ Useful focused checks:
 
 ```bash
 uv run pytest tests/test_cli_contract.py tests/test_command_classification.py -q
+uv run pytest tests/test_research_client.py tests/test_portfolio_scenario.py -q
 uv run pytest tests/test_installation.py tests/test_state_migration.py -q
 uv run pytest tests/test_l3_thesis_versioning.py tests/test_cli_contract.py -q
 uv run pytest tests/test_risk_policy.py tests/test_performance.py -q

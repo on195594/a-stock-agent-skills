@@ -18,10 +18,12 @@ from a_stock_agent_runtime import (
     paths,
     performance,
     research_client,
+    portfolio_scenario,
 )
 
 COMMANDS = {
     "research": research_client.cmd_research,
+    "portfolio-scenario": portfolio_scenario.cmd_portfolio_scenario,
     "check": commands_analysis.cmd_check,
     "get": commands_analysis.cmd_get,
     "set": commands_analysis.cmd_set,
@@ -93,6 +95,7 @@ COMMAND_CLASSIFICATION = {
             "checklist",
             "score-fundamentals",
             "performance-report",
+            "portfolio-scenario",
         ),
         "R0",
     ),
@@ -153,6 +156,7 @@ class _CLIParser(argparse.ArgumentParser):
 
 _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "research": (),
+    "portfolio-scenario": (),
     "check": (("代码", "?"),),
     "get": (("代码", "?"),),
     "set": (
@@ -287,6 +291,8 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         )
         if command == "research":
             research_client.configure_parser(command_parser)
+        if command == "portfolio-scenario":
+            portfolio_scenario.configure_parser(command_parser)
         for index, (metavar, nargs) in enumerate(positionals, start=1):
             if nargs is None:
                 command_parser.add_argument(f"arg{index}", metavar=metavar)
@@ -360,7 +366,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.parse_args(args)
     except SystemExit as exc:
         return int(exc.code or 0)
-    if command == "research":
+    if command in {"research", "portfolio-scenario"}:
         return int(COMMANDS[command](remaining) or 0)
     if command == "performance-report":
         try:

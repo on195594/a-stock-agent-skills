@@ -3,6 +3,7 @@
 import argparse
 import json
 import re
+import shlex
 import sys
 from urllib.parse import urlsplit
 
@@ -48,6 +49,11 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     for name, label in (("report", "读取报告及原文证据"), ("status", "读取任务状态")):
         action = actions.add_parser(name, help=label)
         action.add_argument("id", type=_positive_id)
+    actions.add_parser("budget", help="读取研究调用上限；不是费用报价，不启动研究")
+    resume = actions.add_parser("resume", help="凭原请求编号只读找回任务；不重提、不付费重跑")
+    resume.add_argument("--request-id", required=True)
+    # Explicit opt-in preserves the existing full report wire contract.
+    actions.choices["report"].add_argument("--compact", action="store_true")
     start = actions.add_parser("start", help="发起研究或关联追问，返回任务编号")
     start.add_argument("code", type=_code)
     start.add_argument("--question", required=True)
@@ -79,6 +85,12 @@ def cmd_research(argv: list[str]) -> int:
             path, params = "/api/reports", {"code": args.code}
         elif args.action == "report":
             path = f"/api/reports/{args.id}"
+            if args.compact:
+                params = {"compact": "true"}
+        elif args.action == "resume":
+            path, params = "/api/request", {"request_id": args.request_id}
+        elif args.action == "budget":
+            path = "/api/research/budget"
         elif args.action == "status":
             path = f"/api/runs/{args.id}"
         elif args.action == "start":
@@ -116,15 +128,33 @@ def cmd_research(argv: list[str]) -> int:
                 "更新前不要重试；更新后沿用原 request-id，不要重复创建任务"
             )
         if not 200 <= response.status_code < 300:
+            detail = ""
+            try:
+                failure = response.json()
+            except ValueError:
+                failure = None
+            if (isinstance(failure, dict) and failure.get("version") == "research-v1"
+                    and isinstance(failure.get("error"), str)):
+                # Only the public error field, bounded and stripped of control characters/secrets.
+                public_error = failure["error"].replace(token, "[REDACTED]")
+                detail = "：" + "".join(char for char in public_error if char.isprintable())[:600]
+            elif response.status_code == 404 and (args.action in {"resume", "budget"}
+                                                   or args.action == "report" and args.compact):
+                detail = "；服务可能尚未部署此读取接口，请核对配套服务版本"
             raise ValueError(
-                f"Research HTTP {response.status_code}；检查配置/请求，用原 request-id 查询或重试，勿重复创建任务"
+                f"Research HTTP {response.status_code}{detail}；不会自动重试或重开研究，勿换编号重复提交"
             )
         payload = response.json()
         if not isinstance(payload, dict) or payload.get("version") != "research-v1":
             raise ValueError("Research 响应版本不兼容")
+        if args.action == "report" and args.compact and payload.get("view") != "compact":
+            raise ValueError("Research 服务尚未支持精简视图；需要原文时显式去掉 --compact，不自动重开研究")
     except requests.RequestException as exc:
         print(
-            f"Research 连接失败：{type(exc).__name__}；提交结果可能未知，请沿用 request-id",
+            f"Research 连接失败：{type(exc).__name__}；"
+            + (f"提交结果可能未知。先只读找回任务：a-stock-cache research resume "
+               f"--request-id {shlex.quote(args.request_id)}；勿换编号重复提交"
+               if args.action in {"start", "feedback"} else "读取失败；不会自动重提研究"),
             file=sys.stderr,
         )
         return 1

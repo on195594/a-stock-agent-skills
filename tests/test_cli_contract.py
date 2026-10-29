@@ -113,6 +113,10 @@ CLI_ARGUMENT_CASES = {
     "daily-brief": ([], []),
     "stop-alert": ([], []),
     "regulatory-evidence": (["600000"], ["600000"]),
+    "portfolio-scenario": (
+        ["--snapshot", "/tmp/snapshot.json", "--sell", "600000:100", "--fees", "0"],
+        ["--snapshot", "/tmp/snapshot.json", "--sell", "600000:100", "--sell", "600001:200", "--fees", "5", "--cash", "100"],
+    ),
     "portfolio-risk": (
         [],
         [

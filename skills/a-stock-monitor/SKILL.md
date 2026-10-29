@@ -13,6 +13,8 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 
 用户仅要求核对持仓且尚未确认时，只读查询 `a-stock-cache holdings <股票代码> --active-only`；结果不完整时说明缺口并停止，不启动 Monitor，也不擅自转入首次研究。
 
+用户明确指定股票和数量、仅要求“假设卖出后的风险/现金比较”时，读取下表组合风险资料的只读情景段；复用本会话完整快照，不自动形成卖出候选。含糊的“卖100股呢”先区分交易建议与假设计算，不把询问当成交或授权。其他问题仍走下述 Level 1。
+
 ### Level 1：默认快照
 
 先取得用户明确的账户总资产，并把本会话或截图已确认的账户范围、资产估值时点随首次调用传入，再只读运行一次：
@@ -47,7 +49,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 | C/D 加仓复核 | `references/step3.5-cd-accumulation.md` |
 | A/E/F Tier 复核 | `references/step4-tier-system.md` |
 | 账户差异、已成交补账或状态更新 | `references/data-operations.md` |
-| `risk_budget_exceeded`、组合再平衡或任何加仓 | `references/portfolio-risk.md` |
+| `risk_budget_exceeded`、组合再平衡、任何加仓或用户指定数量的假设比较 | `references/portfolio-risk.md` |
 
 `risk_budget_exceeded` 的 `code=null` 表示组合级只读复核：仅用本轮汇总、持仓和 `data_gaps`，不重查价、不心算补全风险、不调用 W1。兼容默认/显式覆盖不等于个人预算，禁止改参数绕过超限；超预算不能 clean/no_action，已有合法交易候选不降级。超限原因只引用明细中的 principal/unrealized_gain 与 `denominator_components`；快照未给出的卖出标的或股数不得提出。
 
