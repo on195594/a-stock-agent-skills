@@ -12,6 +12,7 @@ import pytest
 from a_stock_agent_runtime import (
     cache,
     commands_holdings,
+    db,
     paths,
     risk_budget,
     risk_policy,
@@ -457,3 +458,121 @@ def test_portfolio_attribution_is_unknown_when_any_position_split_is_unknown():
     breaches = risk_budget.assess(positions, 100000, risk_budget.policy(10, 8))["breaches"]
     assert [item["code"] for item in breaches] == [None]
     assert "principal=unknown; unrealized_gain=unknown" in breaches[0]["detail"]
+
+
+@pytest.mark.parametrize("with_value", [False, True])
+@pytest.mark.parametrize("source", ["default", "explicit"])
+def test_monitor_missing_scope_keeps_holding_layer_without_applying_policy(
+    with_value, source, tmp_path, isolated_cache_database, monkeypatch, capsys
+):
+    holding_id = _seed_holding(
+        isolated_cache_database, "600000", next_review="2000-01-01"
+    )
+    with db.db_session() as conn:
+        conn.execute(
+            """INSERT INTO holding_alerts
+               (holding_id, code, level, category, reason_code, reason,
+                opened_at, review_due, updated_at)
+               VALUES (?, '600000', 'yellow', 'unverified', 'fixture_due',
+                       'verify disclosure', '2000-01-01', '2000-01-01', '2000-01-01')""",
+            (holding_id,),
+        )
+        conn.commit()
+    mock_price_quotes(monkeypatch, _quotes)
+    path = (
+        paths.risk_policy_path()[0] if source == "default" else tmp_path / "policy.json"
+    )
+    _file(path, _policy(off_account_strategy_cash=150000))
+    before = path.read_bytes()
+    args = ["monitor-snapshot", "--json", "--max-position-risk-pct", "3",
+            "--max-portfolio-risk-pct", "6"]
+    if source == "explicit":
+        args += ["--policy-file", str(path)]
+    if with_value:
+        args += ["--portfolio-value", "100000", "--portfolio-value-as-of",
+                 "2026-01-01T00:00:00+08:00"]
+    assert cache.main(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+    account = payload["account"]
+    assert account["portfolio_value"] == (100000 if with_value else None)
+    assert account["risk_policy"]["status"] == "not_applied_account_scope_required"
+    assert account["risk_policy"]["source"] == "not_applied_account_scope_required"
+    assert account["risk_policy"]["max_position_risk_pct"] is None
+    assert account["risk_policy"]["max_portfolio_risk_pct"] is None
+    assert account["account_scope"] is None
+    assert account["denominator_requires_review"] is True
+    assert account["risk_budget_status"] is None
+    assert account["stock_weight_pct"] is None
+    assert account["total_stop_risk_pct"] is None
+    assert payload["data_status"] == "partial"
+    assert payload["action_status"] == "review_candidate"
+    assert payload["stop_reason"] is None
+    assert payload["requires_user_confirmation"] is False
+    fields = {gap["field"] for gap in payload["data_gaps"]}
+    assert fields == (
+        {"account_scope"} if with_value else {"account_scope", "portfolio_value"}
+    )
+    denominator_escalations = [
+        item for item in payload["escalations"]
+        if item["reason_code"] == "denominator_missing"
+    ]
+    assert len(denominator_escalations) == 1
+    assert "account scope" in denominator_escalations[0]["detail"]
+    if not with_value:
+        assert "portfolio value" in denominator_escalations[0]["detail"]
+    holding = payload["holdings"][0]
+    assert holding["id"] == holding_id
+    assert holding["quote"]["price"] == 100
+    assert holding["stop_loss_15"] == 85
+    assert holding["stop_loss_20"] == 80
+    assert holding["portfolio_weight_pct"] is None
+    assert holding["stop_risk_pct"] is None
+    assert holding["l3"]["conditions"]
+    assert holding["alerts"][0]["review_due_now"] is True
+    assert holding["tier"]["tier1_status"] == "pending"
+    assert any(
+        item["reason_code"] == "alert_review_due" for item in payload["escalations"]
+    )
+    assert any(
+        item["reason_code"] == "l3_review_due" for item in payload["escalations"]
+    )
+    assert not any(
+        item["reason_code"] == "risk_budget_exceeded" for item in payload["escalations"]
+    )
+    assert path.read_bytes() == before
+    assert payload["manifest"]["writes"] is False
+    # The portfolio-risk command still requires a matching explicit scope.
+    assert cache.main(["portfolio-risk", "--policy-file", str(path)]) == 1
+    assert "account-scope" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "case", ["mismatch", "expired", "invalid", "unreadable", "missing"]
+)
+def test_monitor_partial_mode_does_not_hide_policy_errors(
+    case, tmp_path, monkeypatch, capsys
+):
+    path = tmp_path / "policy.json"
+    value = _policy()
+    if case == "expired":
+        value["effective_to"] = "2001-01-01T00:00:00+08:00"
+    elif case == "invalid":
+        value["max_position_risk_pct"] = -1
+    _file(path, value)
+    if case == "unreadable":
+        path.chmod(0o644)
+    elif case == "missing":
+        path.unlink()
+    monkeypatch.setattr(
+        commands_holdings.db,
+        "read_only_db_session",
+        lambda *a: pytest.fail("database access"),
+    )
+    monkeypatch.setattr(socket.socket, "connect", lambda *a: pytest.fail("network"))
+    args = ["monitor-snapshot", "--json", "--policy-file", str(path)]
+    if case == "mismatch":
+        args += ["--account-scope", "other-account"]
+    assert cache.main(args) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "风险参数不可用" in captured.err

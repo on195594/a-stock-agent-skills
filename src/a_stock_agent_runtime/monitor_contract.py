@@ -214,9 +214,22 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
     _nonempty(policy["policy_id"], "risk_policy.policy_id")
     _nonempty(policy["source"], "risk_policy.source")
     sources = _object(policy["field_sources"], "risk_policy.field_sources")
+    not_applied = policy.get("status") == "not_applied_account_scope_required"
+    if not_applied and (
+        policy["source"] != "not_applied_account_scope_required"
+        or account.get("account_scope") is not None
+        or account.get("denominator_requires_review") is not True
+        or budget_status is not None
+        or account["stock_weight_pct"] is not None
+        or account["total_stop_risk_pct"] is not None
+    ):
+        raise MonitorContractError("unapplied risk_policy has inconsistent account evidence")
     for field in ("max_position_risk_pct", "max_portfolio_risk_pct"):
         number = policy[field]
-        if (
+        if not_applied:
+            if number is not None or sources.get(field) != policy["source"]:
+                raise MonitorContractError(f"unapplied risk_policy.{field} must be null")
+        elif (
             isinstance(number, bool)
             or not isinstance(number, (int, float))
             or number <= 0

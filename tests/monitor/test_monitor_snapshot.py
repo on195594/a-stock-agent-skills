@@ -1176,3 +1176,25 @@ def test_invalid_holding_timestamp_blocks_monitor_with_sufficient_industry_cover
     assert payload["holdings"][0]["quote"]["status"] in {"unavailable", "stale"}
     assert payload["stop_reason"] is None
     assert any(item["reason_code"] == "quote_gap" for item in payload["escalations"])
+
+
+@pytest.mark.parametrize(
+    "cadence", ["quarterly", "semiannual", "annual", "event", "unspecified"]
+)
+def test_snapshot_l3_due_includes_evidence_cadence(
+    isolated_cache_database, monkeypatch, capsys, cadence
+) -> None:
+    _seed_holding(isolated_cache_database, next_review="2000-01-01")
+    with sqlite3.connect(isolated_cache_database) as conn:
+        conn.execute("UPDATE holding_l3_conditions SET evidence_cadence=?", (cadence,))
+    mock_price_quotes(monkeypatch, _quotes)
+    result, payload = _run(capsys, ["--portfolio-value", "100000"])
+    assert result == 0
+    assert payload["holdings"][0]["l3"]["conditions"][0]["evidence_cadence"] == cadence
+    due = [
+        item
+        for item in payload["escalations"]
+        if item["reason_code"] == "l3_review_due"
+    ]
+    assert len(due) == 1
+    assert due[0]["evidence_cadence"] == cadence

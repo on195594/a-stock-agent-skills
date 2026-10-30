@@ -1461,3 +1461,407 @@ def test_bank_cash_flow_gate_is_not_applicable_during_fetch() -> None:
         missing_source["cash_flow_gate"]["reason_code"]
         == "financial_framework_source_missing"
     )
+
+
+@pytest.fixture
+def quarter_frames():
+    periods = ["2025-06-30", "2025-09-30", "2025-12-31", "2026-06-30", "2026-09-30"]
+    return {
+        "income": pd.DataFrame(
+            {
+                "end_date": periods,
+                "revenue": [60, 100, 140, 90, 150],
+                "n_income_attr_p": [6, 10, 14, 9, 15],
+            }
+        ),
+        "indicator": pd.DataFrame(
+            {
+                "ts_code": ["600000.SH"] * 5,
+                "ann_date": periods,
+                "end_date": periods,
+                "update_flag": ["1"] * 5,
+                "endpoint": ["fina_indicator"] * 5,
+                **{
+                    key: [None] * 5
+                    for key in (
+                        "roe_waa", "netprofit_yoy", "debt_to_assets",
+                        "grossprofit_margin", "bps", "or_yoy", "dt_netprofit_yoy",
+                        "f_ann_date", "report_type", "comp_type", "end_type",
+                    )
+                },
+            }
+        ),
+        "deducted": pd.DataFrame(
+            {
+                "end_date": [period.replace("-", "") for period in periods]
+                + ["20260930"],
+                "ann_date": ["20261030"] * 6,
+                "update_flag": ["1"] * 5 + ["0"],
+                "profit_dedt": [5, 8, 12, 7, 12, 999],
+            }
+        ),
+        "cashflow": pd.DataFrame(
+            {"end_date": periods, "n_cashflow_act": [80, 120, 200, 100, 180]}
+        ),
+        "balance": pd.DataFrame(
+            {
+                "end_date": periods,
+                **{
+                    key: [80, 100, 200, 120, 150]
+                    for key in (
+                        "accounts_receiv",
+                        "inventories",
+                        "notes_payable",
+                        "contract_liab",
+                    )
+                },
+            }
+        ),
+    }
+
+
+def test_quarter_uses_single_quarter_ytd_and_same_period_balance(quarter_frames):
+    result = fetcher.build_quarter_check("600000", quarter_frames)
+    fields = result["fields"]
+    assert result["report_period"] == "2026-09-30"
+    assert fields["revenue_single_quarter"]["value"] == 60
+    assert fields["revenue_single_quarter_yoy"]["value"] == 50
+    assert fields["net_profit_attributable_ytd_yoy"]["value"] == 50
+    assert fields["deducted_net_profit_single_quarter_yoy"]["value"] == pytest.approx(
+        200 / 3
+    )
+    assert fields["operating_cash_flow_ttm"]["value"] == 260
+    assert fields["net_profit_attributable_ttm"]["value"] == 19
+    assert fields["operating_cash_flow_to_net_profit_ttm"]["value"] == pytest.approx(
+        260 / 19
+    )
+    assert fields["operating_cash_flow_ttm"]["periods"] == [
+        "2025-12-31",
+        "2026-09-30",
+        "2025-09-30",
+    ]
+    for key in (
+        "accounts_receivable",
+        "inventory",
+        "notes_payable",
+        "contract_liabilities",
+    ):
+        assert fields[key + "_yoy"]["value"] == 50
+        assert fields[key + "_yoy"]["basis"] == "yoy_same_period_end"
+        assert fields[key + "_yoy"]["periods"] == ["2026-09-30", "2025-09-30"]
+        assert fields[key + "_vs_year_start"]["value"] == -25
+        assert fields[key + "_vs_year_start"]["basis"] == "vs_year_start"
+        assert "季节性" in fields[key + "_vs_year_start"]["label"]
+
+
+@pytest.mark.parametrize("profit", [0, -1])
+def test_quarter_nonpositive_ttm_profit_has_no_ratio(quarter_frames, profit):
+    quarter_frames["income"].loc[4, "n_income_attr_p"] = profit - 4
+    metric = fetcher.build_quarter_check("600000", quarter_frames)["fields"][
+        "operating_cash_flow_to_net_profit_ttm"
+    ]
+    assert metric["value"] is None
+    assert "非正" in metric["reason"]
+
+
+def test_quarter_missing_inputs_never_annualise_or_use_old_annual(quarter_frames):
+    quarter_frames["cashflow"].loc[2, "end_date"] = "2024-12-31"
+    quarter_frames["deducted"] = None
+    quarter_frames["balance"]["accounts_receiv"] = quarter_frames["balance"][
+        "accounts_receiv"
+    ].astype(float)
+    quarter_frames["balance"].loc[1, "accounts_receiv"] = float("inf")
+    fields = fetcher.build_quarter_check("600000", quarter_frames)["fields"]
+    for name in (
+        "operating_cash_flow_ttm",
+        "deducted_net_profit_ytd_yoy",
+        "accounts_receivable_yoy",
+    ):
+        assert fields[name]["value"] is None
+        assert fields[name]["reason"]
+    assert fields["accounts_receivable_vs_year_start"]["value"] == -25
+
+
+@pytest.mark.parametrize("period", ["2026-03-31", "2025-12-31"])
+def test_quarter_q1_and_annual_periods(period):
+    year = int(period[:4])
+    previous = f"{year - 1}{period[4:]}"
+    income = pd.DataFrame(
+        {
+            "end_date": [previous, period],
+            "revenue": [100, 120],
+            "n_income_attr_p": [10, 12],
+        }
+    )
+    fields = fetcher.build_quarter_check("600000", {"income": income})["fields"]
+    assert fields["revenue_ytd_yoy"]["value"] == pytest.approx(20)
+    if period.endswith("03-31"):
+        assert fields["revenue_single_quarter"]["value"] == 120
+        assert fields["revenue_single_quarter_yoy"]["value"] == pytest.approx(20)
+        assert fields["net_profit_attributable_ttm"]["value"] is None
+    else:
+        assert fields["net_profit_attributable_ttm"]["value"] == 12
+        assert fields["net_profit_attributable_ttm"]["periods"] == [period]
+        assert fields["revenue_single_quarter"]["value"] is None
+
+
+@pytest.fixture
+def multi_year_dividends():
+    return pd.DataFrame({
+        "报告期": ["2024-12-31", "2025-06-30", "2025-12-31", "2026-06-30"],
+        "现金分红-现金分红比例": [18.0, 3.0, 5.6, 2.0],
+        "送转股份-送转总比例": [2.0, 0.0, 0.0, 0.0],
+        "除权除息日": ["2025-05-26", "2025-09-26", None, "2026-05-26"],
+        "方案进度": ["实施分配", "实施分配", "董事会预案", "实施分配"],
+    })
+
+
+@pytest.mark.parametrize("financial_year", [2025, 2026])
+@pytest.mark.parametrize("quote_kind", ["valid", "no_as_of", "invalid_price"])
+@pytest.mark.parametrize(
+    "missing,deducted_failure,split_ratio,dps_override",
+    [(False, False, 0, None), (False, False, 0.2, None),
+     (False, True, 0, None), (True, True, 0, None),
+     (False, False, 0, 0), (False, False, 0, -1)],
+)
+def test_quarter_cli_json_thresholds_and_missing_sources(
+    monkeypatch, capsys, quarter_frames, missing, deducted_failure, split_ratio,
+    isolated_db, quote_kind, dps_override, multi_year_dividends, financial_year,
+):
+    import json
+    import tushare
+    from pathlib import Path
+    import a_stock_lib.providers as providers
+
+    assert len(quarter_frames["indicator"].columns) == 16
+    assert "profit_dedt" not in quarter_frames["indicator"]
+
+    class Provider:
+        def __init__(self):
+            print("provider creation diagnostic")
+
+        def fetch_indicator_history(self, code):
+            pytest.fail("quarter must not fetch unused indicators")
+
+    for key, method in (
+        ("income", "fetch_income_history"),
+        ("balance", "fetch_balance_history"),
+        ("cashflow", "fetch_cashflow_history"),
+    ):
+        if missing and key == "cashflow":
+            continue
+        setattr(
+            Provider,
+            method,
+            lambda self, code, key=key: SimpleNamespace(
+                status="failed" if missing else "ok", value=quarter_frames[key]
+            ),
+        )
+    monkeypatch.setattr(
+        providers, "TushareFinancialProvider", lambda **kwargs: Provider()
+    )
+    def direct_indicator(**kwargs):
+        print("direct indicator diagnostic")
+        assert kwargs["ts_code"] == "600000.SH"
+        assert set(kwargs["fields"].split(",")) == {
+            "ts_code", "end_date", "ann_date", "update_flag", "profit_dedt",
+        }
+        if deducted_failure:
+            raise RuntimeError("deducted source failed")
+        return quarter_frames["deducted"]
+
+    monkeypatch.setattr(
+        tushare, "pro_api",
+        lambda token: SimpleNamespace(fina_indicator=direct_indicator),
+    )
+
+    def timed_call(method, *args, timeout=None, **kwargs):
+        try:
+            return method(*args, **kwargs)
+        except RuntimeError as exc:
+            return ("ERROR", str(exc))
+
+    monkeypatch.setattr(fetcher, "timed_call", timed_call)
+    monkeypatch.setattr(
+        fetcher,
+        "_fetch_realtime_quote",
+        lambda code: SimpleNamespace(
+            price=-1 if quote_kind == "invalid_price" else 20,
+            as_of=None if quote_kind == "no_as_of" else "2026-10-30T15:00:00+08:00",
+            source="sina",
+        ),
+    )
+    financials = pd.DataFrame({"报告期": [f"{financial_year}-12-31"]})
+    monkeypatch.setattr(fetcher, "_fetch_financials", lambda code: financials)
+    multi_year_dividends.loc[3, "送转股份-送转总比例"] = split_ratio * 10
+    if dps_override == 0:
+        # Positive disclosed amounts can round to a zero annual DPS.
+        multi_year_dividends["现金分红-现金分红比例"] = 0.00001
+    monkeypatch.setattr(
+        fetcher, "_fetch_dividends",
+        lambda code: None if missing else multi_year_dividends,
+    )
+    if dps_override == -1:
+        monkeypatch.setattr(
+            fetcher, "_compute_dividend_basis",
+            lambda *args: (0, dps_override, None, 2025, ["2025-06-30", "2025-12-31"]),
+        )
+    monkeypatch.setattr(
+        fetcher,
+        "_fetch_bond_yield",
+        lambda reasons: None
+        if missing
+        else {"value": 2, "as_of": "2026-10-30", "source": "fixture"},
+    )
+    fetch_results = {}
+    fetch_basis = {}
+    compute_dividends = fetcher._compute_dividends
+
+    def capture_basis(*args):
+        dividend = compute_dividends(*args)
+        fetch_basis.update(dividend)
+        return dividend
+
+    monkeypatch.setattr(fetcher, "_compute_dividends", capture_basis)
+    monkeypatch.setattr(
+        fetcher, "_fetch_spot_data",
+        lambda *args: ("fixture", "fixture", None if quote_kind == "invalid_price" else 20),
+    )
+
+    def financial_data(code, results, reasons):
+        results.update(eps=1.2, bps=6, operating_cf_per_share=2.4)
+        return financials, 1.2, 6
+
+    monkeypatch.setattr(fetcher, "_fetch_fin_data", financial_data)
+    for name in ("_compute_ttm_valuation", "_fetch_pb_pe_data", "_fetch_percentiles"):
+        monkeypatch.setattr(fetcher, name, lambda *args: None)
+    monkeypatch.setattr(
+        fetcher, "_build_cache_payload",
+        lambda code, name, industry, results, reasons, period: fetch_results.update(results),
+    )
+    assert fetcher.main(["fetch", "600000"]) == 0
+    capsys.readouterr()
+    monkeypatch.setattr(fetcher, "_compute_dividends", compute_dividends)
+    assert fetcher.main(["quarter", "600000", "--json"]) == 0
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert "provider creation diagnostic" in captured.err
+    assert "direct indicator diagnostic" in captured.err
+    fields = result["fields"]
+    for key in ("year", "periods", "split_ratio", "split_ex_date"):
+        assert fields["dps"][key] == fetch_basis[key]
+    if dps_override is None:
+        assert fields["dps"]["value"] == fetch_results.get("dps")
+    elif dps_override == 0 and quote_kind != "invalid_price":
+        assert fetch_results["dps"] == 0
+    expected_split = split_ratio if financial_year == 2025 and not missing else 0
+    assert fetch_results["eps"] == round(1.2 / (1 + expected_split), 4)
+    assert fetch_results["bps"] == round(6 / (1 + expected_split), 4)
+    assert fetch_results["operating_cf_per_share"] == round(2.4 / (1 + expected_split), 4)
+    if dps_override is None and not missing and quote_kind != "invalid_price":
+        assert fetch_results["dividend_yield"] == round(4.3 / (1 + expected_split), 2)
+        assert fetch_results["dps_ttm"] == round(0.76 / (1 + expected_split), 4)
+    assert not Path(isolated_db).exists()
+    deducted_fields = {
+        "deducted_net_profit_ytd": 12,
+        "deducted_net_profit_ytd_yoy": 50,
+        "deducted_net_profit_single_quarter": 5,
+        "deducted_net_profit_single_quarter_yoy": 200 / 3,
+    }
+    for name, expected in deducted_fields.items():
+        if deducted_failure:
+            assert fields[name]["value"] is None
+            assert "deducted source failed" in fields[name]["reason"]
+        else:
+            assert fields[name]["value"] == pytest.approx(expected)
+            assert fields[name]["reason"] is None
+    if deducted_failure:
+        assert "deducted source failed" in result["source_errors"]["deducted"]
+    assert fields["price"]["periods"] == (
+        ["2026-10-30T15:00:00+08:00"] if quote_kind == "valid" else []
+    )
+    if dps_override is not None:
+        assert fields["dps"]["value"] is None
+        assert fields["dps"]["reason"]
+        if quote_kind != "invalid_price":
+            assert "非正" in fields["dps"]["reason"]
+    if quote_kind == "invalid_price" or dps_override is not None:
+        assert fields["dps_at_150bp_spread"]["value"] is None
+        assert fields["dps_at_100bp_spread"]["value"] is None
+    elif missing:
+        assert result["report_period"] is None
+        assert result["source_errors"]
+        assert fields["dps_at_150bp_spread"]["value"] is None
+        assert fields["dps_at_150bp_spread"]["reason"]
+    else:
+        assert result["report_period"] == "2026-09-30"
+        assert fields["revenue_single_quarter"]["value"] == 60
+        assert fields["dps_at_150bp_spread"]["value"] == pytest.approx(0.7)
+        assert fields["dps_at_100bp_spread"]["value"] == pytest.approx(0.6)
+        assert fields["dps"]["value"] == (0.7167 if expected_split else 0.86)
+        assert fields["dps"]["split_ratio"] == expected_split
+        assert fields["dps"]["split_ex_date"] == (
+            "2026-05-26" if expected_split else None
+        )
+        assert fields["dps"]["year"] == 2025
+        assert fields["dps"]["periods"] == ["2025-06-30", "2025-12-31"]
+        assert fields["dps_at_150bp_spread"]["periods"]
+    assert fetcher.main(["quarter", "600000"]) == 0
+    assert "季节性" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "args", [[], ["bad"], ["600000", "--write"], ["600000", "--json", "extra"]]
+)
+def test_quarter_rejects_invalid_arguments(args):
+    assert fetcher.main(["quarter", *args]) == 1
+
+
+@pytest.mark.parametrize("frame,field", [
+    ("income", "net_profit_attributable_ttm"),
+    ("cashflow", "operating_cash_flow_ttm"),
+])
+@pytest.mark.parametrize("missing", ["2026-09-30", "2025-09-30", "2025-12-31"])
+def test_quarter_ttm_requires_each_input_period(quarter_frames, frame, field, missing):
+    quarter_frames[frame] = quarter_frames[frame].loc[
+        quarter_frames[frame]["end_date"] != missing
+    ]
+    fields = fetcher.build_quarter_check("600000", quarter_frames)["fields"]
+    assert fields[field]["value"] is None
+    assert fields[field]["reason"]
+    assert fields["operating_cash_flow_to_net_profit_ttm"]["value"] is None
+
+
+def test_quarter_ignores_indicator_period_and_prefers_corrected_deducted(quarter_frames):
+    quarter_frames["indicator"].loc[4, "end_date"] = "2027-03-31"
+    quarter_frames["deducted"].loc[5, "ann_date"] = "20261031"
+    result = fetcher.build_quarter_check("600000", quarter_frames)
+    assert result["report_period"] == "2026-09-30"
+    assert result["fields"]["deducted_net_profit_ytd"]["value"] == 12
+
+
+@pytest.mark.parametrize("latest,expected_single,expected_ttm", [
+    ("2025-12-31", 40, 14), ("2026-03-31", 30, 15),
+])
+def test_quarter_q4_derivation_and_complete_q1_ttm(latest, expected_single, expected_ttm):
+    income = pd.DataFrame({
+        "end_date": ["2024-09-30", "2024-12-31", "2025-03-31", "2025-09-30",
+                     "2025-12-31", "2026-03-31"],
+        "revenue": [70, 100, 20, 100, 140, 30],
+        "n_income_attr_p": [7, 10, 2, 10, 14, 3],
+    })
+    income = income.loc[income["end_date"] <= latest]
+    fields = fetcher.build_quarter_check("600000", {"income": income})["fields"]
+    assert fields["revenue_single_quarter"]["value"] == expected_single
+    assert fields["revenue_single_quarter_yoy"]["value"] == pytest.approx(
+        (expected_single / (30 if latest.endswith("12-31") else 20) - 1) * 100
+    )
+    assert fields["net_profit_attributable_ttm"]["value"] == expected_ttm
+
+
+def test_quarter_annual_ttm_requires_latest_in_each_frame(quarter_frames):
+    quarter_frames["balance"].loc[4, "end_date"] = "2026-12-31"
+    fields = fetcher.build_quarter_check("600000", quarter_frames)["fields"]
+    for name in ("operating_cash_flow_ttm", "net_profit_attributable_ttm"):
+        assert fields[name]["value"] is None
+        assert fields[name]["reason"]

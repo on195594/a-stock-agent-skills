@@ -17,9 +17,9 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 
 ### Level 1：默认快照
 
-先取得用户明确的账户总资产，并把本会话或截图已确认的账户范围、资产估值时点随首次调用传入，再只读运行一次：
+使用用户明确的账户总资产，并把本会话或截图已确认的账户范围、资产估值时点随首次调用传入，只读运行一次：
 
-现金余额、单只持仓市值不能替代账户总资产。缺少总资产时请求补充，不调用快照，也不把现金填入建议命令的 `--portfolio-value`；继续复用已提供的持仓、成交和截图说明对账缺口。
+现金余额、单只持仓市值不能替代账户总资产。缺少总资产时仍运行一次 `a-stock-cache monitor-snapshot --json`，省略 `--portfolio-value`，账户范围未经确认也省略 `--account-scope`；报告持仓层报价、止损距离、L3/预警/Tier 到期项和升级项，再请求缺失输入。不得以 `holdings`、fetcher 报价或手工风险求和替代快照，不把现金填入 `--portfolio-value`；继续复用已有持仓、成交和截图说明对账缺口。
 
 ```bash
 a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
@@ -27,7 +27,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 `monitor-snapshot --json` 输出是 `monitor-v1` machine contract；状态、动作、缺口和停止条件只从结构化字段读取，不从自然语言重建。
 
-已确认账户范围时在上述命令追加 `--account-scope <账户范围>`；已知政策要求范围但用户尚未确认时先请求补充，不从政策文件反推账户、不先执行必然失败的无范围调用。可附用户提供的 `--policy-file`，不得生成政策或确认引用。`--portfolio-value-as-of` 须用户或截图明确确认资产估值日期与时间，格式 `YYYY-MM-DDTHH:MM:SS+08:00`；手机设备状态栏时间不能替代资产估值时间，缺日期/时点则保持缺省并请求补充。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时即使 clean 也不授予加仓权限。2%/8% 是兼容默认，不是个人回撤目标；非法政策不得静默回退，确认元数据不是 W1 令牌。
+已确认账户范围时在上述命令追加 `--account-scope <账户范围>`；政策要求范围但用户尚未确认时，仍取无范围的持仓层快照并请求补充，不从政策文件反推账户；该模式不应用政策，权重与风险预算为空，不授予新增或加仓权限。可附用户提供的 `--policy-file`，不得生成政策或确认引用。`--portfolio-value-as-of` 须用户或截图明确确认资产估值日期与时间，格式 `YYYY-MM-DDTHH:MM:SS+08:00`；手机设备状态栏时间不能替代资产估值时间，缺日期/时点则保持缺省并请求补充。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时即使 clean 也不授予加仓权限。2%/8% 是兼容默认，不是个人回撤目标；非法政策不得静默回退，确认元数据不是 W1 令牌。
 
 通过宿主的命令执行工具调用 runtime CLI，保留 stdout、stderr 和退出码；不要在有硬超时的临时代码内核中包裹整轮监控。
 
@@ -58,7 +58,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 ## 工具预算与停止条件
 
 - Level 1 固定为一次 `monitor-snapshot`。快照拥有本轮持仓报价，不得重复查价或另起研究任务。
-- 用户明确要求市场、国内宏观或 Fed 背景时，每个相关主题只取一个主来源；仅失败、不完整、过期或冲突时允许一次 fallback。
+- 用户要求消息面时，主题为每条活动 L3 `core_driver`/`non_core` 对应的行业或政策主题，加公司公告；明确要求市场、国内宏观或 Fed 背景时纳入对应主题。每个相关主题只取一个主来源；仅失败、不完整、过期或冲突时允许一次 fallback。
 - 默认不启动研究子代理；只有单份长文档或一个有边界的关键证据缺口可例外，且子代理不得读取账户状态或作最终交易判断。
 - 得到可执行动作候选、阻断结论或干净快速路径后立即停止；optional 新闻、宏观、历史估值和技术材料不得阻塞首轮交付。
 
@@ -68,6 +68,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 - 持有逻辑、现价新增价值、账户风险贡献分开；不能新增不等于必须卖出，未确认退出也不等于可以加仓。不得仅因浮盈或“防御股”标签确定卖出顺序。
 - 账户、证据和用户目标未变时，追问不改变行动结论，不凭空增加价格或股数；发现前次错误应明确纠正并解释依据，不能为保持一致延续错误。
 - 缺口逐项说明缺什么、由系统还是用户补、影响哪项判断、补齐后复核什么及复核时点/事件；成本对账完成不自动解除财务门禁。能自行取得的公开证据不转嫁用户，已提供材料不重复索取；追问未重述本会话已有材料或已确认的成交事实，不等于缺失；不可恢复时说明具体缺项。
+- **待确认写入**：列出拟议 W1 的完整、可复制命令，填入实际 ID、验证日期、结论/证据与复核日期：`a-stock-cache --confirm-write l3-update <id> <status> <as-of> <证据> [下次复核日期] [--evidence-cadence <值>]`，以及预警的 `alert-resolve` 或以原 reason_code 调用 `alert-open` 续期；仅列出，不执行，无拟议写入则写“无”。
 
 ## 安全边界
 

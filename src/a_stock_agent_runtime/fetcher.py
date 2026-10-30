@@ -3,6 +3,7 @@
 A股基本面数据自动获取工具
 用法：
   a-stock-fetch fetch <股票代码>   获取并缓存基本面数据
+  a-stock-fetch quarter <股票代码> [--json]  只读季度与TTM核对
   fetcher.py check <股票代码>   验证缓存数据质量
   fetcher.py batch              批量更新 watchlist 所有股票
 """
@@ -442,7 +443,7 @@ def _report_period_label(raw: Any) -> str | None:
     return f"{period.year}{suffix}" if suffix else None
 
 
-def _deduplicated_report_rows(frame: Any) -> Any:
+def _deduplicated_report_rows(frame: Any, *, prefer_corrected: bool = False) -> Any:
     import pandas as pd
 
     if isinstance(frame, tuple) or frame is None or getattr(frame, "empty", True):
@@ -458,9 +459,11 @@ def _deduplicated_report_rows(frame: Any) -> Any:
     rows["_announcement"] = pd.to_datetime(announced, errors="coerce")
     update_flag = rows.get("update_flag", pd.Series(index=rows.index, dtype="float64"))
     rows["_update_order"] = pd.to_numeric(update_flag, errors="coerce").fillna(-1)
-    rows = rows.dropna(subset=["_period"]).sort_values(
-        ["_period", "_announcement", "_update_order"], na_position="first"
-    )
+    order = ["_period", "_announcement", "_update_order"]
+    if prefer_corrected:
+        rows["_update_order"] = rows["_update_order"].eq(1)
+        order = ["_period", "_update_order", "_announcement"]
+    rows = rows.dropna(subset=["_period"]).sort_values(order, na_position="first")
     return rows.drop_duplicates("_period", keep="last").reset_index(drop=True)
 
 
@@ -1052,9 +1055,9 @@ def _fetch_bond_yield_api(start_date: str, end_date: str) -> Any:
 # ─── 计算辅助函数 ────────────────────────────────────────────────────────────
 
 
-def compute_dividend_yield(
+def _compute_dividend_basis(
     div_df: Any, current_price: float | None
-) -> tuple[float | None, float | None, str | None]:
+) -> tuple[float | None, float | None, str | None, int | None, list[str]]:
     """从分红历史（按报告期）估算股息率与每股分红（DPS）。
 
     div_df 来自 ak.stock_fhps_detail_em，含'报告期'（如2025-12-31）/
@@ -1076,27 +1079,27 @@ def compute_dividend_yield(
     若最新报告期距离选中的完整财年已相隔至少两年，可能意味着公司跳过了
     年度分红；此时 fail-closed 返回空值，拒绝用陈旧年度分红伪装当前股息率。
     若最新报告期已超过约13个月（公司可能停止分红），返回 (None, None, 原因)。
-    返回值：(yield_pct, dps_per_share, reason)；成功时 reason=None，失败时 yield/dps 均为 None。
+    返回股息率、DPS、原因及实际选用的年份与报告期。
     """
     import pandas as pd
 
     if div_df is None or div_df.empty or not current_price or current_price <= 0:
-        return None, None, "无分红数据或价格不可用"
+        return None, None, "无分红数据或价格不可用", None, []
     if "报告期" not in div_df.columns:
-        return None, None, "分红数据缺少报告期字段"
+        return None, None, "分红数据缺少报告期字段", None, []
 
     df = div_df.copy()
     amount_col = (
         "现金分红-现金分红比例" if "现金分红-现金分红比例" in df.columns else "派息"
     )
     if amount_col not in df.columns:
-        return None, None, "分红数据缺少现金分红金额字段"
+        return None, None, "分红数据缺少现金分红金额字段", None, []
     df["_amount"] = pd.to_numeric(df[amount_col], errors="coerce")
     df["_period"] = pd.to_datetime(df["报告期"], errors="coerce")
     df = df.dropna(subset=["_period"])
     valid = df[df["_amount"].fillna(0) > 0]
     if valid.empty:
-        return None, None, "无有效分红金额记录"
+        return None, None, "无有效分红金额记录", None, []
 
     cutoff = datetime.now() - timedelta(days=400)
     latest_period = valid["_period"].max()
@@ -1105,6 +1108,8 @@ def compute_dividend_yield(
             None,
             None,
             f"超过12个月无分红（最近报告期：{latest_period.strftime('%Y-%m-%d')}）",
+            None,
+            [],
         )
 
     complete_years = valid.loc[
@@ -1122,13 +1127,62 @@ def compute_dividend_yield(
                 f"最近完整财年({target_year})距最新报告期({latest_period.strftime('%Y-%m-%d')})超过1年，"
                 f"可能已停发年度分红，拒绝返回可能陈旧的股息率"
             ),
+            None,
+            [],
         )
-    total_per_10 = valid[valid["_period"].dt.year == target_year]["_amount"].sum()
+    selected = valid[valid["_period"].dt.year == target_year]
+    total_per_10 = selected["_amount"].sum()
     if total_per_10 <= 0:
-        return None, None, "派息为0"
+        return None, None, "派息为0", None, []
     per_share = round(float(total_per_10) / 10, 4)
     yield_pct = round(per_share / float(current_price) * 100, 2)
-    return yield_pct, per_share, None
+    periods = sorted(set(selected["_period"].dt.date.astype(str)))
+    return yield_pct, per_share, None, target_year, periods
+
+
+def compute_dividend_yield(
+    div_df: Any, current_price: float | None
+) -> tuple[float | None, float | None, str | None]:
+    """Return the existing annual dividend yield/DPS contract before split adjustment."""
+    dy, dps, reason, _, _ = _compute_dividend_basis(div_df, current_price)
+    return dy, dps, reason
+
+
+def _compute_dividends(
+    div_df: Any, current_price: float | None, latest_report_year: int | None
+) -> dict:
+    """Shared fetch/quarter dividend basis, including fetch's whole-year adjustment."""
+    split_ratio, split_ex_date = 0.0, None
+    if isinstance(div_df, str):
+        reason = "分红API超时"
+    elif div_df is None or isinstance(div_df, tuple):
+        reason = "无分红数据"
+    else:
+        reason = None
+        split_ratio, split_ex_date = _detect_split_ratio(div_df, latest_report_year)
+    dy = dps = dps_ttm = year = None
+    periods = []
+    if reason is None:
+        dy, dps, reason, year, periods = _compute_dividend_basis(div_df, current_price)
+        dps_ttm = compute_dps_ttm(div_df)
+    ttm_reason = reason if div_df is None or isinstance(div_df, (str, tuple)) else (
+        "无有效TTM分红金额记录" if dps_ttm is None else None
+    )
+    if split_ratio > 0:
+        dps = round(dps / (1 + split_ratio), 4) if dps is not None else None
+        dps_ttm = round(dps_ttm / (1 + split_ratio), 4) if dps_ttm is not None else None
+        dy = round(dy / (1 + split_ratio), 2) if dy is not None else None
+    return {
+        "dividend_yield": dy,
+        "dps": dps,
+        "dps_ttm": dps_ttm,
+        "reason": reason,
+        "ttm_reason": ttm_reason,
+        "year": year,
+        "periods": periods,
+        "split_ratio": split_ratio,
+        "split_ex_date": split_ex_date,
+    }
 
 
 def compute_dps_ttm(div_df: Any) -> float | None:
@@ -1811,37 +1865,23 @@ def _fetch_dividend(
 ) -> tuple[float, str | None]:
     """Step 4: 股息率 + DPS（每股分红，用于股息率交叉验证）。"""
     logger.info("  [4/7] 计算股息率与每股分红...")
-    split_ratio, split_ex_date = 0.0, None
     div_df = timed_call(_fetch_dividends, code, timeout=API_TIMEOUT)
-    if div_df is not None and not isinstance(div_df, (str, tuple)):
-        split_ratio, split_ex_date = _detect_split_ratio(div_df, latest_report_year)
-    if isinstance(div_df, str):
-        reason = "分红API超时"
-    elif div_df is None or isinstance(div_df, tuple):
-        reason = "无分红数据"
+    dividend = _compute_dividends(div_df, current_price, latest_report_year)
+    for field in ("dividend_yield", "dps", "dps_ttm"):
+        if dividend[field] is not None:
+            results[field] = dividend[field]
+        else:
+            null_reasons[field] = dividend[
+                "ttm_reason" if field == "dps_ttm" else "reason"
+            ]
+    if dividend["dividend_yield"] is not None:
+        logger.info(
+            f"  ✅ 股息率={dividend['dividend_yield']}% | "
+            f"DPS={dividend['dps']}元 | DPS_TTM={dividend['dps_ttm']}元"
+        )
     else:
-        reason = None
-    if reason:
-        null_reasons["dividend_yield"] = reason
-        null_reasons["dps"] = reason
-        null_reasons["dps_ttm"] = reason
-        logger.warning("  ⚠️ %s", reason)
-        return split_ratio, split_ex_date
-    dy, dps, dy_reason = compute_dividend_yield(div_df, current_price)
-    dps_ttm = compute_dps_ttm(div_df)
-    if dps_ttm is not None:
-        results["dps_ttm"] = dps_ttm
-    else:
-        null_reasons["dps_ttm"] = "无有效TTM分红金额记录"
-    if dy is not None:
-        results["dividend_yield"] = dy
-        results["dps"] = dps
-        logger.info(f"  ✅ 股息率={dy}% | DPS={dps}元 | DPS_TTM={dps_ttm}元")
-    else:
-        null_reasons["dividend_yield"] = dy_reason
-        null_reasons["dps"] = dy_reason
-        logger.warning("  ⚠️ 股息率无法计算: %s", dy_reason)
-    return split_ratio, split_ex_date
+        logger.warning("  ⚠️ 股息率无法计算: %s", dividend["reason"])
+    return dividend["split_ratio"], dividend["split_ex_date"]
 
 
 def _fetch_percentiles(
@@ -2244,7 +2284,7 @@ def cmd_fetch(args: list[str]) -> None:
         code, current_price, results, null_reasons, latest_report_year
     )
     if split_ratio > 0:
-        for field in ("eps", "bps", "dps", "dps_ttm", "operating_cf_per_share"):
+        for field in ("eps", "bps", "operating_cf_per_share"):
             val = results.get(field)
             if val is not None:
                 original = val
@@ -2253,12 +2293,6 @@ def cmd_fetch(args: list[str]) -> None:
                     f"  ✅ 送转复权调整: {field} {original} → {results[field]} "
                     f"(ratio={split_ratio}, ex={split_ex_date})"
                 )
-        dy = results.get("dividend_yield")
-        if dy is not None:
-            results["dividend_yield"] = round(dy / (1 + split_ratio), 2)
-            logger.info(
-                f"  ✅ 送转复权调整: dividend_yield → {results['dividend_yield']}%"
-            )
     _fetch_pb_pe_data(code, current_price, results, null_reasons)
     results["valuation_compatibility"] = compute_valuation_compatibility(
         current_price=current_price,
@@ -2329,6 +2363,285 @@ def _print_data_quality_summary(data, core_fetched, core_total):
         print(f"  待补充: {', '.join(missing_core)}")
 
 
+def _quarter_metric(value: Any, basis: str, periods: list[str], reason=None) -> dict:
+    import math
+
+    number = parse_float(value)
+    if number is None or not math.isfinite(number):
+        return {
+            "value": None,
+            "basis": basis,
+            "periods": periods,
+            "reason": reason or "缺少同口径已披露数据",
+        }
+    return {"value": number, "basis": basis, "periods": periods, "reason": None}
+
+
+def build_quarter_check(code: str, frames: dict[str, Any]) -> dict:
+    """Calculate only disclosed periods; no estimates or interim annualisation."""
+    import pandas as pd
+
+    rows = {
+        key: _deduplicated_report_rows(frames.get(key), prefer_corrected=key == "deducted")
+        for key in ("income", "cashflow", "balance", "deducted")
+    }
+    periods = [
+        frame["_period"].max()
+        for frame in rows.values()
+        if frame is not None and not frame.empty
+    ]
+    latest = max(periods) if periods else None
+    result = {"code": code, "report_period": None, "fields": {}}
+    fields = result["fields"]
+    if latest is not None:
+        result["report_period"] = latest.date().isoformat()
+        prior = latest - pd.DateOffset(years=1)
+        year_end = pd.Timestamp(latest.year - 1, 12, 31)
+        previous = latest - pd.offsets.QuarterEnd()
+    else:
+        prior = year_end = previous = None
+
+    def labels(*values):
+        return [value.date().isoformat() for value in values if value is not None]
+
+    def number(frame, period, column):
+        value = _row_number(_row_at_period(rows.get(frame), period), column)
+        return _quarter_metric(value, "", [])["value"]
+
+    def growth(current, base, basis, comparison_periods):
+        reason = None
+        if base is not None and base <= 0:
+            reason = "比较基期非正，增长率不适用"
+        value = (
+            (current / base - 1) * 100
+            if current is not None and base is not None and base > 0
+            else None
+        )
+        return _quarter_metric(value, basis, comparison_periods, reason)
+
+    for key, frame, column in (
+        ("revenue", "income", "revenue"),
+        ("net_profit_attributable", "income", "n_income_attr_p"),
+        ("deducted_net_profit", "deducted", "profit_dedt"),
+    ):
+        current, base = number(frame, latest, column), number(frame, prior, column)
+        fields[key + "_ytd"] = _quarter_metric(current, "ytd", labels(latest))
+        fields[key + "_ytd_yoy"] = growth(
+            current, base, "ytd_yoy", labels(latest, prior)
+        )
+        single_periods, comparison_periods = labels(latest), labels(latest, prior)
+        if latest is not None and latest.month != 3:
+            preceding = number(frame, previous, column)
+            prior_previous = previous - pd.DateOffset(years=1)
+            prior_preceding = number(frame, prior_previous, column)
+            current = current - preceding if None not in (current, preceding) else None
+            base = (
+                base - prior_preceding if None not in (base, prior_preceding) else None
+            )
+            single_periods = labels(latest, previous)
+            comparison_periods = labels(latest, previous, prior, prior_previous)
+        fields[key + "_single_quarter"] = _quarter_metric(
+            current, "single_quarter", single_periods
+        )
+        fields[key + "_single_quarter_yoy"] = growth(
+            current, base, "single_quarter_yoy", comparison_periods
+        )
+
+    ttm_periods = (
+        labels(latest)
+        if latest is not None and latest.month == 12
+        else labels(year_end, latest, prior)
+    )
+    for key, frame, column in (
+        ("operating_cash_flow_ttm", "cashflow", "n_cashflow_act"),
+        ("net_profit_attributable_ttm", "income", "n_income_attr_p"),
+    ):
+        value = None
+        required = [latest] if latest is not None and latest.month == 12 else [
+            latest, prior, year_end
+        ]
+        if latest is not None and all(
+            number(frame, period, column) is not None for period in required
+        ):
+            value, _ = _ttm_pair(rows.get(frame), latest, column)
+        fields[key] = _quarter_metric(
+            value, "ttm", ttm_periods, "缺少TTM所需的最新期、上年同期或上年年末数据"
+        )
+    cash = fields["operating_cash_flow_ttm"]["value"]
+    profit = fields["net_profit_attributable_ttm"]["value"]
+    ratio = (
+        cash / profit
+        if cash is not None and profit is not None and profit > 0
+        else None
+    )
+    fields["operating_cash_flow_to_net_profit_ttm"] = _quarter_metric(
+        ratio,
+        "ttm_ratio",
+        ttm_periods,
+        "TTM归母净利润非正，比例不适用" if profit is not None and profit <= 0 else None,
+    )
+    for key, column in (
+        ("accounts_receivable", "accounts_receiv"),
+        ("inventory", "inventories"),
+        ("notes_payable", "notes_payable"),
+        ("contract_liabilities", "contract_liab"),
+    ):
+        current = number("balance", latest, column)
+        fields[key] = _quarter_metric(current, "period_end", labels(latest))
+        fields[key + "_yoy"] = growth(
+            current,
+            number("balance", prior, column),
+            "yoy_same_period_end",
+            labels(latest, prior),
+        )
+        seasonal = growth(
+            current,
+            number("balance", year_end, column),
+            "vs_year_start",
+            labels(latest, year_end),
+        )
+        seasonal["label"] = "较年初（季节性比较，非同比）"
+        fields[key + "_vs_year_start"] = seasonal
+    return result
+
+
+def cmd_quarter(args: list[str]) -> None:
+    import json
+    import tushare
+    from a_stock_lib.providers import TushareFinancialProvider
+    from a_stock_lib.providers.tushare_quotes import to_tushare_stock_code
+
+    if (
+        len(args) not in (1, 2)
+        or not re.fullmatch(r"\d{6}", args[0])
+        or (len(args) == 2 and args[1] != "--json")
+    ):
+        print("用法: a-stock-fetch quarter <股票代码> [--json]", file=sys.stderr)
+        raise SystemExit(1)
+    code = args[0]
+    frames = {}
+    errors = {}
+    # Existing adapters log to stdout; JSON output must remain a single object.
+    was_disabled = logger.disabled
+    logger.disabled = "--json" in args
+    try:
+        from contextlib import redirect_stdout
+
+        with redirect_stdout(sys.stderr if "--json" in args else sys.stdout):
+            provider = TushareFinancialProvider(token=paths.tushare_token())
+            for key, method, source in (
+                ("income", "fetch_income_history", "tushare.income"),
+                ("balance", "fetch_balance_history", "tushare.balancesheet"),
+                ("cashflow", "fetch_cashflow_history", "tushare.cashflow"),
+            ):
+                method_call = getattr(provider, method, None)
+                raw = (
+                    timed_call(method_call, code, timeout=API_TIMEOUT)
+                    if method_call is not None
+                    else ("ERROR", f"{source}: provider不支持")
+                )
+                frame = (
+                    _tushare_frame(raw, source) if not _is_timed_call_error(raw) else raw
+                )
+                if frame is None or isinstance(frame, (str, tuple)):
+                    errors[key] = str(frame or "数据源无返回")
+                    frame = None
+                frames[key] = frame
+            # The provider's indicator projection does not include deducted profit.
+            def fetch_deducted():
+                return tushare.pro_api(paths.tushare_token()).fina_indicator(
+                    ts_code=to_tushare_stock_code(code),
+                    fields="ts_code,end_date,ann_date,update_flag,profit_dedt",
+                )
+
+            deducted = timed_call(fetch_deducted, timeout=API_TIMEOUT)
+            if deducted is None or isinstance(deducted, (str, tuple)):
+                errors["deducted"] = str(deducted or "扣非净利润数据源无返回")
+                deducted = None
+            frames["deducted"] = deducted
+            result = build_quarter_check(code, frames)
+            result["source_errors"] = errors
+            fields = result["fields"]
+            if "deducted" in errors:
+                for name, metric in fields.items():
+                    if name.startswith("deducted_net_profit"):
+                        metric["reason"] = f"扣非净利润直接源不可用: {errors['deducted']}"
+            quote = None
+            try:
+                quote = _fetch_realtime_quote(code)
+            except Exception as exc:
+                errors["price"] = str(exc)
+            price = _quarter_metric(getattr(quote, "price", None), "current_quote", [])
+            if price["value"] is not None and price["value"] <= 0:
+                price = _quarter_metric(None, "current_quote", [], "价格非正")
+            price["periods"] = (
+                [quote.as_of]
+                if price["value"] is not None and getattr(quote, "as_of", None)
+                else []
+            )
+            price.update(
+                source=getattr(quote, "source", None), as_of=getattr(quote, "as_of", None)
+            )
+            fields["price"] = price
+            # Use fetch's financial adapter for the same split cutoff year.
+            fin_df = timed_call(_fetch_financials, code, timeout=API_TIMEOUT)
+            data_period = _extract_data_period(fin_df)
+            latest_report_year = int(data_period[:4]) if data_period else None
+            div = timed_call(_fetch_dividends, code, timeout=API_TIMEOUT)
+            dividend = _compute_dividends(div, price["value"], latest_report_year)
+            dps, reason = dividend["dps"], dividend["reason"]
+            if dps is not None and dps <= 0:
+                dps, reason = None, "每股分红非正"
+            fields["dps"] = _quarter_metric(
+                dps, "fetcher_dividend_year", dividend["periods"], reason
+            )
+            fields["dps"].update(
+                year=dividend["year"],
+                split_ratio=dividend["split_ratio"],
+                split_ex_date=dividend["split_ex_date"],
+            )
+            null_reasons = {}
+            bond = _fetch_bond_yield(null_reasons)
+            bond_value = _quarter_metric(
+                (bond or {}).get("value"),
+                "cgb_10y_yield_pct",
+                [],
+                null_reasons.get("bond_yield_10y"),
+            )
+            bond_value.update(
+                source=(bond or {}).get("source"), as_of=(bond or {}).get("as_of")
+            )
+            bond_value["periods"] = (
+                [(bond or {})["as_of"]] if (bond or {}).get("as_of") else []
+            )
+            fields["bond_yield_10y"] = bond_value
+            for spread in (150, 100):
+                value = None
+                if (
+                    dps is not None
+                    and dps > 0
+                    and price["value"] is not None
+                    and bond_value["value"] is not None
+                ):
+                    value = price["value"] * (bond_value["value"] / 100 + spread / 10000)
+                fields[f"dps_at_{spread}bp_spread"] = _quarter_metric(
+                    value,
+                    "dividend_spread_threshold",
+                    price["periods"] + bond_value["periods"],
+                    "缺少有效分红、现价或国债收益率",
+                )
+    finally:
+        logger.disabled = was_disabled
+    if "--json" in args:
+        print(json.dumps(result, ensure_ascii=False, allow_nan=False))
+    else:
+        print(f"{code} 季度核对 | 最新报告期: {result['report_period'] or '未知'}")
+        for name, metric in fields.items():
+            print(
+                f"{name}: {metric['value']} | {metric['basis']} | {','.join(metric['periods'])} | {metric.get('label') or metric['reason'] or ''}"
+            )
+
+
 def cmd_check(args: list[str]) -> None:
     if not args:
         print("错误：需要参数 <股票代码>", file=sys.stderr)
@@ -2385,6 +2698,7 @@ def cmd_batch(args: list[str]) -> None:
 
 COMMANDS = {
     "fetch": cmd_fetch,
+    "quarter": cmd_quarter,
     "check": cmd_check,
     "batch": cmd_batch,
 }

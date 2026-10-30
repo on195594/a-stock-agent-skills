@@ -120,6 +120,10 @@ SCHEMA_MIGRATIONS = [
         "035-analysis-decision-json",
         "ALTER TABLE analysis_results ADD COLUMN decision_json TEXT",
     ),
+    (
+        "036-l3-evidence-cadence",
+        "ALTER TABLE holding_l3_conditions ADD COLUMN evidence_cadence TEXT NOT NULL DEFAULT 'unspecified' CHECK(evidence_cadence IN ('quarterly','semiannual','annual','event','unspecified'))",
+    ),
 ]
 
 

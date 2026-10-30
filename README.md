@@ -108,6 +108,8 @@ a-stock-cache benchmark-report    read-only ledger cash flows vs the same flows 
 a-stock-cache daily-brief         read-only post-close push text; silent without same-day quotes
 a-stock-cache stop-alert          intraday stop-line push text from canonical stops, once per day per level
 a-stock-fetch    structured market-data fetch CLI
+a-stock-fetch quarter <code> [--json]
+                read-only quarterly/YTD YoY, TTM cash flow, same-period balances and dividend-spread DPS
 a-stock-install  installer entrypoint
 ```
 

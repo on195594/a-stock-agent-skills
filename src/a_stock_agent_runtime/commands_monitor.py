@@ -31,6 +31,7 @@ from a_stock_agent_runtime.risk_policy import RiskParameters
 
 _SCOPES = {"aggregate", "core_driver", "non_core", "governance"}
 _ACTIONS = {"review", "reduce", "exit"}
+_EVIDENCE_CADENCES = {"quarterly", "semiannual", "annual", "event", "unspecified"}
 
 
 def _fail(message: str) -> None:
@@ -125,7 +126,7 @@ def _load_monitor_local_snapshot() -> dict[str, Any]:
             """SELECT l.holding_id, l.id, l.thesis_version_id, l.status,
                       l.condition_text, l.as_of, l.next_review_date, l.evidence,
                       l.temporary_exit_rule, l.condition_scope, l.action_level,
-                      l.materiality_basis, l.updated_at
+                      l.materiality_basis, l.updated_at, l.evidence_cadence
                FROM holding_l3_conditions l
                JOIN holdings h ON h.id=l.holding_id
                WHERE h.exit_date IS NULL AND l.is_active=1
@@ -182,6 +183,7 @@ def _load_monitor_local_snapshot() -> dict[str, Any]:
                         "action",
                         "materiality_basis",
                         "updated_at",
+                        "evidence_cadence",
                     ),
                     row[1:],
                     strict=True,
@@ -295,6 +297,7 @@ def _add_escalation(
     detail: str,
     *,
     candidate: str = "review",
+    evidence_cadence: str | None = None,
 ) -> None:
     item = {
         "code": code,
@@ -302,6 +305,8 @@ def _add_escalation(
         "candidate": candidate,
         "detail": detail,
     }
+    if evidence_cadence is not None:
+        item["evidence_cadence"] = evidence_cadence
     if item not in escalations:
         escalations.append(item)
 
@@ -355,6 +360,7 @@ def build_monitor_snapshot(
     stage_timings_ms: dict[str, int] | None = None,
     risk_policy: dict | None = None,
     denominator_evidence: dict | None = None,
+    account_scope_required: bool = False,
 ) -> dict[str, Any]:
     """Purely combine one local snapshot and one shared quote snapshot."""
     portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
@@ -366,7 +372,8 @@ def build_monitor_snapshot(
     escalations: list[dict[str, Any]] = []
     gaps: list[dict[str, Any]] = []
     output_holdings: list[dict[str, Any]] = []
-    partial = portfolio_value is None
+    risk_value = None if account_scope_required else portfolio_value
+    partial = risk_value is None
     stale = False
     conflicted = False
     trade_requested = False
@@ -383,14 +390,19 @@ def build_monitor_snapshot(
             f"restore same-industry context ({error_code})",
         )
 
+    denominator_details = []
     if portfolio_value is None:
-        _add_escalation(
-            escalations,
-            None,
-            "denominator_missing",
-            "explicit portfolio value is required for weights and risk budgets",
-        )
+        denominator_details.append("explicit portfolio value is required for weights and risk budgets")
         _add_gap(gaps, None, "portfolio_value", "provide --portfolio-value")
+    if account_scope_required:
+        denominator_details.append(
+            "account scope is unconfirmed; policy not applied; weights and risk budgets unavailable"
+        )
+        _add_gap(gaps, None, "account_scope", "confirm and provide --account-scope")
+    if denominator_details:
+        _add_escalation(
+            escalations, None, "denominator_missing", "; ".join(denominator_details)
+        )
 
     duplicate_codes = sorted(
         {
@@ -453,14 +465,14 @@ def build_monitor_snapshot(
             holding["shares"] if required_fields["shares"] and code not in duplicate_codes else None,
             current_price,
             holding["stop_loss_20"] if required_fields["stop_loss_20"] else None,
-            portfolio_value,
+            risk_value,
             holding["reference_cost"],
         )
         if risk["market_value"] is not None:
             valued += 1
             total_market_value += risk["market_value"]
         if risk["stop_risk"] is None or (
-            portfolio_value is not None and risk["stop_risk_pct"] is None
+            risk_value is not None and risk["stop_risk_pct"] is None
         ):
             partial = True
             _add_gap(gaps, code, "stop_risk", "restore valid risk inputs")
@@ -653,6 +665,7 @@ def build_monitor_snapshot(
                     code,
                     "l3_review_due",
                     f"L3 condition {condition['id']} is due",
+                    evidence_cadence=condition.get("evidence_cadence", "unspecified"),
                 )
             if condition["status"] == "triggered":
                 candidate = (
@@ -765,10 +778,10 @@ def build_monitor_snapshot(
     active_count = len(holdings)
     stock_market_value = _number(total_market_value) if valued else None
     stock_weight_pct = (
-        _number(total_market_value / portfolio_value * 100)
-        if valued and portfolio_value is not None else None
+        _number(total_market_value / risk_value * 100)
+        if valued and risk_value is not None else None
     )
-    if valued and (stock_market_value is None or portfolio_value is not None and stock_weight_pct is None):
+    if valued and (stock_market_value is None or risk_value is not None and stock_weight_pct is None):
         partial = True
         _add_gap(gaps, None, "account_valuation", "restore finite account valuation inputs")
     if active_count and priced == 0 and not stale and not conflicted:
@@ -793,7 +806,7 @@ def build_monitor_snapshot(
     quote_complete = priced == active_count
     denominator_source = _denominator_source(portfolio_value, denominator_evidence)
     budget = risk_budget.assess(
-        output_holdings, portfolio_value, limits,
+        output_holdings, risk_value, limits,
         account_scope=denominator_evidence.get("account_scope") if denominator_evidence else None,
         denominator_source=denominator_source or "cli",
     )
@@ -976,7 +989,7 @@ def _parse_monitor_snapshot_args(args: list[str]) -> RiskParameters:
     if "--json" not in args:
         _fail("monitor-snapshot requires --json")
     return commands_holdings._parse_portfolio_risk_args(
-        [arg for arg in args if arg != "--json"]
+        [arg for arg in args if arg != "--json"], allow_missing_scope=True
     )
 
 
@@ -1006,6 +1019,7 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
         industry_result=industry_result,
         risk_policy=limits,
         denominator_evidence=parameters.denominator_evidence(),
+        account_scope_required=parameters.account_scope_required,
         now=domain.cst_now(),
         stage_timings_ms={
             "preflight": round((preflight_done - started) * 1000),
@@ -1147,7 +1161,11 @@ def _validated_rewrite_payload() -> dict:
         "temporary_exit_rule",
     }
     for index, item in enumerate(payload["new_l3"], start=1):
-        if not isinstance(item, dict) or set(item) != l3_fields:
+        if (
+            not isinstance(item, dict)
+            or not l3_fields <= set(item)
+            or set(item) - l3_fields - {"evidence_cadence"}
+        ):
             _fail(f"new_l3[{index}] 字段不完整或包含未知字段")
         if any(
             not isinstance(item[field], str) or not item[field].strip()
@@ -1156,6 +1174,9 @@ def _validated_rewrite_payload() -> dict:
             _fail(f"new_l3[{index}] 的所有字段必须是非空字符串")
         for field in l3_fields:
             item[field] = item[field].strip()
+        cadence = item.setdefault("evidence_cadence", "unspecified")
+        if not isinstance(cadence, str) or cadence not in _EVIDENCE_CADENCES:
+            _fail(f"new_l3[{index}] 的 evidence_cadence 非法")
         if item["scope"] not in _SCOPES or item["action"] not in _ACTIONS:
             _fail(f"new_l3[{index}] 的 scope/action 非法")
         if item["scope"] == "non_core" and item["action"] != "review":
@@ -1163,9 +1184,26 @@ def _validated_rewrite_payload() -> dict:
     return payload
 
 
+def _l3_cadence_args(args: list[str]) -> tuple[list[str], str | None]:
+    args = list(args)
+    cadence = None
+    if "--evidence-cadence" in args:
+        index = args.index("--evidence-cadence")
+        if index + 1 >= len(args) or args[index + 1] not in _EVIDENCE_CADENCES:
+            _fail(
+                "evidence_cadence 必须为 quarterly/semiannual/annual/event/unspecified"
+            )
+        cadence = args[index + 1]
+        del args[index : index + 2]
+    if any(arg.startswith("--") for arg in args):
+        _fail("未知或重复的 L3 参数")
+    return args, cadence
+
+
 def cmd_l3_add(args: list[str]) -> None:
     """Add a structured L3 condition. Usage: l3-add <code> <origin> <condition> [temporary_exit_rule]."""
-    if len(args) < 3:
+    args, cadence = _l3_cadence_args(args)
+    if len(args) not in (3, 4):
         print(
             "错误：需要参数 <代码> <original|recovered|new_monitoring> "
             "<条件文本> [临时出场规则]",
@@ -1189,8 +1227,8 @@ def cmd_l3_add(args: list[str]) -> None:
         cursor = conn.execute(
             """INSERT INTO holding_l3_conditions
                (holding_id, condition_text, origin_type, temporary_exit_rule,
-                created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+                created_at, updated_at, evidence_cadence)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
                 holding_id,
                 condition_text,
@@ -1198,6 +1236,7 @@ def cmd_l3_add(args: list[str]) -> None:
                 temporary_exit_rule,
                 now_iso,
                 now_iso,
+                cadence or "unspecified",
             ),
         )
         conn.commit()
@@ -1206,7 +1245,8 @@ def cmd_l3_add(args: list[str]) -> None:
 
 def cmd_l3_update(args: list[str]) -> None:
     """Update evidence-backed status. Usage: l3-update <id> <status> <as_of> <evidence> [next_review]."""
-    if len(args) < 4:
+    args, cadence = _l3_cadence_args(args)
+    if len(args) not in (4, 5):
         print(
             "错误：需要参数 <条件id> <pending|not_triggered|watch|triggered> "
             "<as-of> <证据> [下次复核日期]",
@@ -1235,9 +1275,18 @@ def cmd_l3_update(args: list[str]) -> None:
     with db.db_session() as conn:
         cursor = conn.execute(
             """UPDATE holding_l3_conditions
-               SET status=?, evidence=?, as_of=?, next_review_date=?, updated_at=?
+               SET status=?, evidence=?, as_of=?, next_review_date=?, updated_at=?,
+                   evidence_cadence=COALESCE(?, evidence_cadence)
                WHERE id=? AND is_active=1""",
-            (status, evidence, as_of, next_review, domain.utc_now_iso(), condition_id),
+            (
+                status,
+                evidence,
+                as_of,
+                next_review,
+                domain.utc_now_iso(),
+                cadence,
+                condition_id,
+            ),
         )
         if cursor.rowcount == 0:
             _fail(f"未找到活动L3条件 id={condition_id}；已退役条件不可更新")
@@ -1312,6 +1361,7 @@ def cmd_l3_list(args: list[str]) -> None:
                                     "scope": None,
                                     "action": None,
                                     "materiality_basis": None,
+                                    "evidence_cadence": "unspecified",
                                     "valid_for_action": False,
                                 }
                                 for row in rows
@@ -1326,7 +1376,7 @@ def cmd_l3_list(args: list[str]) -> None:
             for row in rows:
                 print(
                     f"#{row[0]} [{row[1]}] {row[2]} | {row[3]} | as-of:{row[4] or '─'} "
-                    f"| 下次:{row[5] or '─'} | 证据:{row[6] or '─'} | 临时出场:{row[7] or '─'}"
+                    f"| 下次:{row[5] or '─'} | 证据:{row[6] or '─'} | 临时出场:{row[7] or '─'} | evidence_cadence:unspecified"
                 )
             if not rows:
                 print(f"{code} 无结构化L3条件")
@@ -1402,7 +1452,8 @@ def cmd_l3_list(args: list[str]) -> None:
             """SELECT l.id, l.origin_type, l.status, l.condition_text, l.as_of,
                       l.next_review_date, l.evidence, l.temporary_exit_rule,
                       l.thesis_version_id, l.is_active, l.retired_at, l.retired_reason,
-                      l.condition_scope, l.action_level, l.materiality_basis, t.version
+                      l.condition_scope, l.action_level, l.materiality_basis, t.version,
+                      l.evidence_cadence
                FROM holding_l3_conditions l
                LEFT JOIN holding_thesis_versions t ON t.id=l.thesis_version_id
                WHERE l.holding_id=? ORDER BY l.id""",
@@ -1482,6 +1533,7 @@ def cmd_l3_list(args: list[str]) -> None:
                             "materiality_basis": row[14],
                             "valid_for_action": bool(valid(row)),
                             "thesis_version": row[15],
+                            "evidence_cadence": row[16],
                             "retired_at": row[10],
                             "retired_reason": row[11],
                         }
@@ -1503,7 +1555,8 @@ def cmd_l3_list(args: list[str]) -> None:
             f"#{row[0]} [{row[1]}] {row[2]} {lifecycle} thesis:{thesis} "
             f"[{row[12]}/{row[13]}] | {row[3]} | as-of:{row[4] or '─'} "
             f"| 下次:{row[5] or '─'} | 证据:{row[6] or '─'} | 重要性:{row[14] or '─'} "
-            f"| 临时出场:{row[7] or '─'} | 退役:{row[10] or '─'} {row[11] or ''}"
+            f"| 临时出场:{row[7] or '─'} | 退役:{row[10] or '─'} {row[11] or ''} "
+            f"| evidence_cadence:{row[16]}"
         )
 
 
@@ -1588,8 +1641,8 @@ def cmd_thesis_rewrite(args: list[str]) -> None:
                     """INSERT INTO holding_l3_conditions
                        (holding_id, thesis_version_id, condition_text, origin_type,
                         temporary_exit_rule, condition_scope, action_level,
-                        materiality_basis, created_at, updated_at)
-                       VALUES (?, ?, ?, 'new_monitoring', ?, ?, ?, ?, ?, ?)""",
+                        materiality_basis, created_at, updated_at, evidence_cadence)
+                       VALUES (?, ?, ?, 'new_monitoring', ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         holding_id,
                         thesis_id,
@@ -1600,6 +1653,7 @@ def cmd_thesis_rewrite(args: list[str]) -> None:
                         item["materiality_basis"],
                         now_iso,
                         now_iso,
+                        item["evidence_cadence"],
                     ),
                 )
             if conn.execute(

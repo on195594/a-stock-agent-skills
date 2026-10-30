@@ -1857,9 +1857,13 @@ def calculate_position_risk(
     }
 
 
-def _parse_portfolio_risk_args(args: list[str] | None) -> risk_policy.RiskParameters:
+def _parse_portfolio_risk_args(
+    args: list[str] | None, *, allow_missing_scope: bool = False
+) -> risk_policy.RiskParameters:
     try:
-        return risk_policy.parse_risk_args(args)
+        return risk_policy.parse_risk_args(
+            args, allow_missing_scope=allow_missing_scope
+        )
     except risk_policy.RiskPolicyError as exc:
         print(f"风险参数不可用：{exc}", file=sys.stderr)
         raise SystemExit(1) from None

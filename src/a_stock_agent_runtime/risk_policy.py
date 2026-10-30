@@ -21,6 +21,7 @@ class RiskParameters:
     account_scope: str | None = None
     portfolio_value_as_of: str | None = None
     off_account_strategy_cash: float = 0.0
+    account_scope_required: bool = False
 
     def denominator_evidence(self) -> dict[str, Any]:
         has_value = self.portfolio_value is not None
@@ -33,7 +34,8 @@ class RiskParameters:
             "denominator_freshness_status": "as_of_provided"
             if as_of_known
             else "unknown",
-            "denominator_requires_review": not (scope_known and as_of_known),
+            "denominator_requires_review": self.account_scope_required
+            or not (scope_known and as_of_known),
             "denominator_components": {
                 "account_value": self.portfolio_value - self.off_account_strategy_cash,
                 "off_account_strategy_cash": self.off_account_strategy_cash,
@@ -90,7 +92,13 @@ def _json_float(value: str) -> float:
     return number
 
 
-def _load_policy(path: str | None, scope: str | None, now: datetime) -> dict | None:
+def _load_policy(
+    path: str | None,
+    scope: str | None,
+    now: datetime,
+    *,
+    allow_missing_scope: bool = False,
+) -> dict | None:
     try:
         selected, configured = paths.risk_policy_path(path)
         if not selected.exists() and not selected.is_symlink() and not configured:
@@ -117,7 +125,9 @@ def _load_policy(path: str | None, scope: str | None, now: datetime) -> dict | N
         value[field] = _nonempty(value.get(field), field)
     if value.get("currency") != "CNY":
         raise RiskPolicyError("risk policy currency must be CNY")
-    if scope is None or value["account_scope"] != scope:
+    if (scope is None and not allow_missing_scope) or (
+        scope is not None and value["account_scope"] != scope
+    ):
         raise RiskPolicyError(
             "risk policy requires a matching explicit --account-scope"
         )
@@ -157,6 +167,7 @@ def resolve_risk_parameters(
     max_position_risk_pct: float | None = None,
     max_portfolio_risk_pct: float | None = None,
     now: datetime | None = None,
+    allow_missing_scope: bool = False,
 ) -> RiskParameters:
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None or current.utcoffset() is None:
@@ -175,14 +186,30 @@ def resolve_risk_parameters(
     # Always validate the selected file BEFORE any per-call numeric override.
     if policy_file is not None:
         policy_file = _nonempty(policy_file, "policy_file")
-    file_policy = _load_policy(policy_file, scope, current)
+    file_policy = _load_policy(
+        policy_file, scope, current, allow_missing_scope=allow_missing_scope
+    )
+    account_scope_required = file_policy is not None and scope is None
     for field, override in (
         ("max_position_risk_pct", max_position_risk_pct),
         ("max_portfolio_risk_pct", max_portfolio_risk_pct),
     ):
         if override is not None:
             _limit(override, field)
-    if file_policy is None:
+    if account_scope_required:
+        status = "not_applied_account_scope_required"
+        effective = {
+            "policy_id": file_policy["policy_id"],
+            "status": status,
+            "source": status,
+            "max_position_risk_pct": None,
+            "max_portfolio_risk_pct": None,
+            "field_sources": {
+                "max_position_risk_pct": status,
+                "max_portfolio_risk_pct": status,
+            },
+        }
+    elif file_policy is None:
         effective = risk_budget.policy(max_position_risk_pct, max_portfolio_risk_pct)
     else:
         effective = {
@@ -228,10 +255,14 @@ def resolve_risk_parameters(
         off_account = 0.0
     else:
         portfolio_value += off_account
-    return RiskParameters(portfolio_value, effective, scope, as_of, off_account)
+    return RiskParameters(
+        portfolio_value, effective, scope, as_of, off_account, account_scope_required
+    )
 
 
-def parse_risk_args(args: list[str] | None) -> RiskParameters:
+def parse_risk_args(
+    args: list[str] | None, *, allow_missing_scope: bool = False
+) -> RiskParameters:
     """Shared handler-independent parsing for both risk CLI commands."""
     options = {
         "--portfolio-value": "portfolio_value",
@@ -254,4 +285,4 @@ def parse_risk_args(args: list[str] | None) -> RiskParameters:
             values[name] = float(raw) if name in numeric else _nonempty(raw, name)
         except ValueError as exc:
             raise RiskPolicyError(f"invalid {option}") from exc
-    return resolve_risk_parameters(**values)
+    return resolve_risk_parameters(**values, allow_missing_scope=allow_missing_scope)

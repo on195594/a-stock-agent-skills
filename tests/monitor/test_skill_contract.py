@@ -223,3 +223,63 @@ def test_monitor_has_no_ambiguous_direct_sell_shortcuts():
     assert "3pts=黄色预警入口" in VALUATION_REVIEW
     assert "5pts=红色框架复核入口" in VALUATION_REVIEW
     assert "两级条件都不是独立卖出授权" in VALUATION_REVIEW
+
+
+def test_missing_account_inputs_still_require_one_holding_snapshot():
+    assert "缺少总资产时仍运行一次 `a-stock-cache monitor-snapshot --json`" in SKILL
+    assert "账户范围未经确认也省略 `--account-scope`" in SKILL
+    assert "不得以 `holdings`、fetcher 报价或手工风险求和替代快照" in SKILL
+    assert "不授予新增或加仓权限" in SKILL
+    assert "不调用快照" not in SKILL
+
+
+def test_l3_cadence_and_quarterly_comparison_require_evidence():
+    for marker in (
+        "季报只能裁定 `quarterly`/`event` 行",
+        "`semiannual`/`annual` 行仅作检查点",
+        "记录方向并保持状态",
+        "`unspecified` 行须用户通过 `a-stock-cache --confirm-write l3-update <id> <status> <as-of> <证据> [下次复核日期] --evidence-cadence <值>` 分类",
+        "a-stock-fetch quarter <代码> --json",
+        "yoy_same_period_end",
+        "vs_year_start",
+        "季节性对照",
+        "不能单独据此把 L3 设为 `triggered` 或 `not_triggered`",
+    ):
+        assert marker in DAILY_MONITORING
+
+
+def test_news_topics_and_pending_writes_are_explicit():
+    assert "每条活动 L3 `core_driver`/`non_core`" in SKILL
+    assert "行业或政策主题，加公司公告" in SKILL
+    assert "待确认写入" in SKILL
+    assert "完整、可复制命令" in SKILL
+    assert "l3-update <id> <status> <as-of> <证据>" in SKILL
+    assert "`alert-resolve`" in SKILL and "`alert-open` 续期" in SKILL
+    assert "仅列出，不执行" in SKILL
+
+
+def test_shared_research_service_waits_and_checks_latest_disclosure():
+    monitor = (ROOT / "references/research-service.md").read_text(encoding="utf-8")
+    research = (
+        ROOT.parent / "a-stock-research/references/research-service.md"
+    ).read_text(encoding="utf-8")
+    assert monitor == research
+    for marker in (
+        "同一问题二选一",
+        "轮询间隔至少 30 秒",
+        "20 分钟仍未完成则停止等待",
+        "不得同时提交研究又自行读披露抢先下结论",
+        "证据齐备后只交付一次合并答案",
+        "进度说明不得包含结论",
+        "`announcement_searches` 的 `until`",
+        "报告生成时间与当前日期比较",
+        "财报季还须查官方披露列表",
+        "引用旧报告用 `--parent-report-id`。",
+    ):
+        assert marker in monitor
+
+
+def test_l3_cadence_commands_include_required_positionals():
+    command = "a-stock-cache --confirm-write l3-update <id> <status> <as-of> <证据> [下次复核日期]"
+    assert command + " --evidence-cadence <值>" in DAILY_MONITORING
+    assert command + " [--evidence-cadence <值>]" in SKILL

@@ -116,6 +116,10 @@ def test_schema_migration_is_idempotent_for_legacy_fixture(
             for row in conn.execute("PRAGMA table_info(holding_l3_conditions)")
         }
         assert columns["condition_scope"][4] == "'legacy_unclassified'"
+        assert columns["evidence_cadence"][4] == "'unspecified'"
+        assert conn.execute(
+            "SELECT evidence_cadence FROM holding_l3_conditions"
+        ).fetchone() == ("unspecified",)
         assert conn.execute(
             "SELECT condition_scope, action_level, is_active FROM holding_l3_conditions"
         ).fetchone() == ("legacy_unclassified", "legacy_unclassified", 1)
@@ -473,3 +477,119 @@ def test_remove_holding_and_cleanup_cover_thesis_versions(capsys) -> None:
         assert conn.execute(
             "SELECT COUNT(*) FROM holding_thesis_versions"
         ).fetchone() == (0,)
+
+
+@pytest.mark.parametrize(
+    "cadence", ["quarterly", "semiannual", "annual", "event", "unspecified"]
+)
+def test_l3_evidence_cadence_round_trip_and_update_preserves_it(
+    cadence, capsys
+) -> None:
+    commands_holdings.cmd_add_holding(["000963", "30", "800"])
+    assert (
+        cache.main(
+            [
+                "--confirm-write",
+                "l3-add",
+                "000963",
+                "original",
+                "条件",
+                "临时规则",
+                "--evidence-cadence",
+                cadence,
+            ]
+        )
+        == 0
+    )
+    with db.db_session() as conn:
+        assert conn.execute(
+            "SELECT evidence_cadence FROM holding_l3_conditions"
+        ).fetchone() == (cadence,)
+        condition_id = str(
+            conn.execute("SELECT id FROM holding_l3_conditions").fetchone()[0]
+        )
+    assert (
+        cache.main(
+            [
+                "--confirm-write",
+                "l3-update",
+                condition_id,
+                "watch",
+                "2026-10-30",
+                "官方证据",
+                "2027-04-30",
+                "--evidence-cadence",
+                "semiannual",
+            ]
+        )
+        == 0
+    )
+    commands_monitor.cmd_l3_update([condition_id, "watch", "2026-10-30", "保留频率"])
+    capsys.readouterr()
+    commands_monitor.cmd_l3_list(["000963", "--json"])
+    assert (
+        json.loads(capsys.readouterr().out)["conditions"][0]["evidence_cadence"]
+        == "semiannual"
+    )
+    commands_monitor.cmd_l3_list(["000963"])
+    assert "evidence_cadence:semiannual" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "command,args",
+    [
+        ("l3-add", ["000963", "original", "条件"]),
+        ("l3-update", ["1", "watch", "2026-10-30", "证据"]),
+    ],
+)
+def test_l3_cadence_write_gate_and_invalid_values(
+    isolated_cache_database, command, args
+) -> None:
+    assert cache.main([command, *args, "--evidence-cadence", "annual"]) == 3
+    assert not isolated_cache_database.exists()
+    assert (
+        cache.main(["--confirm-write", command, *args, "--evidence-cadence", "monthly"])
+        == 1
+    )
+    assert not isolated_cache_database.exists()
+
+
+def test_l3_cadence_database_constraint() -> None:
+    condition_id = _add_holding_with_l3("000963")[0]
+    with db.db_session() as conn:
+        assert conn.execute(
+            "SELECT evidence_cadence FROM holding_l3_conditions"
+        ).fetchone() == ("unspecified",)
+        for invalid in (None, "monthly"):
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "UPDATE holding_l3_conditions SET evidence_cadence=? WHERE id=?",
+                    (invalid, condition_id),
+                )
+
+
+def test_thesis_rewrite_preserves_explicit_cadence_and_defaults_missing(
+    monkeypatch,
+) -> None:
+    old_ids = _add_holding_with_l3("000963")
+    payload = _payload(old_ids)
+    payload["new_l3"][0]["evidence_cadence"] = "semiannual"
+    payload["new_l3"].append({**payload["new_l3"][0], "condition": "第二条件"})
+    del payload["new_l3"][1]["evidence_cadence"]
+    _rewrite(monkeypatch, "000963", payload)
+    with db.db_session() as conn:
+        assert conn.execute(
+            "SELECT evidence_cadence FROM holding_l3_conditions WHERE is_active=1 ORDER BY id"
+        ).fetchall() == [("semiannual",), ("unspecified",)]
+
+
+def test_thesis_rewrite_rejects_invalid_cadence_before_mutation(monkeypatch) -> None:
+    old_ids = _add_holding_with_l3("000963")
+    payload = _payload(old_ids)
+    payload["new_l3"][0]["evidence_cadence"] = "monthly"
+    with pytest.raises(SystemExit):
+        _rewrite(monkeypatch, "000963", payload)
+    with db.db_session() as conn:
+        assert conn.execute(
+            "SELECT is_active FROM holding_l3_conditions"
+        ).fetchall() == [(1,)]

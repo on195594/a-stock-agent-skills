@@ -44,6 +44,13 @@ nonnegative, and total liabilities to be finite and positive. Missing components
 remain missing, rather than becoming zero, without blocking other financial
 fields.
 
+`a-stock-fetch quarter` shares fetch's annual dividend calculation, including
+announced proposals and the existing whole-year split adjustment. The helper
+returns the selected year, periods and split metadata with DPS; quarter does not
+reconstruct them. Quarter reads the same financial adapter to obtain fetch's
+split cutoff year. Missing or nonpositive DPS produces null with a reason and
+null dividend-spread thresholds.
+
 ## Versioned wire contracts
 
 ### decision-v1
@@ -119,8 +126,19 @@ not exempt future releases. No production legacy-permissive parsing switch exist
 
 `risk_policy.py` resolves the shared effective parameters before either risk
 handler runs. A selected invalid policy fails closed even with numeric overrides;
-file identity, confirmation, scope, timezone and field sources are explicit. No
-policy is written or adopted by the model. Denominator as-of/scope gaps remain
+file identity, confirmation, scope, timezone and field sources are explicit.
+`monitor-snapshot` alone may omit an account scope even with a selected policy:
+the file is still validated, but its limits, CLI limit overrides and strategy cash
+are not applied. In this mode `account.risk_policy.status`, `source` and both
+`field_sources` are `not_applied_account_scope_required`; `policy_id` identifies
+the validated file and both limits are null. This documented monitor-v1 exception
+requires the matching validator; ordinary policies still require positive limits.
+`denominator_requires_review` is always true, even with a value and as-of supplied.
+The golden `monitor-policy-not-applied.json` records this shape.
+The holding layer remains available; `account_scope` is a data gap, weights and
+budget conclusions are null, and the snapshot cannot be clean/no_action. An
+explicit mismatched scope, invalid/unreadable or expired policy still fails.
+No policy is written or adopted by the model. Denominator as-of/scope gaps remain
 visible and do not grant new-risk authorization. Existing monitor-v1 safety and
 coordinated-release boundaries above remain in force.
 

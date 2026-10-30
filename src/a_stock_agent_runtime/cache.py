@@ -239,6 +239,8 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
 }
 
 _CLI_VALUE_OPTIONS = {
+    "l3-add": ("--evidence-cadence",),
+    "l3-update": ("--evidence-cadence",),
     "add-holding": ("--notes", "--fee", "--date"),
     "buy-holding": ("--fee", "--date"),
     "sell-holding": ("--fee", "--tax", "--date"),

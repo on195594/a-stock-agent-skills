@@ -261,3 +261,22 @@ def test_loads_and_dumps_round_trip() -> None:
     text = monitor_contract.dumps_monitor_snapshot(payload)
     assert " " not in text
     assert monitor_contract.loads_monitor_snapshot(text) == payload
+
+
+def test_unapplied_policy_golden_and_inconsistent_limits():
+    from pathlib import Path
+
+    payload = json.loads(
+        (Path(__file__).parent / "golden" / "monitor-policy-not-applied.json").read_text()
+    )
+    assert monitor_contract.validate_monitor_snapshot(payload) is payload
+    payload["account"]["risk_policy"]["max_position_risk_pct"] = 2
+    with pytest.raises(monitor_contract.MonitorContractError, match="must be null"):
+        monitor_contract.validate_monitor_snapshot(payload)
+
+
+def test_ordinary_policy_still_rejects_null_limits():
+    payload = _snapshot()
+    payload["account"]["risk_policy"]["max_position_risk_pct"] = None
+    with pytest.raises(monitor_contract.MonitorContractError, match="must be positive"):
+        monitor_contract.validate_monitor_snapshot(payload)
