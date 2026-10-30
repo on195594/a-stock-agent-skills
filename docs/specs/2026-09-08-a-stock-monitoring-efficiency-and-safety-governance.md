@@ -209,6 +209,7 @@ preflight → local snapshot → close DB session → one quote batch
 - `alert_review_due`
 - `l3_review_due`
 - `l3_candidate`
+- `l3_watch`（0.1.28：已核实的观察项，数据完整但永不 clear）
 - `governance_gate`
 - `quote_gap`
 - `denominator_missing`
@@ -222,7 +223,7 @@ preflight → local snapshot → close DB session → one quote batch
 - 部分报价：只报告下限，缺价持仓进入 `review_required`；
 - 报价过期：不得确认当日价格触发；
 - active holding 与券商/权威输入冲突：`blocked`，先对账，不删除历史；
-- L3 legacy/pending/watch/invalid：保留具体待核实项，不得写“全部未触发”；
+- L3 legacy/pending/invalid：保留具体待核实项，不得写“全部未触发”；watch 为已核实观察项，以 `l3_watch` 升级、冻结新增风险，不标 partial；
 - 任一关键字段 unavailable/conflicted：不能生成确定性交易候选。
 
 ### 5.6 审计 manifest

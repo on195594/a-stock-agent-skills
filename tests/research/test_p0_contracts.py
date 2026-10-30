@@ -224,7 +224,7 @@ def test_project_version_is_single_release_source() -> None:
     pyproject = tomllib.loads(
         (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     )
-    assert pyproject["project"]["version"] == "0.1.27"
+    assert pyproject["project"]["version"] == "0.1.28"
     lock = tomllib.loads((PROJECT_ROOT / "uv.lock").read_text(encoding="utf-8"))
     project = next(
         item for item in lock["package"] if item["name"] == "a-stock-agent-skills"

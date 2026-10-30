@@ -48,6 +48,7 @@ _ESCALATION_REASON_ORDER = (
     "alert_review_due",
     "l3_review_due",
     "l3_candidate",
+    "l3_watch",
     "governance_gate",
     "risk_budget_exceeded",
     "quote_gap",
@@ -272,7 +273,9 @@ def _l3_view(holding: dict[str, Any], today: date) -> tuple[dict, list[str], boo
                 contract = "invalid"
                 gaps.append(f"L3 condition {condition['id']} contract invalid")
                 unresolved = True
-            if condition["status"] in {"pending", "watch"}:
+            # A verified watch row is resolved evidence with heightened risk; it is
+            # reported separately as l3_watch instead of making the data partial.
+            if condition["status"] == "pending":
                 unresolved = True
             due = _due(condition["next_review"], today)
             condition["review_due"] = due
@@ -667,6 +670,15 @@ def build_monitor_snapshot(
                     f"L3 condition {condition['id']} is due",
                     evidence_cadence=condition.get("evidence_cadence", "unspecified"),
                 )
+            if condition["status"] == "watch":
+                _add_escalation(
+                    escalations,
+                    code,
+                    "l3_watch",
+                    f"L3 condition {condition['id']} is watch (as_of {condition['as_of']}, "
+                    f"next_review {condition['next_review']}); no new risk",
+                    evidence_cadence=condition.get("evidence_cadence", "unspecified"),
+                )
             if condition["status"] == "triggered":
                 candidate = (
                     "trade"
@@ -1041,6 +1053,7 @@ _BRIEF_REASONS = {
     "alert_review_due": "预警到期复核",
     "l3_review_due": "L3到期复核",
     "l3_candidate": "L3待复核",
+    "l3_watch": "L3观察中",
     "governance_gate": "门禁未通过",
     "risk_budget_exceeded": "风险预算超限",
     "quote_gap": "行情缺失",

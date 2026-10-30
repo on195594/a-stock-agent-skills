@@ -40,7 +40,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 ### Level 2：按升级项展开
 
-只加载与 runtime 升级原因或上述账户差异相符的资料。L3 触发或候选必须先读下表的日常监控与 L3 资料完成复核；写入待确认不替代这一步。升级项需要公司公开证据时，按 [Research 服务](references/research-service.md) 先读已有报告，仅对关键缺口发起追问/纠错；结果返回父级复核，不直接改变账户动作：
+只加载与 runtime 升级原因或上述账户差异相符的资料。L3 触发或候选必须先读下表的日常监控与 L3 资料完成复核；写入待确认不替代这一步。`l3_watch` 是已核实的观察项：冻结该股新增风险，`next_review` 前不重复核实，只在首屏列出。升级项需要公司公开证据时，按 [Research 服务](references/research-service.md) 先读已有报告，仅对关键缺口发起追问/纠错；结果返回父级复核，不直接改变账户动作：
 
 | 升级原因 | Reference |
 |---|---|

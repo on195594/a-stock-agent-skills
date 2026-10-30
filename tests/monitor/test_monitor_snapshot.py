@@ -513,7 +513,7 @@ def test_partial_quotes_preserve_priced_position_lower_bound(
     }
 
 
-@pytest.mark.parametrize("l3_state", ["pending", "watch", "legacy", "invalid"])
+@pytest.mark.parametrize("l3_state", ["pending", "legacy", "invalid"])
 def test_unresolved_l3_never_clears(
     l3_state, isolated_cache_database, monkeypatch, capsys
 ) -> None:
@@ -539,6 +539,29 @@ def test_unresolved_l3_never_clears(
         l3_state if l3_state in {"legacy", "invalid"} else "versioned"
     )
     assert "l3_candidate" in {item["reason_code"] for item in payload["escalations"]}
+
+
+def test_verified_watch_l3_is_complete_but_never_clears(
+    isolated_cache_database, monkeypatch, capsys
+) -> None:
+    _seed_holding(isolated_cache_database, l3_status="watch")
+    mock_price_quotes(monkeypatch, _quotes)
+
+    result, payload = _run(capsys, ["--portfolio-value", "100000"])
+
+    assert result == 0
+    assert payload["data_status"] == "complete"
+    assert payload["review_status"] == "review_required"
+    assert payload["action_status"] == "review_candidate"
+    assert payload["stop_reason"] is None
+    reasons = {item["reason_code"] for item in payload["escalations"]}
+    assert "l3_watch" in reasons
+    assert "l3_candidate" not in reasons
+    watch = next(i for i in payload["escalations"] if i["reason_code"] == "l3_watch")
+    assert watch["candidate"] == "review"
+    assert "next_review" in watch["detail"] and "no new risk" in watch["detail"]
+    assert watch["evidence_cadence"] == "unspecified"
+    assert not any(gap["field"] == "l3" for gap in payload["data_gaps"])
 
 
 def test_legacy_l3_and_stale_quote_are_not_clean(

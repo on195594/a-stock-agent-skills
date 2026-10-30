@@ -30,6 +30,7 @@ ESCALATION_REASON_CODES = frozenset(
         "alert_review_due",
         "l3_review_due",
         "l3_candidate",
+        "l3_watch",
         "governance_gate",
         "risk_budget_exceeded",
         "quote_gap",
