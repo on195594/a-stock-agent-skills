@@ -315,6 +315,22 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.27 activation (2026-10-30)
+
+Release `0.1.27` (`1e3fad8`) was committed and pushed to `master`. The installer activated
+release `0.1.27-1e3fad8bf995` across stable CLI commands and client Skill discovery links
+(`claude`, `codex`, `hermes`, shared `~/.agents/skills/`); rollback manifest
+`~/.local/share/a-stock-agent/rollback-1793368147753282680.json`. Full matrix: 1,550+ tests
+passed (11 skipped), Ruff, regulatory freshness, standalone QA and cron smoke passed; two agy
+review rounds, the second clean. Migration `036-l3-evidence-cadence` (additive column, all 34
+rows `unspecified`) was first applied by a live `uv run a-stock-fetch quarter` check from the
+source tree before the backup, so `backup-pre-0.1.27-20261030-214847.db` already contains the
+column; 0.1.26 reads it unchanged. Live checks: `monitor-snapshot --json` without
+`--portfolio-value`/`--account-scope` now returns the holdings layer with
+`risk_policy.status=not_applied_account_scope_required`, `action_status=review_candidate`;
+`a-stock-fetch quarter` for 603606/600900/000963 matched the 2026Q3 filings. Paired Research
+server: `08e7e89`. No account state or investment rules were changed.
+
 ## 0.1.26 activation (2026-10-29)
 
 Release `0.1.26` (`e838b7f`) was committed and pushed to `master`. The installer activated
