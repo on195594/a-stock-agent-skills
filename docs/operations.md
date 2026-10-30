@@ -315,6 +315,16 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.28 activation (2026-10-30)
+
+Release `0.1.28` (`048fc45`) was committed and pushed to `master` and activated as
+`0.1.28-048fc4532cbc` for `claude`, `codex`, `hermes` and shared `~/.agents/skills/`; rollback
+manifest `~/.local/share/a-stock-agent/rollback-1793373971278693640.json`, database backup
+`backups/backup-pre-0.1.28-20261030-232608.db` (no schema change). Full matrix 1,569 passed
+(11 skipped); mutation check: restoring `watch` as unresolved fails the new test. Live check with
+the confirmed account inputs: `data_status=complete`, `review_candidate`, 603606 reported as
+`l3_watch` instead of `l3_candidate`. No account state or investment rules were changed.
+
 ## 0.1.27 activation (2026-10-30)
 
 Release `0.1.27` (`1e3fad8`) was committed and pushed to `master`. The installer activated
