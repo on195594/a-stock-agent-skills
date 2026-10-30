@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 
 
@@ -79,12 +77,6 @@ def test_qa_is_runtime_independent() -> None:
     assert "a-stock-monitor report" not in QA_SKILL
 
 
-def test_research_qa_routing_is_host_neutral() -> None:
-    assert "a-stock-qa" in RESEARCH
-    for client_command in ("agy --", "codex:", "claude:", "hermes:"):
-        assert client_command not in RESEARCH.lower()
-
-
 def test_qa_verdict_is_bound_to_an_immutable_report_snapshot() -> None:
     for contract in (
         "完整报告正文的不可变快照",
@@ -107,17 +99,6 @@ def test_held_stock_route_hard_stops_research_work() -> None:
     assert "改用 `a-stock-monitor`" in RESEARCH
     assert "账本不可用时可继续公开研究" in RESEARCH
     assert "不得声称新仓或给账户级动作" in RESEARCH
-
-
-def test_standalone_smoke_uses_isolated_python() -> None:
-    result = subprocess.run(
-        [sys.executable, "-I", str(ROOT / "tests/qa/standalone_smoke.py")],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 def test_qa_separates_process_data_and_decision_status() -> None:

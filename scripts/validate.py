@@ -73,7 +73,9 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
                     "move conditional detail to references"
                 )
             if _THRESHOLD_RE.search(text):
-                errors.append(f"{path}: deterministic threshold duplicated in main Skill")
+                errors.append(
+                    f"{path}: deterministic threshold duplicated in main Skill"
+                )
             for label, markers in _REQUIRED_MARKERS.items():
                 if not all(marker in text for marker in markers):
                     errors.append(f"{path}: missing {label}")
@@ -88,7 +90,17 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
         if not scan_root.exists():
             continue
         for path in scan_root.rglob("*"):
-            if not path.is_file() or ".git" in path.parts:
+            relative = path.relative_to(scan_root)
+            if (
+                not path.is_file()
+                or {".git", "__pycache__"}.intersection(relative.parts)
+                or path.suffix in {".pyc", ".pyo"}
+            ):
+                continue
+            if {"logs", "locks"}.intersection(relative.parts[:-1]) or re.fullmatch(
+                r"cache\.db(?:-(?:wal|shm))?|\.env(?:\..+)?", path.name
+            ):
+                errors.append(f"mutable file packaged: {path}")
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             if re.search(r"(?:~|/home/[^/]+)/\.(?:claude|agents|hermes)/skills", text):
@@ -97,10 +109,6 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
                 r"(?:\bagy\s+--|\bcodex:|\bclaude:|\bhermes:)", text, re.I
             ):
                 errors.append(f"{path}: client-specific tool invocation")
-            if re.search(
-                r"(?:cache\.db(?:-(?:wal|shm))?|\.env|/logs/|/locks/)", path.name
-            ):
-                errors.append(f"mutable file packaged: {path}")
     return errors
 
 
