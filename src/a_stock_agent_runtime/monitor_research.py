@@ -107,6 +107,9 @@ def summarize(result: dict, holding_codes: list[str]) -> tuple[dict, list, list]
             horizon = (candidate["card"]["current"].get("valuation") or {}).get("horizon")
             if horizon is None or horizon <= 0:
                 continue
+            # Candidates that cannot reach the threshold even before costs need no date check.
+            if candidate["neutral_return"] - holding["neutral_return"] < 0.03:
+                continue
             if not holding["close_date"] or not candidate["close_date"]:
                 mismatches.append(f"{code}/{candidate['code']} 缺少收盘日，未比较机会成本")
                 continue
