@@ -304,6 +304,8 @@ def _build_cli_parser() -> argparse.ArgumentParser:
             command_parser.add_argument(option, metavar="值")
         if command in {"watchlist", "monitor-snapshot"}:
             command_parser.add_argument("--json", action="store_true")
+        if command == "monitor-snapshot":
+            command_parser.add_argument("--no-research", action="store_true")
         if command == "watchlist":
             command_parser.add_argument("--breakdown", action="store_true")
         if command == "holdings":

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import json
 import math
 import re
@@ -31,6 +31,7 @@ ESCALATION_REASON_CODES = frozenset(
         "l3_review_due",
         "l3_candidate",
         "l3_watch",
+        "research_thesis_review",
         "governance_gate",
         "risk_budget_exceeded",
         "quote_gap",
@@ -113,6 +114,163 @@ def _required(item: dict[str, Any], fields: set[str], field: str) -> None:
     missing = sorted(fields - item.keys())
     if missing:
         raise MonitorContractError(f"missing required field: {field}.{missing[0]}")
+
+
+RESEARCH_STATUSES = frozenset({"ok", "not_configured", "unavailable", "skipped"})
+REVIEW_PROMPT_KINDS = frozenset({"valuation_stretched", "opportunity_cost", "research_unavailable"})
+_RESEARCH_ROW_FIELDS = {
+    "code", "card", "card_status", "verdict", "report_id", "completed_at",
+    "close", "close_date", "zone", "neutral_return", "conservative_return",
+    "optimistic_return", "note",
+}
+
+
+def _research_code(value: Any) -> None:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]{6}", value) is None:
+        raise MonitorContractError("research code must be six digits")
+
+
+def _research_number(value: Any) -> None:
+    if value is not None and (isinstance(value, bool) or not isinstance(value, (float, int))):
+        raise MonitorContractError("research number must be numeric or null")
+
+
+def _research_date(value: Any) -> None:
+    if value is not None:
+        try:
+            date.fromisoformat(value)
+        except (TypeError, ValueError):
+            raise MonitorContractError("research close_date must be an ISO date or null") from None
+
+
+def _research_card(raw: Any) -> dict:
+    card = _object(raw, "research.card")
+    _required(card, {"code", "origin", "status", "verdict", "report_id", "completed_at", "current", "pending_events"}, "research.card")
+    _research_code(card["code"])
+    _supported(card["origin"], frozenset({"external", "l5"}), "research.card.origin")
+    _supported(card["status"], frozenset({"有效", "待复核"}), "research.card.status")
+    if type(card["report_id"]) is not int or card["report_id"] <= 0:
+        raise MonitorContractError("research report_id must be a positive integer")
+    _iso8601(card["completed_at"], "research.card.completed_at")
+    _optional_string(card.get("verdict"), "research.card.verdict")
+    for raw_event in _array(card["pending_events"], "research.card.pending_events"):
+        event = _object(raw_event, "research.card.pending_event")
+        for field in ("title", "kind", "type"):
+            _optional_string(event.get(field), "research.card.event")
+    current = _object(card["current"], "research.card.current")
+    _required(current, {"last_close", "last_close_date", "current_zone", "valuation"}, "research.card.current")
+    _research_number(current["last_close"])
+    _research_date(current["last_close_date"])
+    for field in ("current_zone", "note", "reason"):
+        _optional_string(current.get(field), "research.card.current")
+    if current["valuation"] is not None:
+        valuation = _object(current["valuation"], "research.card.valuation")
+        _required(valuation, {"annual_returns", "horizon"}, "research.card.valuation")
+        for field in ("horizon", "support_below", "stretched_above", "close"):
+            _research_number(valuation.get(field))
+        _optional_string(valuation.get("reason"), "research.card.valuation.reason")
+        if valuation["annual_returns"] is not None:
+            returns = _object(valuation["annual_returns"], "research.card.annual_returns")
+            _required(returns, {"保守", "中性", "乐观"}, "research.card.annual_returns")
+            for number in returns.values():
+                _research_number(number)
+    return card
+
+
+def validate_research_cards(payload: dict) -> None:
+    """Check the optional HTTP boundary before it can affect a monitor snapshot."""
+    _reject_nonfinite(payload)
+    _required(payload, {"cards", "missing"}, "research")
+    codes = []
+    for raw in _array(payload["cards"], "research.cards"):
+        codes.append(_research_card(raw)["code"])
+    for raw in _array(payload["missing"], "research.missing"):
+        item = _object(raw, "research.missing")
+        _research_code(item.get("code"))
+        _supported(item.get("origin"), frozenset({"external", "l5"}), "research.missing.origin")
+        codes.append(item["code"])
+    if len(set(codes)) != len(codes):
+        raise MonitorContractError("research response has duplicate codes")
+
+
+def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
+    # Old snapshots remain readable; when present the additive pair is validated.
+    if "research" not in value and "review_prompts" not in value:
+        return
+    _required(value, {"research", "review_prompts"}, "snapshot")
+    research = _object(value["research"], "research")
+    _required(research, {"status", "holdings", "candidates", "missing"}, "research")
+    status = _supported(research["status"], RESEARCH_STATUSES, "research.status")
+    _optional_string(research.get("reason"), "research.reason")
+    for group in ("holdings", "candidates"):
+        codes = []
+        for raw in _array(research[group], f"research.{group}"):
+            row = _object(raw, "research.row")
+            _required(row, _RESEARCH_ROW_FIELDS, "research.row")
+            _research_code(row["code"])
+            codes.append(row["code"])
+            if row["card"] is not None:
+                card = _research_card(row["card"])
+                if status != "ok" or any(row[left] != card[right] for left, right in (
+                    ("code", "code"), ("card_status", "status"), ("report_id", "report_id"),
+                    ("completed_at", "completed_at"), ("verdict", "verdict"),
+                )):
+                    raise MonitorContractError("research card projection is inconsistent")
+                if group == "candidates" and card["origin"] != "l5":
+                    raise MonitorContractError("research candidate must originate from l5")
+                current = card["current"]
+                returns = (current.get("valuation") or {}).get("annual_returns") or {}
+                expected = {
+                    "close": current["last_close"], "close_date": current["last_close_date"],
+                    "zone": current["current_zone"], "neutral_return": returns.get("中性"),
+                    "conservative_return": returns.get("保守"), "optimistic_return": returns.get("乐观"),
+                }
+                if any(row[field] != number for field, number in expected.items()):
+                    raise MonitorContractError("research current projection is inconsistent")
+            elif any(row[field] is not None for field in _RESEARCH_ROW_FIELDS - {"code", "card"}):
+                raise MonitorContractError("missing research card requires null projection")
+            for field in ("close", "neutral_return", "conservative_return", "optimistic_return"):
+                _research_number(row[field])
+            for field in ("zone", "note"):
+                _optional_string(row[field], f"research.row.{field}")
+            _research_date(row["close_date"])
+        if len(codes) != len(set(codes)) or (
+            group == "holdings" and set(codes) != holding_codes
+            or group == "candidates" and set(codes) & holding_codes
+        ):
+            raise MonitorContractError("research holding/candidate scope is inconsistent")
+    for code in _array(research["missing"], "research.missing"):
+        _research_code(code)
+    for raw in _array(value["review_prompts"], "review_prompts"):
+        prompt = _object(raw, "review_prompt")
+        _required(prompt, {"code", "kind", "detail", "evidence"}, "review_prompt")
+        kind = _supported(prompt["kind"], REVIEW_PROMPT_KINDS, "review_prompt.kind")
+        if kind == "research_unavailable":
+            if prompt["code"] is not None or status != "unavailable":
+                raise MonitorContractError("research_unavailable requires unavailable research")
+        elif prompt["code"] not in holding_codes or status != "ok":
+            raise MonitorContractError("review prompt requires an active researched holding")
+        _nonempty(prompt["detail"], "review_prompt.detail")
+        evidence = _object(prompt["evidence"], "review_prompt.evidence")
+        if kind != "research_unavailable":
+            evidence_rows = [evidence]
+            if kind == "opportunity_cost":
+                _required(evidence, {"holding", "candidate", "holding_neutral_return", "candidate_neutral_return",
+                                     "candidate_horizon", "annual_switch_cost", "net_advantage"}, "review_prompt.evidence")
+                evidence_rows = [evidence["holding"], evidence["candidate"]]
+                for field in ("holding_neutral_return", "candidate_neutral_return", "candidate_horizon",
+                              "annual_switch_cost", "net_advantage"):
+                    _research_number(evidence[field])
+                    if evidence[field] is None:
+                        raise MonitorContractError("opportunity_cost evidence requires numbers")
+            for raw_evidence in evidence_rows:
+                item = _object(raw_evidence, "review_prompt.evidence.row")
+                _required(item, {"code", "report_id", "close_date", "close"}, "review_prompt.evidence.row")
+                _research_code(item["code"])
+                if type(item["report_id"]) is not int or item["report_id"] <= 0:
+                    raise MonitorContractError("review_prompt report_id must be a positive integer")
+                _research_date(item["close_date"])
+                _research_number(item["close"])
 
 
 def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
@@ -319,6 +477,8 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
                     "within_budget requires complete holding risk evidence"
                 )
 
+    _validate_research_fields(value, {holding["code"] for holding in holdings})
+
     escalations = _array(value["escalations"], "escalations")
     for index, raw in enumerate(escalations):
         item = _object(raw, f"escalations[{index}]")
@@ -345,6 +505,18 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
             f"escalations[{index}].candidate",
         )
         _nonempty(item["detail"], f"escalations[{index}].detail")
+
+    thesis_reviews = [item for item in escalations if item["reason_code"] == "research_thesis_review"]
+    pending_codes = {
+        row["code"] for row in value.get("research", {}).get("holdings", [])
+        if row["card_status"] == "待复核"
+    }
+    if (len(thesis_reviews) != len(pending_codes)
+            or {item["code"] for item in thesis_reviews} != pending_codes
+            or any(item["candidate"] != "review" for item in thesis_reviews)
+            or thesis_reviews and value["review_status"] == "cleared"):
+        raise MonitorContractError("research thesis reviews require pending holding cards and review status")
+    gate_escalations = [item for item in escalations if item["reason_code"] != "research_thesis_review"]
 
     gaps = _array(value["data_gaps"], "data_gaps")
     for index, raw in enumerate(gaps):
@@ -498,9 +670,9 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
     if stop_reason == "clean_fast_gate" and (
         value["data_status"] != "complete"
         or value["valuation_status"] != "exact"
-        or value["review_status"] != "cleared"
+        or value["review_status"] != ("review_required" if thesis_reviews else "cleared")
         or action_status != "no_action"
-        or escalations
+        or gate_escalations
         or gaps
         or not coverage["complete"]
     ):

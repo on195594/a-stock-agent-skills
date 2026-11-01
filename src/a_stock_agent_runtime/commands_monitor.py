@@ -23,6 +23,7 @@ from a_stock_agent_runtime import (
     db,
     domain,
     monitor_contract,
+    monitor_research,
     risk_budget,
     risk_gates,
 )
@@ -49,6 +50,7 @@ _ESCALATION_REASON_ORDER = (
     "l3_review_due",
     "l3_candidate",
     "l3_watch",
+    "research_thesis_review",
     "governance_gate",
     "risk_budget_exceeded",
     "quote_gap",
@@ -364,6 +366,7 @@ def build_monitor_snapshot(
     risk_policy: dict | None = None,
     denominator_evidence: dict | None = None,
     account_scope_required: bool = False,
+    research_result: dict | None = None,
 ) -> dict[str, Any]:
     """Purely combine one local snapshot and one shared quote snapshot."""
     portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
@@ -827,14 +830,6 @@ def build_monitor_snapshot(
             escalations, breach["code"], "risk_budget_exceeded", breach["detail"]
         )
 
-    escalations.sort(
-        key=lambda item: (
-            0 if item["candidate"] == "trade" else 1,
-            _REASON_ORDER[item["reason_code"]],
-            item["code"] or "",
-            item["detail"],
-        )
-    )
     gaps.sort(
         key=lambda item: (item["code"] or "", item["field"], item["minimum_action"])
     )
@@ -925,13 +920,13 @@ def build_monitor_snapshot(
             "stop_reason": "clean_fast_gate" if clean else None,
         },
     }
-    monitor_contract.validate_monitor_snapshot(payload)
-    return payload
+    return _with_research(payload, research_result)
 
 
 def unavailable_monitor_snapshot(
     portfolio_value: float | None, risk_policy: dict | None = None,
     denominator_evidence: dict | None = None,
+    research_result: dict | None = None,
 ) -> dict[str, Any]:
     portfolio_value = portfolio_value if risk_budget.positive_number(portfolio_value) else None
     payload = {
@@ -993,6 +988,22 @@ def unavailable_monitor_snapshot(
             "stop_reason": None,
         },
     }
+    return _with_research(payload, research_result)
+
+
+def _with_research(payload: dict, result: dict | None) -> dict:
+    research, prompts, escalations = monitor_research.summarize(
+        result or {"status": "not_configured"},
+        [holding["code"] for holding in payload["holdings"]],
+    )
+    payload["research"], payload["review_prompts"] = research, prompts
+    payload["escalations"].extend(escalations)
+    payload["escalations"].sort(key=lambda item: (
+        0 if item["candidate"] == "trade" else 1,
+        _REASON_ORDER[item["reason_code"]], item["code"] or "", item["detail"],
+    ))
+    if escalations and payload["review_status"] == "cleared":
+        payload["review_status"] = "review_required"
     monitor_contract.validate_monitor_snapshot(payload)
     return payload
 
@@ -1001,7 +1012,7 @@ def _parse_monitor_snapshot_args(args: list[str]) -> RiskParameters:
     if "--json" not in args:
         _fail("monitor-snapshot requires --json")
     return commands_holdings._parse_portfolio_risk_args(
-        [arg for arg in args if arg != "--json"], allow_missing_scope=True
+        [arg for arg in args if arg not in {"--json", "--no-research"}], allow_missing_scope=True
     )
 
 
@@ -1010,13 +1021,16 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
     started = time.perf_counter()
     parameters = _parse_monitor_snapshot_args(args)
     portfolio_value, limits = parameters.portfolio_value, parameters.risk_policy
+    research_result = monitor_research.fetch_cards(skip="--no-research" in args)
     preflight_done = time.perf_counter()
     try:
         local = _load_monitor_local_snapshot()
     except (OSError, sqlite3.Error):
         print(
             monitor_contract.dumps_monitor_snapshot(
-                unavailable_monitor_snapshot(portfolio_value, limits, parameters.denominator_evidence())
+                unavailable_monitor_snapshot(
+                    portfolio_value, limits, parameters.denominator_evidence(), research_result
+                )
             )
         )
         raise SystemExit(1) from None
@@ -1032,6 +1046,7 @@ def cmd_monitor_snapshot(args: list[str]) -> None:
         risk_policy=limits,
         denominator_evidence=parameters.denominator_evidence(),
         account_scope_required=parameters.account_scope_required,
+        research_result=research_result,
         now=domain.cst_now(),
         stage_timings_ms={
             "preflight": round((preflight_done - started) * 1000),
@@ -1054,6 +1069,7 @@ _BRIEF_REASONS = {
     "l3_review_due": "L3到期复核",
     "l3_candidate": "L3待复核",
     "l3_watch": "L3观察中",
+    "research_thesis_review": "研究论点待复核",
     "governance_gate": "门禁未通过",
     "risk_budget_exceeded": "风险预算超限",
     "quote_gap": "行情缺失",
