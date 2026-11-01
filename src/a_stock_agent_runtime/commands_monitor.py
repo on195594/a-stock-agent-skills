@@ -1002,8 +1002,13 @@ def _with_research(payload: dict, result: dict | None) -> dict:
         0 if item["candidate"] == "trade" else 1,
         _REASON_ORDER[item["reason_code"]], item["code"] or "", item["detail"],
     ))
-    if escalations and payload["review_status"] == "cleared":
-        payload["review_status"] = "review_required"
+    if escalations:
+        # A thesis review is an escalation like any other: it ends the clean fast path.
+        if payload["review_status"] == "cleared":
+            payload["review_status"] = "review_required"
+        if payload["action_status"] == "no_action":
+            payload["action_status"] = "review_candidate"
+        payload["stop_reason"] = payload["manifest"]["stop_reason"] = None
     monitor_contract.validate_monitor_snapshot(payload)
     return payload
 

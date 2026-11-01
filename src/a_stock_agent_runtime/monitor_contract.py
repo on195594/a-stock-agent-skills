@@ -516,7 +516,6 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
             or any(item["candidate"] != "review" for item in thesis_reviews)
             or thesis_reviews and value["review_status"] == "cleared"):
         raise MonitorContractError("research thesis reviews require pending holding cards and review status")
-    gate_escalations = [item for item in escalations if item["reason_code"] != "research_thesis_review"]
 
     gaps = _array(value["data_gaps"], "data_gaps")
     for index, raw in enumerate(gaps):
@@ -670,9 +669,9 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
     if stop_reason == "clean_fast_gate" and (
         value["data_status"] != "complete"
         or value["valuation_status"] != "exact"
-        or value["review_status"] != ("review_required" if thesis_reviews else "cleared")
+        or value["review_status"] != "cleared"
         or action_status != "no_action"
-        or gate_escalations
+        or escalations
         or gaps
         or not coverage["complete"]
     ):

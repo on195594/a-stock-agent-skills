@@ -104,12 +104,12 @@ The holding-sale ledger imports the same stamp-tax constant. No sizing is genera
 
 A pending holding card adds `research_thesis_review` with `candidate=review` and
 pending event titles/types, ordered after `l3_watch` and before `governance_gate`.
-Only `review_status=cleared` becomes `review_required`; blocked reviews remain blocked.
-Research never changes `data_status`, `action_status`, `data_gaps`, or the existing
-`clean_fast_gate` result. Consequently a clean account gate may coexist with
-`review_required` and research-only escalations: the validator explicitly allows
-this exception only with matching pending holding cards, and the Skill still routes
-those escalations to Level 2. All ordinary escalations retain their gate semantics,
+Like every other escalation it ends the clean fast path: `review_status=cleared`
+becomes `review_required`, `action_status=no_action` becomes `review_candidate` and
+`stop_reason` is null; blocked reviews remain blocked. It never freezes risk or creates
+a trade candidate. Research availability (`not_configured`/`unavailable`/`skipped`) and
+`review_prompts` never change `data_status`, `action_status`, `data_gaps` or
+`clean_fast_gate`. All ordinary escalations retain their gate semantics,
 including `risk_budget_exceeded`. Research prompts and errors cannot freeze risk,
 confirm L3, authorize trades or write state. Production comparison remains an
 activation-time check requiring separate authorization.

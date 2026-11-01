@@ -3,7 +3,7 @@
 ## 0.1.29 — 2026-11-01
 
 - 按批次 B 授权接入 Research 论点卡：快照只读一次 `/api/cards`，新增 `research`、`review_prompts`、`--no-research` 与 CLI `research cards/card`；共享 HTTP 凭据、超时、版本与脱敏处理。
-- 有效卡支持透支区提醒及扣交易成本后至少 3 个百分点的机会成本提醒；待复核持仓卡新增 `research_thesis_review`，仅影响复核状态。原数据/动作/缺口及 clean gate 保留，提醒不进入升级项、不推导交易数量。印花税与佣金常量统一归属 `trading_costs.py`。
+- 有效卡支持透支区提醒及扣交易成本后至少 3 个百分点的机会成本提醒；待复核持仓卡新增 `research_thesis_review`，与其他升级项一样结束干净快速路径（不冻结、不产生交易候选）；提醒与 Research 不可用不改变数据/动作/缺口及 clean gate，提醒不进入升级项、不推导交易数量。印花税与佣金常量统一归属 `trading_costs.py`。
 - 更新 monitor-v1 加法契约、Monitor 展示/复核资料；真实评估报告数值夹具、离线 HTTP 测试与三项互变检查覆盖授权边界。未安装、激活或进行生产持仓对照。
 
 ## 0.1.28 — 2026-10-30

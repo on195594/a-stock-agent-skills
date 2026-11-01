@@ -34,7 +34,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 保留退出码并解析 stdout；业务不完整时命令可能输出有效 JSON 后退出非零。解析前不得额外调用 `holdings`、Wiki、Web 或子代理。
 
 - 先比对用户最新确认的持仓与快照；股数、清仓事实或账户范围冲突时，不把旧账本风险汇总当作当前账户结果，按下表账户差异路由请求最小对账资料，不改写快照或心算补齐。
-- runtime 返回干净快速路径且无上述账户冲突、无 `research_thesis_review` 时，输出结构化 `action_status`、异常项、覆盖率、as-of 与 `stop_reason`，立即停止。
+- runtime 返回干净快速路径且无上述账户冲突时，输出结构化 `action_status`、异常项、覆盖率、as-of 与 `stop_reason`，立即停止。
 - runtime 返回阻断、复核候选、触发、到期、异常或冲突时，仅对 `escalations` 指定的持仓和证据进入 Level 2。
 - 缺少 required 数据时不得输出确定性无动作、继续持有或仓位不变；点名最小补数动作（如针对 governance_gates 过期指明执行 `a-stock-fetch fetch <代码>`；`regulatory_gate` 仍 incomplete 时按数据操作资料的“P0 监管门证据补录”，每个年报期一次），并冻结相关交易与风险变更。
 
@@ -54,7 +54,7 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 
 `risk_budget_exceeded` 的 `code=null` 表示组合级只读复核：仅用本轮汇总、持仓和 `data_gaps`，不重查价、不心算补全风险、不调用 W1。兼容默认/显式覆盖不等于个人预算，禁止改参数绕过超限；超预算不能 clean/no_action，已有合法交易候选不降级。超限原因只引用明细中的 principal/unrealized_gain 与 `denominator_components`；快照未给出的卖出标的或股数不得提出。
 
-`research_thesis_review` 不冻结、不产生交易候选、不自动修改 L3；即使 `action_status=no_action` 且 `stop_reason=clean_fast_gate`，仍按此升级项复核公开证据。`risk_budget_exceeded` 保持原规则，仍属于四类理由中的“风险超限”。
+`research_thesis_review` 不冻结、不产生交易候选、不自动修改 L3；它与其他升级项一样结束干净快速路径（`action_status=review_candidate`），按此升级项复核公开证据。`risk_budget_exceeded` 保持原规则，仍属于四类理由中的“风险超限”。
 
 动作冲突只服从 `references/decision-table.json` 及 runtime 输出。阈值、优先级、状态机、整手、组合风险与可执行性由 runtime/library 判定；Skill 不复算或从自然语言推断。
 

@@ -77,7 +77,14 @@ def prompts(payload, kind):
 
 def assert_gate_unchanged(baseline, actual, *, thesis_review=False):
     for field in UNCHANGED:
+        if thesis_review and field in {"action_status", "stop_reason"}:
+            continue
         assert actual[field] == baseline[field], field
+    if thesis_review:
+        # A thesis review ends the clean fast path exactly like other escalations.
+        assert actual["stop_reason"] is None and actual["manifest"]["stop_reason"] is None
+        assert actual["action_status"] in {"review_candidate", "trade_candidate"}
+        return
     assert actual["manifest"]["stop_reason"] == baseline["manifest"]["stop_reason"]
     if not thesis_review:
         assert actual["review_status"] == baseline["review_status"]

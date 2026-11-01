@@ -290,7 +290,7 @@ def test_research_prompts_preserve_action_and_route_pending_cards():
         "研究提醒（不影响动作状态）", "逐条转述 `review_prompts`",
         "`research.holdings/candidates`", "保守/中性/乐观年化回报",
         "风险占用", "不得从提醒推导卖出股数、比例或候选买入数量",
-        "无 `research_thesis_review`", "--no-research",
+        "结束干净快速路径（`action_status=review_candidate`）", "--no-research",
     ):
         assert marker in SKILL
     assert "| `research_thesis_review`" in SKILL
