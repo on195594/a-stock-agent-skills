@@ -283,3 +283,17 @@ def test_l3_cadence_commands_include_required_positionals():
     command = "a-stock-cache --confirm-write l3-update <id> <status> <as-of> <证据> [下次复核日期]"
     assert command + " --evidence-cadence <值>" in DAILY_MONITORING
     assert command + " [--evidence-cadence <值>]" in SKILL
+
+
+def test_research_prompts_preserve_action_and_route_pending_cards():
+    for marker in (
+        "研究提醒（不影响动作状态）", "逐条转述 `review_prompts`",
+        "`research.holdings/candidates`", "保守/中性/乐观年化回报",
+        "风险占用", "不得从提醒推导卖出股数、比例或候选买入数量",
+        "无 `research_thesis_review`", "--no-research",
+    ):
+        assert marker in SKILL
+    assert "| `research_thesis_review`" in SKILL
+    assert "report_id" in DAILY_MONITORING and "区间暂停解读" in DAILY_MONITORING
+    assert "不进入 `escalations`" in VALUATION_REVIEW
+    assert "3 个百分点" in VALUATION_REVIEW and "0.025%" in VALUATION_REVIEW

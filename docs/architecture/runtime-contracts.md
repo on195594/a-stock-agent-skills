@@ -66,6 +66,54 @@ JSON serialization. Both normal and unavailable `monitor-snapshot --json`
 outputs use this contract. Additive unknown fields are accepted; renaming a v1
 field requires a future contract version.
 
+#### Research card extension (0.1.29, 2026-11-01)
+
+The [dated batch B specification](../specs/2026-11-01-research-card-review-prompts-spec.md)
+authorizes this additive extension, retaining `schema_version=1`. New snapshots
+include `research` and `review_prompts`; old snapshots without both remain readable.
+The new reason enum requires matching runtime, validator and Monitor Skill consumers.
+
+`monitor-snapshot` performs one read-only `GET /api/cards`; `--no-research` skips it.
+`research_client.request_json` owns endpoint validation, bearer/version headers,
+(10, 30) timeout, no redirects/retries, error redaction and response version checks.
+`research cards` and `research card <code>` expose the corresponding GET endpoints;
+none starts a research task. Missing configuration gives `not_configured`, opt-out
+`skipped`, and transport/version/malformed-card errors `unavailable` with a bounded
+reason. Successful reads are `ok`. Tests inject HTTP and never use live credentials.
+
+`research.holdings` has one row per active code; `candidates` contains only L5 codes
+outside holdings (including missing L5 cards). Rows contain `code`, the original
+`card` (or null), `card_status`, `verdict`, `report_id`, `completed_at`, `close`,
+`close_date`, `zone`, the three `*_return` fields and `note`. `missing` is the list
+of codes reported missing by Research; a holding outside the scan scope also gets
+a null card, without being added to that list. No card means null projection fields.
+Current prices, zones, annual returns and horizon come from Research, never from
+runtime valuation calculations. Pending cards retain those values and their pause note.
+
+`review_prompts` contains `code`, `kind`, a Chinese `detail` and `evidence`.
+Kinds are `valuation_stretched`, `opportunity_cost`, `research_unavailable`
+(the latter has code=null). These prompts never enter escalations. Opportunity
+comparisons require valid cards, non-null neutral returns, a valid L5 candidate
+verdict of 值得继续研究, positive candidate horizon, and closing dates at most
+three calendar days apart; rejected date comparisons are explained in `research.reason`.
+Per holding, only the largest net advantage reaching 0.03 is reported. Evidence
+retains both report IDs and closing dates, neutral returns, candidate horizon,
+annual switch cost and net advantage. `trading_costs.py` owns `STAMP_TAX_RATE=0.0005`
+and `COMMISSION_RATE=0.00025`; annual cost is `(stamp + 2 * commission) / horizon`.
+The holding-sale ledger imports the same stamp-tax constant. No sizing is generated.
+
+A pending holding card adds `research_thesis_review` with `candidate=review` and
+pending event titles/types, ordered after `l3_watch` and before `governance_gate`.
+Only `review_status=cleared` becomes `review_required`; blocked reviews remain blocked.
+Research never changes `data_status`, `action_status`, `data_gaps`, or the existing
+`clean_fast_gate` result. Consequently a clean account gate may coexist with
+`review_required` and research-only escalations: the validator explicitly allows
+this exception only with matching pending holding cards, and the Skill still routes
+those escalations to Level 2. All ordinary escalations retain their gate semantics,
+including `risk_budget_exceeded`. Research prompts and errors cannot freeze risk,
+confirm L3, authorize trades or write state. Production comparison remains an
+activation-time check requiring separate authorization.
+
 #### Coordinated S1 monitor-v1 extension (2026-09-17)
 
 `schema_version=1` is retained, but the new `risk_budget_exceeded` enumeration
