@@ -30,7 +30,7 @@ from a_stock_agent_runtime.position_ledger import (
     public_market_equivalent,
 )
 
-STAMP_TAX_RATE = 0.0005  # A-share seller stamp duty: 0.5‰ of turnover
+from a_stock_agent_runtime.trading_costs import STAMP_TAX_RATE
 
 
 def _single_open_holding(conn: sqlite3.Connection, code: str) -> tuple:

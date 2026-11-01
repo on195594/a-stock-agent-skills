@@ -44,6 +44,9 @@ def _positive_id(value: str) -> int:
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
     actions = parser.add_subparsers(dest="action", required=True)
+    actions.add_parser("cards", help="读取扫描范围内的论点卡")
+    card = actions.add_parser("card", help="读取公司论点卡")
+    card.add_argument("code", type=_code)
     reports = actions.add_parser("reports", help="读取公司历史报告目录")
     reports.add_argument("code", type=_code)
     for name, label in (("report", "读取报告及原文证据"), ("status", "读取任务状态")):
@@ -68,20 +71,73 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         )
 
 
+class ResearchNotConfigured(ValueError):
+    """The optional Research connection has not been configured."""
+
+
+def request_json(path: str, *, body=None, params=None, new_endpoint=False) -> dict:
+    """One versioned request, with shared credential and transport safeguards."""
+    base, token = paths.research_connection()
+    if not base or not token:
+        raise ResearchNotConfigured(
+            "请配置 A_STOCK_RESEARCH_URL 和 A_STOCK_RESEARCH_TOKEN；不会自动读取其他项目的凭据"
+        )
+    base = endpoint_url(base)
+    response = requests.request(
+        "POST" if body is not None else "GET",
+        base + path,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Research-Version": "research-v1",
+        },
+        params=params,
+        json=body,
+        timeout=(10, 30),
+        allow_redirects=False,
+    )
+    if response.status_code == 401:
+        raise ValueError(
+            "Research HTTP 401：研究凭据无效、已撤销或临时令牌已过期；"
+            "请由 Research owner 更新 A_STOCK_RESEARCH_TOKEN，检查环境变量是否覆盖 runtime.env。"
+            "更新前不要重试；更新后沿用原 request-id，不要重复创建任务"
+        )
+    if not 200 <= response.status_code < 300:
+        detail = ""
+        try:
+            failure = response.json()
+        except ValueError:
+            failure = None
+        if (isinstance(failure, dict) and failure.get("version") == "research-v1"
+                and isinstance(failure.get("error"), str)):
+            # Only the public error field, bounded and stripped of control characters/secrets.
+            public_error = failure["error"].replace(token, "[REDACTED]")
+            detail = "：" + "".join(char for char in public_error if char.isprintable())[:600]
+        elif response.status_code == 404 and new_endpoint:
+            detail = "；服务可能尚未部署此读取接口，请核对配套服务版本"
+        raise ValueError(
+            f"Research HTTP {response.status_code}{detail}；不会自动重试或重开研究，勿换编号重复提交"
+        )
+    try:
+        payload = response.json()
+    except ValueError:
+        raise ValueError("Research 响应不是有效 JSON") from None
+    if not isinstance(payload, dict) or payload.get("version") != "research-v1":
+        raise ValueError("Research 响应版本不兼容")
+    return payload
+
+
 def cmd_research(argv: list[str]) -> int:
     """通过 Research 服务复用报告、研究、追问及纠错；不修改账户或评分。"""
     parser = argparse.ArgumentParser(prog="a-stock-cache research")
     configure_parser(parser)
     args = parser.parse_args(argv)
     try:
-        base, token = paths.research_connection()
-        if not base or not token:
-            raise ValueError(
-                "请配置 A_STOCK_RESEARCH_URL 和 A_STOCK_RESEARCH_TOKEN；不会自动读取其他项目的凭据"
-            )
-        base = endpoint_url(base)
         body, params = None, None
-        if args.action == "reports":
+        if args.action == "cards":
+            path = "/api/cards"
+        elif args.action == "card":
+            path = f"/api/companies/{args.code}/card"
+        elif args.action == "reports":
             path, params = "/api/reports", {"code": args.code}
         elif args.action == "report":
             path = f"/api/reports/{args.id}"
@@ -109,44 +165,11 @@ def cmd_research(argv: list[str]) -> int:
                 "location": args.location,
                 "text": args.text,
             }
-        response = requests.request(
-            "POST" if body is not None else "GET",
-            base + path,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "X-Research-Version": "research-v1",
-            },
-            params=params,
-            json=body,
-            timeout=(10, 30),
-            allow_redirects=False,
+        payload = request_json(
+            path, body=body, params=params,
+            new_endpoint=args.action in {"resume", "budget", "cards", "card"}
+            or args.action == "report" and args.compact,
         )
-        if response.status_code == 401:
-            raise ValueError(
-                "Research HTTP 401：研究凭据无效、已撤销或临时令牌已过期；"
-                "请由 Research owner 更新 A_STOCK_RESEARCH_TOKEN，检查环境变量是否覆盖 runtime.env。"
-                "更新前不要重试；更新后沿用原 request-id，不要重复创建任务"
-            )
-        if not 200 <= response.status_code < 300:
-            detail = ""
-            try:
-                failure = response.json()
-            except ValueError:
-                failure = None
-            if (isinstance(failure, dict) and failure.get("version") == "research-v1"
-                    and isinstance(failure.get("error"), str)):
-                # Only the public error field, bounded and stripped of control characters/secrets.
-                public_error = failure["error"].replace(token, "[REDACTED]")
-                detail = "：" + "".join(char for char in public_error if char.isprintable())[:600]
-            elif response.status_code == 404 and (args.action in {"resume", "budget"}
-                                                   or args.action == "report" and args.compact):
-                detail = "；服务可能尚未部署此读取接口，请核对配套服务版本"
-            raise ValueError(
-                f"Research HTTP {response.status_code}{detail}；不会自动重试或重开研究，勿换编号重复提交"
-            )
-        payload = response.json()
-        if not isinstance(payload, dict) or payload.get("version") != "research-v1":
-            raise ValueError("Research 响应版本不兼容")
         if args.action == "report" and args.compact and payload.get("view") != "compact":
             raise ValueError("Research 服务尚未支持精简视图；需要原文时显式去掉 --compact，不自动重开研究")
     except requests.RequestException as exc:

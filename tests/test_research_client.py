@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 import requests
@@ -133,4 +134,31 @@ def test_http_denials_do_not_retry(monkeypatch, capsys, status):
     monkeypatch.setattr(research_client.requests, "request", request)
     assert research_client.cmd_research(["resume", "--request-id", "original"]) == 1
     assert str(status) in capsys.readouterr().err
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("args,path", [(["cards"], "/api/cards"), (["card", "600900"], "/api/companies/600900/card")])
+def test_card_cli_read_only(monkeypatch, capsys, isolated_cache_database, args, path):
+    fixture = Path(__file__).parent / "fixtures/monitor/research-cards.json"
+    payload = json.loads(fixture.read_text())["response"]
+    if args[0] == "card":
+        payload = next(card for card in payload["cards"] if card["code"] == "600900")
+    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("https://research.example", "test-key"))
+    calls = []
+
+    def request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(payload).encode()
+        return response
+
+    monkeypatch.setattr(research_client.requests, "request", request)
+    assert cache.main(["research", *args]) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+    assert not isolated_cache_database.exists()
+    assert len(calls) == 1 and calls[0][0:2] == ("GET", "https://research.example" + path)
+    assert calls[0][2]["json"] is None
+    assert calls[0][2]["timeout"] == (10, 30) and calls[0][2]["allow_redirects"] is False
+    assert cache.main(["research", "card", "invalid"]) == 2
     assert len(calls) == 1
