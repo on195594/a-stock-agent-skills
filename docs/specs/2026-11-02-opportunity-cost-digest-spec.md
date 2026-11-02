@@ -14,7 +14,7 @@
 
 1. **结构化结果全部保留**：新增 `research.opportunity_costs`，按持仓逐条列出达标比较（字段沿用原 `opportunity_cost` 提示的 evidence）。组合复盘和换仓比较表都从这里取数，不受时效限制。
 2. **按候选合并**：`review_prompts` 不再按持仓逐条给出 `opportunity_cost`，改为每个候选一条 `opportunity_cost`，`code` 为候选代码，detail 形如“宁德时代 300750 中性年化 19.82%，扣费后比 长江电力/三花智控/… 高 ≥3 个百分点（最大差 X），情景未经记分，仅提示复核”，evidence 列出各持仓的比较。
-3. **时效**：只有当候选卡或其中任一持仓卡的 `completed_at` 距快照日不超过 7 个自然日时，才生成合并提示；超过 7 日的比较只留在 `research.opportunity_costs`。快照日取 monitor snapshot 本身的日期字段，不取系统时钟以外的推断值。`completed_at` 缺失或不可解析时视为不新鲜，不报错。
+3. **时效**：只有当候选卡或其中任一持仓卡的 `completed_at`（换算为上海日历日）距快照日不超过 7 个自然日时，才生成合并提示；超过 7 日的比较只留在 `research.opportunity_costs`。快照日取 monitor snapshot 本身的日期字段，不取系统时钟以外的推断值。`completed_at` 缺失或不可解析时视为不新鲜，不报错。
 4. 透支区提示（`valuation_stretched`）、待复核升级（`research_thesis_review`）和收盘日不匹配原因不变。
 
 ## 3 文档

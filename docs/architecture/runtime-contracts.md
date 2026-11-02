@@ -111,8 +111,8 @@ evidence fields: `holding`, `candidate` (each with `code`, `report_id`, `close_d
 regardless of age; portfolio reviews and switching tables use this complete list.
 Opportunity prompts now group by candidate: `code` is the candidate code and
 `evidence.comparisons` contains all its retained comparisons. A group is shown only
-when the candidate or any compared holding's `completed_at` calendar date is 0–7
-days before the snapshot's own `as_of` date (inclusive). Missing, null or unparseable
+when the candidate or any compared holding's `completed_at` Asia/Shanghai calendar
+date is 0–7 days before the snapshot's own `as_of` date (inclusive). Missing, null or unparseable
 completion timestamps are not fresh and do not invalidate the card. No clock or
 closing date is substituted. Detail lists the candidate, neutral return, compared
 holdings and maximum net advantage, with “情景未经记分，仅提示复核”. Older snapshots
