@@ -315,6 +315,19 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.29 activation (2026-11-02)
+
+Release `0.1.29` (`094735e`, Research card reading and review prompts, spec
+`docs/specs/2026-11-01-research-card-review-prompts-spec.md`) was activated as
+`0.1.29-094735ed3091` for `claude`, `codex`, `hermes` and shared `~/.agents/skills/` after Research
+`d15af17` (which serves `GET /api/cards`) went live; owner authorization Telegram msg 4058. `--dry-run`
+first, then `--force` to replace the existing same-target symlinks. Rollback manifest
+`~/.local/share/a-stock-agent/rollback-1793612399620548720.json`; no schema change. `scripts/check.sh`
+passed on 2026-11-01. Live snapshot: `research.status=ok`, 4 holdings and 5 L5 candidates read, no
+`missing`; 600900 card `待复核` produced `research_thesis_review` (`review_required`,
+`review_candidate`); no `review_prompts` yet because existing reports predate valuation (`note`
+reports it). Follow-up research with valuation queued for all nine codes.
+
 ## 0.1.28 activation (2026-10-30)
 
 Release `0.1.28` (`048fc45`) was committed and pushed to `master` and activated as
