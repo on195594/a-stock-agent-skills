@@ -5,7 +5,7 @@ inputs, not observed holdings, market quotes, Research verdicts or forecasts.
 """
 
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import json
 from pathlib import Path
 import sqlite3
@@ -55,6 +55,8 @@ def http(monkeypatch, cards):
 
 @pytest.fixture
 def run_snapshot(isolated_cache_database, monkeypatch, capsys, cards, http):
+    monkeypatch.setattr(commands_monitor.domain, "cst_now",
+                        lambda: datetime.fromisoformat("2026-11-02T19:00:00+08:00"))
     _seed_holding(isolated_cache_database, code="600900")
     close = card(cards, "600900")["current"]["last_close"]
     # A hypothetical clean account at the captured close; no invented market price.
@@ -107,7 +109,7 @@ def test_real_cards_one_call_projection_and_prompts_do_not_enter_escalations(run
     assert row["conservative_return"] < 0  # Negative returns are valid evidence.
     opportunity = prompts(actual, "opportunity_cost")
     assert len(opportunity) == 1
-    evidence = opportunity[0]["evidence"]
+    evidence = opportunity[0]["evidence"]["comparisons"][0]
     assert evidence["candidate"]["code"] == "600309"  # Better than the other valid L5.
     assert evidence["holding"]["report_id"] == 3 and evidence["candidate"]["report_id"] == 10
     assert evidence["holding"]["close_date"] == evidence["candidate"]["close_date"] == "2026-10-30"
@@ -288,3 +290,13 @@ def test_malformed_json_does_not_leak_response(monkeypatch):
     monkeypatch.setattr(research_client.requests, "request", lambda *a, **k: response)
     result = monitor_research.fetch_cards()
     assert result == {"status": "unavailable", "reason": "Research 响应不是有效 JSON"}
+
+
+def test_opportunity_freshness_uses_snapshot_as_of(run_snapshot, monkeypatch):
+    # Advance the snapshot clock only; original report timestamps stay unchanged.
+    monkeypatch.setattr(commands_monitor.domain, "cst_now",
+                        lambda: datetime.fromisoformat("2026-11-10T19:00:00+08:00"))
+    _, payload = run_snapshot()
+    assert payload["as_of"].startswith("2026-11-10")
+    assert len(payload["research"]["opportunity_costs"]) == 1
+    assert not prompts(payload, "opportunity_cost")

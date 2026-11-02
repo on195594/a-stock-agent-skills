@@ -1,12 +1,15 @@
 """Optional Research card projection and review prompts; no valuation formulas."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import requests
 
 from a_stock_agent_runtime import monitor_contract, research_client
 from a_stock_agent_runtime.trading_costs import COMMISSION_RATE, STAMP_TAX_RATE
+
+SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
 def fetch_cards(*, skip: bool = False) -> dict:
@@ -36,7 +39,7 @@ def _row(code: str, card: dict | None) -> dict:
         "card_status": card["status"] if card else None,
         "verdict": card.get("verdict") if card else None,
         "report_id": card["report_id"] if card else None,
-        "completed_at": card["completed_at"] if card else None,
+        "completed_at": card.get("completed_at") if card else None,
         "close": current.get("last_close"),
         "close_date": current.get("last_close_date"),
         "zone": current.get("current_zone"),
@@ -51,7 +54,7 @@ def _evidence(row: dict) -> dict:
     return {key: row[key] for key in ("code", "report_id", "close_date", "close")}
 
 
-def summarize(result: dict, holding_codes: list[str]) -> tuple[dict, list, list]:
+def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tuple[dict, list, list]:
     """Return research, informational prompts, and thesis-only review escalations."""
     cards = {card["code"]: card for card in result.get("cards", [])}
     missing = result.get("missing", [])
@@ -66,6 +69,7 @@ def summarize(result: dict, holding_codes: list[str]) -> tuple[dict, list, list]
             ) if code not in holding_codes
         ],
         "missing": [item["code"] for item in missing],
+        "opportunity_costs": [],
     }
     if result.get("reason"):
         research["reason"] = result["reason"]
@@ -126,21 +130,45 @@ def summarize(result: dict, holding_codes: list[str]) -> tuple[dict, list, list]
                 best = advantage, cost, candidate
         if best:
             advantage, cost, candidate = best
-            prompts.append({
-                "code": code, "kind": "opportunity_cost",
-                "detail": (
-                    f"{candidate['code']} 中性年化 {candidate['neutral_return']:.2%}，"
-                    f"{code} 为 {holding['neutral_return']:.2%}，扣年化换仓成本 {cost:.4%} 后"
-                    f"差 {advantage * 100:.4f} 个百分点（门槛3），仅提示复核"
-                ),
-                "evidence": {
-                    "holding": _evidence(holding), "candidate": _evidence(candidate),
-                    "holding_neutral_return": holding["neutral_return"],
-                    "candidate_neutral_return": candidate["neutral_return"],
-                    "candidate_horizon": candidate["card"]["current"]["valuation"]["horizon"],
-                    "annual_switch_cost": float(cost), "net_advantage": float(advantage),
-                },
+            research["opportunity_costs"].append({
+                "holding": _evidence(holding), "candidate": _evidence(candidate),
+                "holding_neutral_return": holding["neutral_return"],
+                "candidate_neutral_return": candidate["neutral_return"],
+                "candidate_horizon": candidate["card"]["current"]["valuation"]["horizon"],
+                "annual_switch_cost": float(cost), "net_advantage": float(advantage),
             })
+    grouped = {}
+    for comparison in research["opportunity_costs"]:
+        grouped.setdefault(comparison["candidate"]["code"], []).append(comparison)
+    for code, comparisons in grouped.items():
+        compared_codes = [code, *(item["holding"]["code"] for item in comparisons)]
+        if not any(_fresh(cards[c].get("completed_at"), snapshot_date) for c in compared_codes):
+            continue
+        candidate = cards[code]
+        names = "/".join(cards[item["holding"]["code"]].get("name") or item["holding"]["code"]
+                         for item in comparisons)
+        maximum = max(item["net_advantage"] for item in comparisons)
+        prompts.append({
+            "code": code, "kind": "opportunity_cost",
+            "detail": (
+                f"{candidate.get('name') or code} {code} 中性年化 "
+                f"{comparisons[0]['candidate_neutral_return']:.2%}，扣费后比 {names} "
+                f"高 ≥3 个百分点（最大差 {maximum * 100:.4f} 个百分点），情景未经记分，仅提示复核"
+            ),
+            "evidence": {"comparisons": comparisons},
+        })
     if mismatches:
         research["reason"] = "；".join(mismatches)
     return research, prompts, escalations
+
+
+def _fresh(completed_at: object, snapshot_date: date) -> bool:
+    try:
+        completed = datetime.fromisoformat(completed_at)
+    except (TypeError, ValueError):
+        return False
+    # Research timestamps are Shanghai dates; naive values are treated as already local.
+    if completed.tzinfo is not None:
+        completed = completed.astimezone(SHANGHAI)
+    completed_date = completed.date()
+    return 0 <= (snapshot_date - completed_date).days <= 7

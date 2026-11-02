@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.30 — 2026-11-02
+
+- 机会成本比较完整保留在 `research.opportunity_costs`；研究提醒按候选合并，仅候选或任一达标持仓卡在快照日前 7 个自然日内完成时展示，缺失或无效完成时间视为不新鲜。情景未经记分，仅提示复核。
+- 比较门槛、扣费、最佳候选、收盘日窗口及所有状态门禁不变；monitor-v1 schema_version 不变。更新 Monitor 文档与生产报告 70–78 真实数值离线回归测试。未推送、安装或激活。
+
 ## 0.1.29 — 2026-11-01
 
 - 按批次 B 授权接入 Research 论点卡：快照只读一次 `/api/cards`，新增 `research`、`review_prompts`、`--no-research` 与 CLI `research cards/card`；共享 HTTP 凭据、超时、版本与脱敏处理。

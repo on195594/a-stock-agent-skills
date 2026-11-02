@@ -145,13 +145,12 @@ def _research_date(value: Any) -> None:
 
 def _research_card(raw: Any) -> dict:
     card = _object(raw, "research.card")
-    _required(card, {"code", "origin", "status", "verdict", "report_id", "completed_at", "current", "pending_events"}, "research.card")
+    _required(card, {"code", "origin", "status", "verdict", "report_id", "current", "pending_events"}, "research.card")
     _research_code(card["code"])
     _supported(card["origin"], frozenset({"external", "l5"}), "research.card.origin")
     _supported(card["status"], frozenset({"有效", "待复核"}), "research.card.status")
     if type(card["report_id"]) is not int or card["report_id"] <= 0:
         raise MonitorContractError("research report_id must be a positive integer")
-    _iso8601(card["completed_at"], "research.card.completed_at")
     _optional_string(card.get("verdict"), "research.card.verdict")
     for raw_event in _array(card["pending_events"], "research.card.pending_events"):
         event = _object(raw_event, "research.card.pending_event")
@@ -211,7 +210,7 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
             codes.append(row["code"])
             if row["card"] is not None:
                 card = _research_card(row["card"])
-                if status != "ok" or any(row[left] != card[right] for left, right in (
+                if status != "ok" or any(row[left] != card.get(right) for left, right in (
                     ("code", "code"), ("card_status", "status"), ("report_id", "report_id"),
                     ("completed_at", "completed_at"), ("verdict", "verdict"),
                 )):
@@ -241,36 +240,60 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
             raise MonitorContractError("research holding/candidate scope is inconsistent")
     for code in _array(research["missing"], "research.missing"):
         _research_code(code)
+    candidate_codes = {row["code"] for row in research["candidates"]}
+    for comparison in _array(research.get("opportunity_costs", []), "research.opportunity_costs"):
+        _opportunity_evidence(comparison, holding_codes, candidate_codes)
     for raw in _array(value["review_prompts"], "review_prompts"):
         prompt = _object(raw, "review_prompt")
         _required(prompt, {"code", "kind", "detail", "evidence"}, "review_prompt")
         kind = _supported(prompt["kind"], REVIEW_PROMPT_KINDS, "review_prompt.kind")
+        _nonempty(prompt["detail"], "review_prompt.detail")
+        evidence = _object(prompt["evidence"], "review_prompt.evidence")
         if kind == "research_unavailable":
             if prompt["code"] is not None or status != "unavailable":
                 raise MonitorContractError("research_unavailable requires unavailable research")
-        elif prompt["code"] not in holding_codes or status != "ok":
-            raise MonitorContractError("review prompt requires an active researched holding")
-        _nonempty(prompt["detail"], "review_prompt.detail")
-        evidence = _object(prompt["evidence"], "review_prompt.evidence")
-        if kind != "research_unavailable":
-            evidence_rows = [evidence]
-            if kind == "opportunity_cost":
-                _required(evidence, {"holding", "candidate", "holding_neutral_return", "candidate_neutral_return",
-                                     "candidate_horizon", "annual_switch_cost", "net_advantage"}, "review_prompt.evidence")
-                evidence_rows = [evidence["holding"], evidence["candidate"]]
-                for field in ("holding_neutral_return", "candidate_neutral_return", "candidate_horizon",
-                              "annual_switch_cost", "net_advantage"):
-                    _research_number(evidence[field])
-                    if evidence[field] is None:
-                        raise MonitorContractError("opportunity_cost evidence requires numbers")
-            for raw_evidence in evidence_rows:
-                item = _object(raw_evidence, "review_prompt.evidence.row")
-                _required(item, {"code", "report_id", "close_date", "close"}, "review_prompt.evidence.row")
-                _research_code(item["code"])
-                if type(item["report_id"]) is not int or item["report_id"] <= 0:
-                    raise MonitorContractError("review_prompt report_id must be a positive integer")
-                _research_date(item["close_date"])
-                _research_number(item["close"])
+        elif kind == "opportunity_cost" and "opportunity_costs" in research:
+            if prompt["code"] not in candidate_codes or status != "ok":
+                raise MonitorContractError("opportunity_cost requires a researched candidate")
+            comparisons = _array(evidence.get("comparisons"), "opportunity_cost.comparisons")
+            if not comparisons:
+                raise MonitorContractError("opportunity_cost requires comparisons")
+            for comparison in comparisons:
+                _opportunity_evidence(comparison, holding_codes, {prompt["code"]})
+                if comparison not in research["opportunity_costs"]:
+                    raise MonitorContractError("opportunity_cost comparison missing from research")
+        else:
+            if prompt["code"] not in holding_codes or status != "ok":
+                raise MonitorContractError("review prompt requires an active researched holding")
+            if kind == "opportunity_cost":  # Pre-0.1.30 snapshots remain readable.
+                _opportunity_evidence(evidence, holding_codes, candidate_codes)
+            else:
+                _review_evidence_row(evidence)
+
+
+def _review_evidence_row(raw: Any) -> dict:
+    item = _object(raw, "review_prompt.evidence.row")
+    _required(item, {"code", "report_id", "close_date", "close"}, "review_prompt.evidence.row")
+    _research_code(item["code"])
+    if type(item["report_id"]) is not int or item["report_id"] <= 0:
+        raise MonitorContractError("review_prompt report_id must be a positive integer")
+    _research_date(item["close_date"])
+    _research_number(item["close"])
+    return item
+
+
+def _opportunity_evidence(raw: Any, holding_codes: set[str], candidate_codes: set[str]) -> None:
+    evidence = _object(raw, "opportunity_cost.evidence")
+    numbers = {"holding_neutral_return", "candidate_neutral_return", "candidate_horizon",
+               "annual_switch_cost", "net_advantage"}
+    _required(evidence, {"holding", "candidate"} | numbers, "opportunity_cost.evidence")
+    for field, codes in (("holding", holding_codes), ("candidate", candidate_codes)):
+        if _review_evidence_row(evidence[field])["code"] not in codes:
+            raise MonitorContractError("opportunity_cost evidence scope is inconsistent")
+    for field in numbers:
+        _research_number(evidence[field])
+        if evidence[field] is None:
+            raise MonitorContractError("opportunity_cost evidence requires numbers")
 
 
 def validate_monitor_snapshot(payload: object) -> dict[str, Any]:

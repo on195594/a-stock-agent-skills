@@ -995,6 +995,7 @@ def _with_research(payload: dict, result: dict | None) -> dict:
     research, prompts, escalations = monitor_research.summarize(
         result or {"status": "not_configured"},
         [holding["code"] for holding in payload["holdings"]],
+        date.fromisoformat(payload["as_of"][:10]),
     )
     payload["research"], payload["review_prompts"] = research, prompts
     payload["escalations"].extend(escalations)

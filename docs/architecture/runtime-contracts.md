@@ -102,6 +102,22 @@ annual switch cost and net advantage. `trading_costs.py` owns `STAMP_TAX_RATE=0.
 and `COMMISSION_RATE=0.00025`; annual cost is `(stamp + 2 * commission) / horizon`.
 The holding-sale ledger imports the same stamp-tax constant. No sizing is generated.
 
+The [0.1.30 specification](../specs/2026-11-02-opportunity-cost-digest-spec.md)
+adds `research.opportunity_costs` (always an array, empty when no comparisons),
+without changing `schema_version`. Each item has the former opportunity prompt's
+evidence fields: `holding`, `candidate` (each with `code`, `report_id`, `close_date`,
+`close`), `holding_neutral_return`, `candidate_neutral_return`, `candidate_horizon`,
+`annual_switch_cost`, `net_advantage`. All best-per-holding comparisons remain here
+regardless of age; portfolio reviews and switching tables use this complete list.
+Opportunity prompts now group by candidate: `code` is the candidate code and
+`evidence.comparisons` contains all its retained comparisons. A group is shown only
+when the candidate or any compared holding's `completed_at` calendar date is 0–7
+days before the snapshot's own `as_of` date (inclusive). Missing, null or unparseable
+completion timestamps are not fresh and do not invalidate the card. No clock or
+closing date is substituted. Detail lists the candidate, neutral return, compared
+holdings and maximum net advantage, with “情景未经记分，仅提示复核”. Older snapshots
+without `opportunity_costs` retain validation of their per-holding prompt shape.
+
 A pending holding card adds `research_thesis_review` with `candidate=review` and
 pending event titles/types, ordered after `l3_watch` and before `governance_gate`.
 Like every other escalation it ends the clean fast path: `review_status=cleared`
