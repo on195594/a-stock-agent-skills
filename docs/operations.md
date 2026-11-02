@@ -315,6 +315,18 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.30 activation (2026-11-02)
+
+Release `0.1.30` (`b6b302c`, opportunity-cost prompts merged per candidate with 7-day freshness, spec
+`docs/specs/2026-11-02-opportunity-cost-digest-spec.md`) was pushed to `master` and activated as
+`0.1.30-b6b302ca8d69` for `claude`, `codex`, `hermes` and shared `~/.agents/skills/`; owner authorization
+Telegram msg 4089. `--dry-run` first, then `--force`. Rollback manifest
+`~/.local/share/a-stock-agent/rollback-1793626260241571720.json`; no schema change. Full matrix 1,629
+passed (11 skipped), `scripts/check.sh` passed; mutation: dropping the Shanghai conversion in `_fresh`
+fails both UTC timestamp cases. Live snapshot (no `--portfolio-value`, `data_status=partial`):
+`research.opportunity_costs` keeps 4 comparisons, `review_prompts` now carries one `opportunity_cost`
+for 300750 naming all four holdings instead of four separate prompts.
+
 ## 0.1.29 activation (2026-11-02)
 
 Release `0.1.29` (`094735e`, Research card reading and review prompts, spec
