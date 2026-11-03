@@ -315,6 +315,17 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.31 activation (2026-11-03)
+
+Release `0.1.31` (`0892de4`, research rows project Research `current.valuation.assumption`; opportunity
+prompts append it once as “Research 注”) was pushed to `master` and activated as `0.1.31-0892de4519ec` for
+`claude`, `codex`, `hermes` and shared `~/.agents/skills/`; owner request in the CLI session of 2026-11-03.
+`--dry-run` first, then `--force`. Rollback manifest
+`~/.local/share/a-stock-agent/rollback-1793665792341729320.json`; no schema change. Pairs with Research
+`c2d212f`. Full matrix 1,631 passed (11 skipped), `scripts/check.sh` passed; mutation: dropping the
+prompt caveat fails the digest test. Live snapshot: 7 rows with rolled returns carry the caveat, the two
+not-priced candidates keep `note` and a null `assumption`; the 300750 `opportunity_cost` prompt ends with it.
+
 ## 0.1.30 activation (2026-11-02)
 
 Release `0.1.30` (`b6b302c`, opportunity-cost prompts merged per candidate with 7-day freshness, spec
