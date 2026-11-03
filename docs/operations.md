@@ -59,6 +59,12 @@ a-stock-fetch check <代码>
 R1 routine check: it may refresh market data and record an alert, but it does
 not write holdings, transactions or other W1 investment state.
 
+Source 0.1.32 (not client activation): with a-stock-lib 0.9.0, `benchmark-report`
+uses the library's date-bounded `.CSI` closing-point provider instead of a direct
+SDK shortcut. Stock valuation uses the nearest close within ten calendar days;
+a fallback prints its actual date, age and source to stderr, never a silent
+same-day quote. A longer suspension or missing index data fails closed.
+
 For a cron smoke, use the isolated fixture check, not production configuration:
 
 ```bash
@@ -314,6 +320,21 @@ Hermes currently selects `openai-codex/gpt-6.1-sol-900k`; configuration was not
 changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
+
+## 0.1.32 source validation (2026-11-03; not activated)
+
+Locks a-stock-lib 0.9.0 (`b278e7b`), wheel SHA256
+`4c470038479856767cd686b0c71abe160b8cc5b39dec65fc9d8d2e68ccaf74a9`.
+Benchmark index/stock prices now use the library contract above. Candidate installer
+used an isolated target root and explicit wheel override; normal frozen sync and
+release installation were then verified against the published artifact. Independent
+cwd checks confirmed version, site-packages import and byte-for-byte wheel contents.
+Validation: 1639 passed / 9 historical-behavior skips across the suite and final
+version/release-install gates; Ruff, regulatory freshness, standalone QA and cron
+fixture checks passed. Real TuShare checks returned both total-return indices through
+2026-10-30 and an explicitly degraded 600900 weekend close (2 days old).
+No active client, account state, cron or production environment changed; 0.1.31 remains
+the last activated runtime below.
 
 ## 0.1.31 activation (2026-11-03)
 

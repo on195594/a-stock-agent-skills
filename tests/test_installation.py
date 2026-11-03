@@ -27,7 +27,7 @@ UV_CACHE_DIR = os.environ.get("UV_CACHE_DIR") or str(
 LIB_SOURCE_OVERRIDE = os.environ.get("A_STOCK_LIB_SOURCE")
 LIB_ROOT = Path(LIB_SOURCE_OVERRIDE) if LIB_SOURCE_OVERRIDE else None
 LIB_WHEEL = (
-    LIB_ROOT / "dist" / "a_stock_lib-0.8.2-py3-none-any.whl"
+    LIB_ROOT / "dist" / "a_stock_lib-0.9.0-py3-none-any.whl"
     if LIB_ROOT is not None
     else None
 )
@@ -135,9 +135,9 @@ def test_copy_install_has_manifest_and_stable_cli(tmp_path) -> None:
     metadata = json.loads(
         (runtime / "a-stock-lib-install.json").read_text(encoding="utf-8")
     )
-    assert metadata["version"] == "0.8.2"
+    assert metadata["version"] == "0.9.0"
     assert metadata["wheel_sha256"] == (
-        "cae49d9d7e71605a5543c1db93a18fd4f305e910a3d5060fde9028ff2d5a324c"
+        "4c470038479856767cd686b0c71abe160b8cc5b39dec65fc9d8d2e68ccaf74a9"
     )
     installed = json.loads(
         subprocess.check_output(
@@ -190,7 +190,7 @@ def test_source_checkout_bootstrap_records_lib_provenance(tmp_path) -> None:
     )
     payload = json.loads(metadata.read_text(encoding="utf-8"))
     assert payload["name"] == "a-stock-lib"
-    assert payload["version"] == "0.8.2"
+    assert payload["version"] == "0.9.0"
     assert len(payload["wheel_sha256"]) == 64
     wheel = Path(payload["wheel"])
     assert wheel.is_file()

@@ -899,12 +899,14 @@ def unrecorded_dividends(
 def _implemented_dividends(code: str) -> list[dict]:
     from a_stock_lib.providers import TushareDividendProvider
 
-    result = TushareDividendProvider(token=paths.tushare_token()).fetch_dividend_history(
-        code
-    )
+    result = TushareDividendProvider(
+        token=paths.tushare_token()
+    ).fetch_dividend_history(code)
     frame = result.value
     if frame is None:
-        raise RuntimeError(f"TuShare 分红数据不可用（{getattr(result, 'status', 'error')}）")
+        raise RuntimeError(
+            f"TuShare 分红数据不可用（{getattr(result, 'status', 'error')}）"
+        )
     rows = []
     for row in frame.to_dict("records"):
         cash = row.get("cash_div_tax")
@@ -917,8 +919,12 @@ def _implemented_dividends(code: str) -> list[dict]:
         rows.append(
             {
                 "record_date": row["record_date"],
-                "ex_date": row.get("ex_date") if isinstance(row.get("ex_date"), str) else None,
-                "pay_date": row.get("pay_date") if isinstance(row.get("pay_date"), str) else None,
+                "ex_date": row.get("ex_date")
+                if isinstance(row.get("ex_date"), str)
+                else None,
+                "pay_date": row.get("pay_date")
+                if isinstance(row.get("pay_date"), str)
+                else None,
                 "cash_div": float(cash) if risk_budget.positive_number(cash) else 0.0,
                 "split_ratio": float(row["stk_div"])
                 if risk_budget.positive_number(row.get("stk_div"))
@@ -1011,7 +1017,9 @@ def stop_level(price: float, stop1: float | None, stop2: float | None) -> str | 
     return None
 
 
-def new_stop_alerts(levels: dict[str, str], state: dict, today: str) -> tuple[list, dict]:
+def new_stop_alerts(
+    levels: dict[str, str], state: dict, today: str
+) -> tuple[list, dict]:
     """Codes whose level worsened since today's last alert, plus the next state."""
     seen = dict(state.get("levels", {})) if state.get("date") == today else {}
     alerts = [
@@ -1045,9 +1053,11 @@ def cmd_stop_alert(args: list[str]) -> None:
         quote = quotes.get(code)
         stamp = quote and risk_gates._parse_time(quote.quote_as_of)
         # Only same-day quotes at most 15 minutes old may raise a live-looking alert.
-        if risk_budget.valid_quote(quote, today) and stamp and abs(
-            (now - stamp).total_seconds()
-        ) <= 900:
+        if (
+            risk_budget.valid_quote(quote, today)
+            and stamp
+            and abs((now - stamp).total_seconds()) <= 900
+        ):
             fresh[code] = quote
     if not fresh:
         print("止损预警：本时段所有持仓行情无效或过期，未能检查", file=sys.stderr)
@@ -1078,7 +1088,9 @@ def cmd_stop_alert(args: list[str]) -> None:
         else:
             stop = stop2 if level == "stop2" else stop1
             label = "第二档" if level == "stop2" else "第一档"
-            print(f"🚨 止损预警 {name}({code}) 现价{quote.price:.2f} 已跌破{label}止损{stop:.3f}{where}")
+            print(
+                f"🚨 止损预警 {name}({code}) 现价{quote.price:.2f} 已跌破{label}止损{stop:.3f}{where}"
+            )
     print("按 a-stock-monitor 复核止损与 L3；预警不等于自动卖出。")
     state_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = state_path.with_suffix(".tmp")
@@ -1090,29 +1102,28 @@ BENCHMARKS = (("H00300.CSI", "沪深300全收益"), ("H00922.CSI", "中证红利
 
 
 def _index_closes(ts_code: str, start: str, end: str) -> dict[str, float]:
-    # shortcut: a-stock-lib 0.8.2 fetch_index_bars returns SCHEMA_CHANGED and has no
-    # total-return codes; move to it once the library provider is fixed.
-    import tushare
-
-    frame = tushare.pro_api(paths.tushare_token()).index_daily(
-        ts_code=ts_code, start_date=start.replace("-", ""), end_date=end.replace("-", "")
+    result = TushareMarketDataProvider(token=paths.tushare_token()).fetch_index_bars(
+        ts_code, start, end
     )
-    if frame is None or frame.empty:
-        raise RuntimeError(f"{ts_code} 指数行情不可用")
-    return {
-        f"{day[:4]}-{day[4:6]}-{day[6:]}": float(close)
-        for day, close in zip(frame["trade_date"], frame["close"])
-    }
+    frame = result.value
+    if result.status == "failed" or frame is None or frame.empty:
+        raise RuntimeError(f"{ts_code} 指数行情不可用（{result.error_code}）")
+    return dict(zip(frame["date"], frame["close"].astype(float)))
 
 
 def _close_on(code: str, day: str) -> float:
-    result = TushareMarketDataProvider(
-        token=paths.tushare_token()
-    ).fetch_daily_bars_range(code, day, day)
-    frame = result.value
-    if frame is None or frame.empty:
-        raise RuntimeError(f"{code} 在 {day} 无收盘价（{result.status}）")
-    return float(frame["close"].iloc[-1])
+    result = TushareMarketDataProvider(token=paths.tushare_token()).fetch_close_price(
+        code, day
+    )
+    if result.status == "failed" or result.value is None:
+        raise RuntimeError(f"{code} 在 {day} 无可用收盘价（{result.error_code}）")
+    if result.status == "degraded":
+        print(
+            f"价格参考：{code} {day} 使用 {result.source_as_of} 收盘价，"
+            f"相差 {result.freshness_days} 天（{result.source}；{result.fallback_reason}）",
+            file=sys.stderr,
+        )
+    return float(result.value)
 
 
 def cmd_benchmark_report(args: list[str]) -> None:
@@ -1159,7 +1170,9 @@ def cmd_benchmark_report(args: list[str]) -> None:
     )
     print(f"  账本净盈亏：{pnl:+,.0f} 元（{pnl / gross_buys:+.2%}）")
     for code, label in BENCHMARKS:
-        closes = {day: px for day, px in benchmarks[code].items() if day <= valuation_day}
+        closes = {
+            day: px for day, px in benchmarks[code].items() if day <= valuation_day
+        }
         bench = public_market_equivalent(flows, closes)
         print(
             f"  同样现金流买{label}：{bench:+,.0f} 元（{bench / gross_buys:+.2%}）"
