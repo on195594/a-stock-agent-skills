@@ -59,7 +59,7 @@ a-stock-fetch check <代码>
 R1 routine check: it may refresh market data and record an alert, but it does
 not write holdings, transactions or other W1 investment state.
 
-Source 0.1.32 (not client activation): with a-stock-lib 0.9.0, `benchmark-report`
+Runtime 0.1.32: with a-stock-lib 0.9.0, `benchmark-report`
 uses the library's date-bounded `.CSI` closing-point provider instead of a direct
 SDK shortcut. Stock valuation uses the nearest close within ten calendar days;
 a fallback prints its actual date, age and source to stderr, never a silent
@@ -321,7 +321,18 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
-## 0.1.32 source validation (2026-11-03; not activated)
+## 0.1.32 activation (2026-11-03)
+
+Owner-authorized activation of `0.1.32-729d470ee38e` for `claude`, `codex`, `hermes`
+and shared `~/.agents/skills/`, following `--dry-run` then `--force` through the
+standard installer. Rollback manifest:
+`~/.local/share/a-stock-agent/rollback-1793684625927950080.json`.
+Independent cwd checks confirmed active CLI targets, all client links, installed
+Skills 0.1.32 / Lib 0.9.0 in site-packages and the locked release wheel hash.
+Pairs with Research `cb569ad` deployed in the same session. Existing verification
+below was reused; no account commands, migrations, credentials or cron changes.
+
+### Source validation
 
 Locks a-stock-lib 0.9.0 (`b278e7b`), wheel SHA256
 `4c470038479856767cd686b0c71abe160b8cc5b39dec65fc9d8d2e68ccaf74a9`.
@@ -334,8 +345,8 @@ Validation after rebasing the disjoint dividend-sensitivity work from `1172e2d`:
 release-install gates; Ruff, regulatory freshness, standalone QA and cron fixture
 checks passed. Real TuShare checks returned both total-return indices through
 2026-10-30 and an explicitly degraded 600900 weekend close (2 days old).
-No active client, account state, cron or production environment changed; 0.1.31 remains
-the last activated runtime below.
+The source-validation phase did not alter active clients or production. The separately
+authorized activation above supersedes the historical 0.1.31 activation below.
 
 ## 0.1.31 activation (2026-11-03)
 
