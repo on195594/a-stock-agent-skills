@@ -2,7 +2,8 @@
   "provenance": {
     "source": "/home/lin/a-share-research-data/app.db",
     "access": "SQLite mode=ro; reports 70–78; captured 2026-11-02",
-    "projection": "Card-shaped offline projection, not an API capture. Numeric current/valuation fields copied unchanged from body.valuation_calc; completed_at copied from reports.created_at. Verdict/name/code are stored report fields. status=有效, origin and pending_events are test scope assignments. Date/missing-field variants in tests are synthetic; no valuation numbers are invented."
+    "projection": "Card-shaped offline projection, not an API capture. Numeric current/valuation fields copied unchanged from body.valuation_calc; completed_at copied from reports.created_at. Verdict/name/code are stored report fields. status=有效, origin and pending_events are test scope assignments. Date/missing-field variants in tests are synthetic; no valuation numbers are invented.",
+    "dividend_sensitivity": "Derived offline by Research valuation.at from matching saved reports in Research tests/data/hypotheses_v3.json; original annual_returns matched exactly; no live fetch."
   },
   "response": {
     "version": "research-v1",
@@ -28,7 +29,8 @@
             },
             "horizon": 2.4914442162902124,
             "support_below": 19.952431387372698,
-            "stretched_above": 27.938541408583703
+            "stretched_above": 27.938541408583703,
+            "neutral_return_without_dividends": -0.017928729327182952
           }
         }
       },
@@ -53,7 +55,8 @@
             },
             "horizon": 2.4914442162902124,
             "support_below": 17.84348407005272,
-            "stretched_above": 31.656501661589935
+            "stretched_above": 31.656501661589935,
+            "neutral_return_without_dividends": 0.08506586254271893
           }
         }
       },
@@ -78,7 +81,8 @@
             },
             "horizon": 2.4914442162902124,
             "support_below": 16.92509482385446,
-            "stretched_above": 31.4773537951808
+            "stretched_above": 31.4773537951808,
+            "neutral_return_without_dividends": -0.0031213839933960747
           }
         }
       },
@@ -103,7 +107,8 @@
             },
             "horizon": 2.4914442162902124,
             "support_below": 23.105007059771438,
-            "stretched_above": 45.626290916639995
+            "stretched_above": 45.626290916639995,
+            "neutral_return_without_dividends": 0.0995683093887262
           }
         }
       },
@@ -144,7 +149,8 @@
             },
             "horizon": 2.4914442162902124,
             "support_below": 181.7650406073478,
-            "stretched_above": 350.1388616118416
+            "stretched_above": 350.1388616118416,
+            "neutral_return_without_dividends": 0.17186654797642467
           }
         }
       },
@@ -185,7 +191,8 @@
             },
             "horizon": 2.4914442162902124,
             "support_below": 11.105330185958104,
-            "stretched_above": 19.297103469748915
+            "stretched_above": 19.297103469748915,
+            "neutral_return_without_dividends": 0.09811281207325295
           }
         }
       },
@@ -210,7 +217,8 @@
             },
             "horizon": 2.4914442162902124,
             "support_below": 43.76362081177593,
-            "stretched_above": 112.16979738498878
+            "stretched_above": 112.16979738498878,
+            "neutral_return_without_dividends": 0.15568509101123565
           }
         }
       }

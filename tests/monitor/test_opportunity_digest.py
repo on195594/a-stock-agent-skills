@@ -39,7 +39,7 @@ def test_four_holdings_one_candidate(cards):
     for comparison in research["opportunity_costs"]:
         assert comparison["candidate"]["report_id"] == 75
         assert comparison["net_advantage"] == pytest.approx(
-            comparison["candidate_neutral_return"] - comparison["holding_neutral_return"]
+            comparison["candidate_return_without_dividends"] - comparison["holding_neutral_return"]
             - .001 / comparison["candidate_horizon"])
     assert "宁德时代" in prompts[0]["detail"] and "19.82%" in prompts[0]["detail"]
     assert "情景未经记分，仅提示复核" in prompts[0]["detail"]

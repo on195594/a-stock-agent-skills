@@ -98,7 +98,13 @@ Kinds are `valuation_stretched`, `opportunity_cost`, `research_unavailable`
 comparisons require valid cards, non-null neutral returns, a valid L5 candidate
 verdict of 值得继续研究, positive candidate horizon, and closing dates at most
 three calendar days apart; rejected date comparisons are explained in `research.reason`.
-Per holding, only the largest net advantage reaching 0.03 is reported. Evidence
+Research optionally supplies `neutral_return_without_dividends`; it must be present and
+between -1 and the ordinary neutral return on both cards for opportunity comparisons.
+Net advantage now uses the candidate's no-dividend endpoint minus the holding's full-dividend
+neutral return minus the existing annual cost. This tests sensitivity within frozen nonnegative
+dividend assumptions, not actual-return bounds. Missing endpoints or insufficient robust advantage
+are explained in `research.reason`; original returns and all account gates remain unchanged.
+Per holding, only the largest such net advantage reaching 0.03 is reported. Evidence
 retains both report IDs and closing dates, neutral returns, candidate horizon,
 annual switch cost and net advantage. `trading_costs.py` owns `STAMP_TAX_RATE=0.0005`
 and `COMMISSION_RATE=0.00025`; annual cost is `(stamp + 2 * commission) / horizon`.
@@ -109,7 +115,8 @@ adds `research.opportunity_costs` (always an array, empty when no comparisons),
 without changing `schema_version`. Each item has the former opportunity prompt's
 evidence fields: `holding`, `candidate` (each with `code`, `report_id`, `close_date`,
 `close`), `holding_neutral_return`, `candidate_neutral_return`, `candidate_horizon`,
-`annual_switch_cost`, `net_advantage`. All best-per-holding comparisons remain here
+`annual_switch_cost`, `net_advantage`, plus `candidate_return_without_dividends` and
+`comparison_basis` explaining the sensitivity calculation. All best-per-holding comparisons remain here
 regardless of age; portfolio reviews and switching tables use this complete list.
 Opportunity prompts now group by candidate: `code` is the candidate code and
 `evidence.comparisons` contains all its retained comparisons. A group is shown only
