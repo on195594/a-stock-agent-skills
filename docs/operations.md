@@ -329,9 +329,10 @@ Benchmark index/stock prices now use the library contract above. Candidate insta
 used an isolated target root and explicit wheel override; normal frozen sync and
 release installation were then verified against the published artifact. Independent
 cwd checks confirmed version, site-packages import and byte-for-byte wheel contents.
-Validation: 1639 passed / 9 historical-behavior skips across the suite and final
-version/release-install gates; Ruff, regulatory freshness, standalone QA and cron
-fixture checks passed. Real TuShare checks returned both total-return indices through
+Validation after rebasing the disjoint dividend-sensitivity work from `1172e2d`:
+1641 passed / 9 historical-behavior skips in the full suite, including version and
+release-install gates; Ruff, regulatory freshness, standalone QA and cron fixture
+checks passed. Real TuShare checks returned both total-return indices through
 2026-10-30 and an explicitly degraded 600900 weekend close (2 days old).
 No active client, account state, cron or production environment changed; 0.1.31 remains
 the last activated runtime below.
