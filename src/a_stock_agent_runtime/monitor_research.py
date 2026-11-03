@@ -124,10 +124,21 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
             if days > 3:
                 mismatches.append(f"{code}/{candidate['code']} 收盘日相差 {days} 个自然日（超过3日），未比较机会成本")
                 continue
+            # Compare the candidate with none of its frozen dividends remaining against
+            # the holding with all remaining. This is sensitivity, not a return guarantee.
+            candidate_low = candidate["card"]["current"]["valuation"].get("neutral_return_without_dividends")
+            holding_low = (holding["card"]["current"].get("valuation") or {}).get("neutral_return_without_dividends")
+            if (candidate_low is None or holding_low is None
+                    or not -1 <= candidate_low <= candidate["neutral_return"]
+                    or not -1 <= holding_low <= holding["neutral_return"]):
+                mismatches.append(f"{code}/{candidate['code']} 缺少适用的分红敏感性值，未比较机会成本")
+                continue
             # Decimal avoids excluding the exact 3pp boundary through float subtraction.
             cost = (Decimal(str(STAMP_TAX_RATE)) + 2 * Decimal(str(COMMISSION_RATE))) / Decimal(str(horizon))
-            advantage = (Decimal(str(candidate["neutral_return"]))
+            advantage = (Decimal(str(candidate_low))
                          - Decimal(str(holding["neutral_return"])) - cost)
+            if advantage < Decimal("0.03"):
+                mismatches.append(f"{code}/{candidate['code']} 扣费后优势未稳健达到3个百分点；现金流未核对，不提示换仓优势")
             if advantage >= Decimal("0.03") and (best is None or advantage > best[0]):
                 best = advantage, cost, candidate
         if best:
@@ -138,6 +149,8 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
                 "candidate_neutral_return": candidate["neutral_return"],
                 "candidate_horizon": candidate["card"]["current"]["valuation"]["horizon"],
                 "annual_switch_cost": float(cost), "net_advantage": float(advantage),
+                "candidate_return_without_dividends": candidate["card"]["current"]["valuation"]["neutral_return_without_dividends"],
+                "comparison_basis": "候选不计累计分红、持仓计全部分红；仅非负冻结分红假设内的敏感性比较，非真实收益上下界",
             })
     grouped = {}
     for comparison in research["opportunity_costs"]:
@@ -157,8 +170,8 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
             "code": code, "kind": "opportunity_cost",
             "detail": (
                 f"{candidate.get('name') or code} {code} 中性年化 "
-                f"{comparisons[0]['candidate_neutral_return']:.2%}，扣费后比 {names} "
-                f"高 ≥3 个百分点（最大差 {maximum * 100:.4f} 个百分点），情景未经记分，仅提示复核"
+                f"{comparisons[0]['candidate_neutral_return']:.2%}，按候选不计累计分红、持仓计全部分红，扣费后比 {names} "
+                f"高 ≥3 个百分点（最大差 {maximum * 100:.4f} 个百分点），仅冻结分红敏感性、非真实收益界限；情景未经记分，仅提示复核"
                 + "".join(f"；Research 注：{caveat}" for caveat in caveats)
             ),
             "evidence": {"comparisons": comparisons},

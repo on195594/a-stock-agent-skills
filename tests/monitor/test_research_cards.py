@@ -27,7 +27,13 @@ UNCHANGED = ("data_status", "valuation_status", "action_status", "data_gaps", "s
 
 @pytest.fixture
 def cards():
-    return json.loads(FIXTURE.read_text())["response"]
+    response = json.loads(FIXTURE.read_text())["response"]
+    # Synthetic zero-dividend sensitivity endpoints for contract/threshold tests;
+    # the captured API fixture predates this field. These are not observed estimates.
+    for item in response["cards"]:
+        if value := item["current"]["valuation"]:
+            value["neutral_return_without_dividends"] = value["annual_returns"]["中性"]
+    return response
 
 
 def card(cards, code):
@@ -158,6 +164,8 @@ def test_net_opportunity_threshold(run_snapshot, cards, candidate_return, expect
     cards["cards"][:] = [held, candidate]
     held["current"]["valuation"]["annual_returns"]["中性"] = .02
     candidate["current"]["valuation"]["annual_returns"]["中性"] = candidate_return
+    held["current"]["valuation"]["neutral_return_without_dividends"] = .02
+    candidate["current"]["valuation"]["neutral_return_without_dividends"] = candidate_return
     candidate["current"]["valuation"]["horizon"] = 2
     _, payload = run_snapshot()
     assert bool(prompts(payload, "opportunity_cost")) is expected
@@ -302,3 +310,36 @@ def test_opportunity_freshness_uses_snapshot_as_of(run_snapshot, monkeypatch):
     assert payload["as_of"].startswith("2026-11-10")
     assert len(payload["research"]["opportunity_costs"]) == 1
     assert not prompts(payload, "opportunity_cost")
+
+
+def test_cash_uncertainty_can_remove_advantage_without_removing_card_returns(cards):
+    held, candidate = card(cards, "600900"), card(cards, "600309")
+    result = {"status": "ok", "cards": [held, candidate], "missing": []}
+    # Boundary mutation: nominal candidate beats holding, but its ex-dividend endpoint does not.
+    candidate["current"]["valuation"]["neutral_return_without_dividends"] = held["current"]["valuation"]["annual_returns"]["中性"]
+    research, notices, escalations = monitor_research.summarize(result, ["600900"], date(2026, 11, 2))
+    assert not research["opportunity_costs"] and '现金流未核对' in research['reason']
+    assert not [n for n in notices if n['kind'] == 'opportunity_cost'] and not escalations
+    assert research['candidates'][0]['neutral_return'] == candidate['current']['valuation']['annual_returns']['中性']
+    del candidate['current']['valuation']['neutral_return_without_dividends']
+    research, _, _ = monitor_research.summarize(result, ["600900"], date(2026, 11, 2))
+    assert not research['opportunity_costs'] and '缺少适用' in research['reason']
+
+
+def test_captured_maotai_changjiang_sensitivity_reverses_nominal_advantage(cards):
+    held, candidate = card(cards, "600900"), card(cards, "600519")
+    # Hypothetical scope/verdict only, not an actual account recommendation.
+    candidate.update(origin="l5", verdict="值得继续研究")
+    # Recomputed by Research valuation.at from valuation-stored-20261101.json,
+    # matching these captured reports: exit_cap/current_cap ** (1/horizon) - 1.
+    held['current']['valuation']['neutral_return_without_dividends'] = -0.004238281527728428
+    candidate['current']['valuation']['neutral_return_without_dividends'] = 0.0335926372960775
+    nominal = (candidate['current']['valuation']['annual_returns']['中性']
+               - held['current']['valuation']['annual_returns']['中性']
+               - .001 / candidate['current']['valuation']['horizon'])
+    assert nominal > .03
+    result = {'status': 'ok', 'cards': [held, candidate], 'missing': []}
+    research, notices, _ = monitor_research.summarize(result, ['600900'], date(2026, 11, 2))
+    assert not research['opportunity_costs']
+    assert '现金流未核对' in research['reason']
+    assert not [n for n in notices if n['kind'] == 'opportunity_cost']

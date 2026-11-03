@@ -165,7 +165,7 @@ def _research_card(raw: Any) -> dict:
     if current["valuation"] is not None:
         valuation = _object(current["valuation"], "research.card.valuation")
         _required(valuation, {"annual_returns", "horizon"}, "research.card.valuation")
-        for field in ("horizon", "support_below", "stretched_above", "close"):
+        for field in ("horizon", "support_below", "stretched_above", "close", "neutral_return_without_dividends"):
             _research_number(valuation.get(field))
         _optional_string(valuation.get("reason"), "research.card.valuation.reason")
         _optional_string(valuation.get("assumption"), "research.card.valuation.assumption")
