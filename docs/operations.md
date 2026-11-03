@@ -321,6 +321,24 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.33 activation (2026-11-03)
+
+Owner-authorized activation of `0.1.33-5add5f365ee7` for `claude`, `codex`, `hermes`
+and shared `~/.agents/skills/`, `--dry-run` then `--force` through the standard
+installer. Rollback manifest:
+`~/.local/share/a-stock-agent/rollback-1793697712640680680.json`.
+Only the dependency lock changed: a-stock-lib 0.10.0 (`bd55597`), wheel SHA256
+`e69dd873a57b5bc38f989650dad751e319554fd90190a07b0135854431164470`. Lib 0.10.0
+changes `framework_rule_hash` values (scoring semantics unchanged; rule hashes are
+recorded, not compared), makes `fetched_at` carry `+08:00`, and lets
+`detect_split_ratio` accept an explicit `as_of` and native TuShare columns; the
+runtime keeps its existing AKShare-column adapter. Validation: full suite 1641
+passed / 9 skipped including version and release-install gates; Ruff, regulatory
+freshness, standalone QA and cron fixture passed. Independent cwd checks confirmed
+active CLI targets, all client links, installed Skills 0.1.33 / Lib 0.10.0 and the
+recorded wheel hash. Pairs with Research `b8d4e54` deployed in the same session.
+No account commands, migrations, credentials or cron changes.
+
 ## 0.1.32 activation (2026-11-03)
 
 Owner-authorized activation of `0.1.32-729d470ee38e` for `claude`, `codex`, `hermes`
