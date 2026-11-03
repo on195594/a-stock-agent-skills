@@ -321,6 +321,22 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.34 activation (2026-11-03)
+
+Owner-authorized (Telegram msg 4137) activation of `0.1.34-4a2622904d48` for `claude`, `codex`,
+`hermes` and shared `~/.agents/skills/`, `--dry-run` then `--force` through the standard
+installer. Rollback manifest:
+`~/.local/share/a-stock-agent/rollback-1793719394930016960.json`; the previous runtime
+`0.1.33-5add5f365ee7` remains installed. Change: dividend-sensitivity near misses state both
+net advantages in `research.reason`; threshold, basis, prompts, account gates and monitor-v1
+schema unchanged; Lib 0.10.0 unchanged. Validation: `scripts/check.sh` passed (1639 passed /
+11 skipped, Ruff, regulatory freshness, standalone QA, cron fixture). Independent cwd checks
+confirmed all three CLI links, client links and installed Skills 0.1.34 / Lib 0.10.0. One
+real account `monitor-snapshot` (no `--portfolio-value`, read-only) after activation: Research
+`ok`, `review_candidate`, opportunity comparisons identical to the pre-activation snapshot
+(300750 vs 000963/002050/603606: 8.24/14.38/5.15 pp), no near miss present in the current
+account. No account writes, trades, migrations, credentials or cron changes.
+
 ## 0.1.33 activation (2026-11-03)
 
 Owner-authorized activation of `0.1.33-5add5f365ee7` for `claude`, `codex`, `hermes`
