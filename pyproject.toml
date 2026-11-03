@@ -1,9 +1,9 @@
 [project]
 name = "a-stock-agent-skills"
-version = "0.1.32"
+version = "0.1.33"
 requires-python = ">=3.13"
 dependencies = [
-  "a-stock-lib @ https://github.com/on195594/a-stock-lib/releases/download/v0.9.0/a_stock_lib-0.9.0-py3-none-any.whl#sha256=4c470038479856767cd686b0c71abe160b8cc5b39dec65fc9d8d2e68ccaf74a9",
+  "a-stock-lib @ https://github.com/on195594/a-stock-lib/releases/download/v0.10.0/a_stock_lib-0.10.0-py3-none-any.whl#sha256=e69dd873a57b5bc38f989650dad751e319554fd90190a07b0135854431164470",
   "akshare==1.18.64",
   "pandas==3.0.2",
   "requests==2.33.1",
