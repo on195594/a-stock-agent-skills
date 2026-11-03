@@ -31,10 +31,26 @@ guesses a sibling home-directory path. Those tests locate it via
 
 ## Validation matrix
 
-Run the smallest relevant check while iterating, then run the full automated
-matrix before committing. `scripts/check.sh` runs this matrix in one command and
-the hosted CI runs the same gate. Run `bash scripts/check.sh` **or** the commands
-below, not both for unchanged code.
+`scripts/check.sh` runs the full automated matrix in one command, and hosted CI
+runs the same gate on every push to `master`. Local validation is tiered:
+
+- **Ordinary change** (one module's logic or wording inside an existing contract,
+  tests, docs): run the changed modules' tests and direct callers with `-x`, plus
+  the gate of each touched area — version bump: `tests/research/test_p0_contracts.py`
+  and `tests/test_installation.py`; Skill text: `tests/test_skill_validation.py`;
+  regulatory constants: `scripts/check_regulatory_freshness.py`; QA Skill: the
+  standalone smoke; cron scripts: the cron smoke. Then `ruff check` and
+  `ruff format --check` on changed Python files. Hosted CI is the full gate.
+- **Full local `bash scripts/check.sh` before committing** only when the change
+  touches the dependency lock or a-stock-lib version, the installer/release or state
+  migrations, monitor-v1 or another wire contract/schema, spans several modules or
+  Skill routing, or first introduces an investment rule.
+- **Activation** reuses the pre-commit result; do not re-run tests. Activate only
+  after hosted CI succeeded on the commit or a descendant that contains it
+  (`gh run list`; a run cancelled by a newer push does not count).
+
+Run heavy commands with `nice -n 15` or a CPU quota. Run `bash scripts/check.sh`
+**or** the commands below, not both for unchanged code.
 
 ```bash
 uv run pytest -q

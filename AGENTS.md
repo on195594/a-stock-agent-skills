@@ -4,7 +4,7 @@
 - Keep the three Skill directories portable and client-neutral.
 - Runtime state, credentials, logs, locks, databases, and reports stay
   outside the repository.
-- Use Python 3.13+, uv, pytest, and Ruff for runtime work. Run targeted tests with `-x` during development; avoid blind full-suite runs with long timeouts. Heavy test commands must run with `nice -n 15` or CPU throttling.
+- Use Python 3.13+, uv, pytest, and Ruff for runtime work. Run targeted tests with `-x` during development; avoid blind full-suite runs with long timeouts. When the full local matrix is required, and activation's CI precondition, follow the tiered rule in `docs/development.md#validation-matrix`. Heavy test commands must run with `nice -n 15` or CPU throttling.
 - `a-stock-cache` W1 commands require the global `--confirm-write` gate.
 - QA tests must remain runnable with `python3 -I` and no installed runtime.
 - Investment rules may change only under an explicit, dated specification and
