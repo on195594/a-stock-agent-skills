@@ -129,3 +129,32 @@ def test_legacy_opportunity_prompt_still_readable(cards):
                 "detail": "旧版逐持仓提示", "evidence": row} for row in comparisons]
     monitor_contract._validate_research_fields(
         {"research": research, "review_prompts": prompts}, set(HOLDINGS))
+
+
+# Verbatim caveat emitted by Research valuation.at since c2d212f (2026-11-03).
+ASSUMPTION = "按冻结累计分红尚未支付测算，未核对实际剩余现金流；不代表已核实的换仓回报差。"
+
+
+def test_research_assumption_is_projected_and_shown_once(cards):
+    _, plain = summarize(cards)
+    assert "Research 注" not in plain[0]["detail"]
+    for item in cards["cards"]:
+        if (item["current"].get("valuation") or {}).get("annual_returns"):
+            item["current"]["valuation"]["assumption"] = ASSUMPTION
+    research, prompts = summarize(cards)
+    rows = research["holdings"] + research["candidates"]
+    assert {row["assumption"] for row in rows if row["neutral_return"] is not None} == {ASSUMPTION}
+    assert prompts[0]["detail"] == plain[0]["detail"] + f"；Research 注：{ASSUMPTION}"
+    # Mutation: a row that drops or rewrites the caveat no longer matches its card.
+    research["holdings"][0]["assumption"] = None
+    with pytest.raises(monitor_contract.MonitorContractError, match="assumption"):
+        monitor_contract._validate_research_fields(
+            {"research": research, "review_prompts": prompts}, set(HOLDINGS))
+
+
+def test_snapshot_rows_without_assumption_remain_readable(cards):
+    research, prompts = summarize(cards)
+    for row in research["holdings"] + research["candidates"]:
+        del row["assumption"]
+    monitor_contract._validate_research_fields(
+        {"research": research, "review_prompts": prompts}, set(HOLDINGS))

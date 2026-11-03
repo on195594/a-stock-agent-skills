@@ -47,6 +47,8 @@ def _row(code: str, card: dict | None) -> dict:
         "conservative_return": returns.get("保守"),
         "optimistic_return": returns.get("乐观"),
         "note": current.get("note") or valuation.get("reason") or current.get("reason"),
+        # Research's caveat for rolled returns (e.g. unverified cumulative dividends).
+        "assumption": valuation.get("assumption"),
     }
 
 
@@ -148,12 +150,16 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
         names = "/".join(cards[item["holding"]["code"]].get("name") or item["holding"]["code"]
                          for item in comparisons)
         maximum = max(item["net_advantage"] for item in comparisons)
+        caveats = dict.fromkeys(
+            caveat for c in compared_codes
+            if (caveat := (cards[c]["current"].get("valuation") or {}).get("assumption")))
         prompts.append({
             "code": code, "kind": "opportunity_cost",
             "detail": (
                 f"{candidate.get('name') or code} {code} 中性年化 "
                 f"{comparisons[0]['candidate_neutral_return']:.2%}，扣费后比 {names} "
                 f"高 ≥3 个百分点（最大差 {maximum * 100:.4f} 个百分点），情景未经记分，仅提示复核"
+                + "".join(f"；Research 注：{caveat}" for caveat in caveats)
             ),
             "evidence": {"comparisons": comparisons},
         })

@@ -84,7 +84,9 @@ reason. Successful reads are `ok`. Tests inject HTTP and never use live credenti
 `research.holdings` has one row per active code; `candidates` contains only L5 codes
 outside holdings (including missing L5 cards). Rows contain `code`, the original
 `card` (or null), `card_status`, `verdict`, `report_id`, `completed_at`, `close`,
-`close_date`, `zone`, the three `*_return` fields and `note`. `missing` is the list
+`close_date`, `zone`, the three `*_return` fields, `note` (pause notice) and, since
+0.1.31, `assumption` (Research's verbatim caveat on rolled returns, null if absent;
+older snapshots without it remain readable). `missing` is the list
 of codes reported missing by Research; a holding outside the scan scope also gets
 a null card, without being added to that list. No card means null projection fields.
 Current prices, zones, annual returns and horizon come from Research, never from
@@ -115,7 +117,8 @@ when the candidate or any compared holding's `completed_at` Asia/Shanghai calend
 date is 0–7 days before the snapshot's own `as_of` date (inclusive). Missing, null or unparseable
 completion timestamps are not fresh and do not invalidate the card. No clock or
 closing date is substituted. Detail lists the candidate, neutral return, compared
-holdings and maximum net advantage, with “情景未经记分，仅提示复核”. Older snapshots
+holdings and maximum net advantage, with “情景未经记分，仅提示复核”, followed by
+each distinct compared-card `assumption` as “Research 注：…”. Older snapshots
 without `opportunity_costs` retain validation of their per-holding prompt shape.
 
 A pending holding card adds `research_thesis_review` with `candidate=review` and

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.31 — 2026-11-03
+
+- 研究行新增 `assumption`，原样投影 Research 卡片 `current.valuation.assumption`（Research `c2d212f` 起：滚动回报按冻结累计分红尚未支付测算，未核对实际剩余现金流）；`note` 仍只表示区间暂停解读。换仓提醒 `detail` 末尾附“Research 注：…”（同句去重）。门槛、扣费、时效与门禁不变；monitor-v1 schema_version 不变，旧快照缺该字段仍可读。
+- 修正研究卡快照测试的时钟：行情桩按 `cst_today` 定日，跨日运行即判为过期，现与固定的 `cst_now` 同日。
+
 ## 0.1.30 — 2026-11-02
 
 - 机会成本比较完整保留在 `research.opportunity_costs`；研究提醒按候选合并，仅候选或任一达标持仓卡在快照日前 7 个自然日（上海日历）内完成时展示，缺失或无效完成时间视为不新鲜。情景未经记分，仅提示复核。

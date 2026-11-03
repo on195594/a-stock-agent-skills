@@ -168,6 +168,7 @@ def _research_card(raw: Any) -> dict:
         for field in ("horizon", "support_below", "stretched_above", "close"):
             _research_number(valuation.get(field))
         _optional_string(valuation.get("reason"), "research.card.valuation.reason")
+        _optional_string(valuation.get("assumption"), "research.card.valuation.assumption")
         if valuation["annual_returns"] is not None:
             returns = _object(valuation["annual_returns"], "research.card.annual_returns")
             _required(returns, {"保守", "中性", "乐观"}, "research.card.annual_returns")
@@ -232,6 +233,12 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
                 _research_number(row[field])
             for field in ("zone", "note"):
                 _optional_string(row[field], f"research.row.{field}")
+            # Added in 0.1.31; earlier snapshots without it remain readable.
+            if "assumption" in row:
+                _optional_string(row["assumption"], "research.row.assumption")
+                source = ((row["card"] or {}).get("current") or {}).get("valuation") or {}
+                if row["assumption"] != source.get("assumption"):
+                    raise MonitorContractError("research assumption projection is inconsistent")
             _research_date(row["close_date"])
         if len(codes) != len(set(codes)) or (
             group == "holdings" and set(codes) != holding_codes

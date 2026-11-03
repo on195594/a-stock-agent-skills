@@ -57,6 +57,8 @@ def http(monkeypatch, cards):
 def run_snapshot(isolated_cache_database, monkeypatch, capsys, cards, http):
     monkeypatch.setattr(commands_monitor.domain, "cst_now",
                         lambda: datetime.fromisoformat("2026-11-02T19:00:00+08:00"))
+    # Quote fixtures date themselves with cst_today; pin it to the same session.
+    monkeypatch.setattr(commands_monitor.domain, "cst_today", lambda: "2026-11-02")
     _seed_holding(isolated_cache_database, code="600900")
     close = card(cards, "600900")["current"]["last_close"]
     # A hypothetical clean account at the captured close; no invented market price.
