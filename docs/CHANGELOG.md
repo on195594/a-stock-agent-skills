@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.34 — 2026-11-03
+
+- 换仓近失比较（名义中性差已 ≥3 个百分点、按候选不计累计分红口径扣费后不足）在 `research.reason` 同时写出计分红与候选不计累计分红两种扣费后优势，避免高股息候选被一句话掩盖。门槛、口径、提醒条件与 monitor-v1 schema 不变。
+
 ## 0.1.31 — 2026-11-03
 
 - 研究行新增 `assumption`，原样投影 Research 卡片 `current.valuation.assumption`（Research `c2d212f` 起：滚动回报按冻结累计分红尚未支付测算，未核对实际剩余现金流）；`note` 仍只表示区间暂停解读。换仓提醒 `detail` 末尾附“Research 注：…”（同句去重）。门槛、扣费、时效与门禁不变；monitor-v1 schema_version 不变，旧快照缺该字段仍可读。2026-11-03 已推送并激活（见 operations.md）。

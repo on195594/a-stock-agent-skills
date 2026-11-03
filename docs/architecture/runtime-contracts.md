@@ -103,7 +103,9 @@ between -1 and the ordinary neutral return on both cards for opportunity compari
 Net advantage now uses the candidate's no-dividend endpoint minus the holding's full-dividend
 neutral return minus the existing annual cost. This tests sensitivity within frozen nonnegative
 dividend assumptions, not actual-return bounds. Missing endpoints or insufficient robust advantage
-are explained in `research.reason`; original returns and all account gates remain unchanged.
+are explained in `research.reason`; a near miss (nominal neutral gap already ≥ 0.03 before cost)
+states both net advantages in percentage points, full-dividend and candidate no-dividend, so
+dividend-heavy candidates stay visible. Original returns and all account gates remain unchanged.
 Per holding, only the largest such net advantage reaching 0.03 is reported. Evidence
 retains both report IDs and closing dates, neutral returns, candidate horizon,
 annual switch cost and net advantage. `trading_costs.py` owns `STAMP_TAX_RATE=0.0005`

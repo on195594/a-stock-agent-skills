@@ -138,7 +138,13 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
             advantage = (Decimal(str(candidate_low))
                          - Decimal(str(holding["neutral_return"])) - cost)
             if advantage < Decimal("0.03"):
-                mismatches.append(f"{code}/{candidate['code']} 扣费后优势未稳健达到3个百分点；现金流未核对，不提示换仓优势")
+                # Near misses keep both bases visible so dividend-heavy candidates are not hidden.
+                nominal = (Decimal(str(candidate["neutral_return"]))
+                           - Decimal(str(holding["neutral_return"])) - cost)
+                mismatches.append(
+                    f"{code}/{candidate['code']} 扣费后优势未稳健达到3个百分点"
+                    f"（计分红 {nominal * 100:.2f} 个百分点，候选不计累计分红 {advantage * 100:.2f} 个百分点）；"
+                    "现金流未核对，不提示换仓优势")
             if advantage >= Decimal("0.03") and (best is None or advantage > best[0]):
                 best = advantage, cost, candidate
         if best:

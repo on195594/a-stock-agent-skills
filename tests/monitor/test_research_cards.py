@@ -342,4 +342,7 @@ def test_captured_maotai_changjiang_sensitivity_reverses_nominal_advantage(cards
     research, notices, _ = monitor_research.summarize(result, ['600900'], date(2026, 11, 2))
     assert not research['opportunity_costs']
     assert '现金流未核对' in research['reason']
+    robust = .0335926372960775 - held['current']['valuation']['annual_returns']['中性'] - .001 / candidate['current']['valuation']['horizon']
+    # Near-miss reason carries both bases (about 3.92pp nominal vs 1.20pp robust).
+    assert f"计分红 {nominal * 100:.2f} 个百分点，候选不计累计分红 {robust * 100:.2f} 个百分点" in research['reason']
     assert not [n for n in notices if n['kind'] == 'opportunity_cost']
