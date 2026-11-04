@@ -148,6 +148,26 @@ def _research_date(value: Any) -> None:
             raise MonitorContractError("research close_date must be an ISO date or null") from None
 
 
+def stance_add_trigger(frozen: dict) -> dict | None:
+    """Project a new checkpoint or the legacy evidence wait without rewriting the card."""
+    return frozen.get("trigger" if frozen.get("action") == "等证据" else "add_trigger")
+
+
+def _research_trigger(value: Any) -> None:
+    trigger = _object(value, "research.card.add_trigger")
+    if set(trigger) != {"metric", "period", "op", "value"}:
+        raise MonitorContractError("research add_trigger requires metric, period, op, value")
+    if not isinstance(trigger["metric"], str) or not re.fullmatch(r"T\.[A-Za-z0-9_]+", trigger["metric"]):
+        raise MonitorContractError("research add_trigger metric must be a T.* row")
+    _research_date(trigger["period"])
+    if trigger["period"] is None:
+        raise MonitorContractError("research add_trigger period is required")
+    _supported(trigger["op"], frozenset({">=", "<="}), "research.add_trigger.op")
+    _research_number(trigger["value"])
+    if trigger["value"] is None or not math.isfinite(trigger["value"]):
+        raise MonitorContractError("research add_trigger value must be finite")
+
+
 def _research_card(raw: Any) -> dict:
     card = _object(raw, "research.card")
     _required(card, {"code", "origin", "status", "verdict", "report_id", "current", "pending_events"}, "research.card")
@@ -190,6 +210,16 @@ def _research_card(raw: Any) -> dict:
         _supported(frozen.get("action"), STANCE_ACTIONS, "research.card.stance_calc.action")
         _research_number(frozen.get("price"))
         _research_date(frozen.get("valid_until"))
+        for field, action in (("add_trigger", "现在分批"), ("trigger", "等证据")):
+            if field in frozen:
+                if frozen["action"] != action:
+                    raise MonitorContractError("research checkpoint action is inconsistent")
+                _research_trigger(frozen[field])
+            stance = card.get("stance") or {}
+            if card.get("stance") is not None and stance.get(field) != frozen.get(field):
+                raise MonitorContractError("research frozen checkpoint is inconsistent with stance")
+        if frozen["action"] == "等证据" and "trigger" not in frozen:
+            raise MonitorContractError("legacy evidence stance requires trigger")
     return card
 
 
@@ -289,12 +319,14 @@ def _validate_research_fields(value: dict, holding_codes: set[str], untradable: 
             _review_evidence_row(evidence)
             row = next(r for r in research["candidates"] if r["code"] == prompt["code"])
             fields = ("code", "report_id", "close_date", "close", *_RESEARCH_STANCE_FIELDS)
+            if "stance_add_trigger" in row:
+                fields = (*fields, "stance_add_trigger")
             if set(evidence) != set(fields) or any(field not in row or evidence[field] != row[field] for field in fields):
                 raise MonitorContractError("research_opportunity evidence is inconsistent")
             # Date-free part of the runtime trigger; the freshness/validity dates are runtime-only.
             if (row["card_status"] != "有效" or row["verdict"] != "值得继续研究" or row["stance_action"] == "回避"
                     or not (row["v2_zone"] == "测算支持区" and row["expected_return"] is not None
-                            or row["stance_action"] == "现在分批"
+                            or row["stance_action"] in {"现在分批", "等证据"}
                             or row["stance_action"] == "等价格" and row["stance_price"] is not None
                             and row["close"] is not None and row["close"] <= row["stance_price"])):
                 raise MonitorContractError("research_opportunity candidate is not eligible")
@@ -320,6 +352,12 @@ def _validate_research_fields(value: dict, holding_codes: set[str], untradable: 
 
 
 def _research_stance(row: dict) -> None:
+    if "stance_add_trigger" in row:
+        frozen = (row["card"] or {}).get("stance_calc") or {}
+        if row["stance_add_trigger"] is not None:
+            _research_trigger(row["stance_add_trigger"])
+        if row["stance_add_trigger"] != stance_add_trigger(frozen):
+            raise MonitorContractError("research add_trigger projection is inconsistent")
     present = [field in row for field in _RESEARCH_STANCE_FIELDS]
     if not any(present):
         return

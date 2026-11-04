@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.37 — 2026-11-04
+
+- 按 [参考证据规格](specs/2026-11-04-reference-evidence-spec.md) 适配 Research 新立场：新增 `stance_add_trigger` 投影与一致性校验；旧等证据按现在分批并附参考加仓检查点处理，首批不再等待财报，后续批次须披露达标且更新有效研究确认。机会提醒与定仓说明保留首批上限，旧快照可读，schema 与风险规则不变。
+
 ## 0.1.36 — 2026-11-04
 
 - 按 [板块权限规格](specs/2026-11-04-untradable-boards-spec.md)（所有者 2026-11-04 说明账户暂无科创板权限）：风险政策可选字段 `untradable_boards`（`STAR`/`BSE`）所列板块照常研究，但不出 `research_opportunity`、不作 `opportunity_cost` 换仓候选、`position-size` 拒绝定仓；未提供账户范围时也生效；快照写入 `account.risk_policy.untradable_boards`，契约拒绝点名受限板块的建议。`schema_version` 与其余规则不变。

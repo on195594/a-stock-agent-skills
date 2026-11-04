@@ -97,3 +97,22 @@ def test_untradable_board_is_not_sized(snapshot):
     assert [position_size.size(snapshot, code, price, "A")["max_shares"]
             for code, price in (("600900", 29.5), ("300750", 380.0))] == before[:2]
     assert before[2] == 361
+
+
+@pytest.mark.parametrize("code", ["300750", "002946", "002648"])
+def test_checkpoint_note_limits_action_to_first_tranche(snapshot, code):
+    from datetime import date
+    from a_stock_agent_runtime import monitor_research
+    cards = json.loads((Path(__file__).parent / "fixtures/monitor/reference-evidence-cards.json").read_text())
+    card = next(c for c in cards["cards"] if c["code"] == code)
+    research, prompts, _ = monitor_research.summarize(
+        {"status": "ok", "cards": [card], "missing": []}, ["600000"], date(2026, 11, 4))
+    snapshot |= {"research": research, "review_prompts": prompts}
+    result = position_size.size(snapshot, code, card["current"]["last_close"], "A")
+    if code == "002648":
+        assert "加仓检查点" not in result["note"]
+    else:
+        assert f"首批 tranches[0]：{result['tranches'][0]['cumulative_shares']} 股" in result["note"]
+        assert "参考，不阻止首批" in result["note"] and "更新的有效研究确认" in result["note"]
+        if code == "300750":
+            assert result["tranches"][0]["cumulative_shares"] == 0

@@ -147,6 +147,23 @@ evidence to equal the candidate row field by field and re-checks the date-free
 trigger (valid card, 值得继续研究, not 回避, and v2 support, 现在分批, or a reached
 等价格 price).
 
+The [0.1.37 specification](../specs/2026-11-04-reference-evidence-spec.md) adds
+optional `stance_add_trigger`: the frozen `add_trigger` for 现在分批, or `trigger`
+for legacy 等证据, otherwise null. Its exact shape is `{metric, period, op, value}`:
+T.* financial row, ISO period date, >=/<=, and a finite number in the source row's
+unit and cumulative basis. Cards validate the shape and any corresponding stance
+checkpoint; rows and opportunity evidence must match the frozen card. Earlier
+snapshots may omit the new field; when a row includes it, its opportunity evidence
+must include it too. `schema_version` stays 1 and legacy 等证据 remains accepted.
+Legacy 等证据 also qualifies for the 0–7-day opportunity condition. Checkpoint
+prompts state the first-tranche ceiling (`tranches[0]`, including zero) and the
+reference threshold, which never blocks the first tranche. Later tranches require
+actual target-period disclosure meeting the threshold and updated valid Research
+confirmation; an unmet threshold calls for reduction review, and undisclosed is
+not unmet. The position-size budget calculation and three stages stay unchanged;
+its note identifies the first-tranche ceiling when the card has a checkpoint.
+Skills never infer fulfillment from the calendar or recompute Research numbers.
+
 The [0.1.36 specification](../specs/2026-11-04-untradable-boards-spec.md) adds the
 optional `account.risk_policy.untradable_boards` (distinct `STAR`/`BSE`, source
 `policy_file`), applied even when the policy's limits are not applied for a missing

@@ -59,6 +59,7 @@ def _stance(card: dict | None, valuation: dict) -> dict:
     v2 = valuation.get("v2") or {}
     return {
         "stance_action": frozen.get("action"),
+        "stance_add_trigger": monitor_contract.stance_add_trigger(frozen),
         "stance_price": frozen.get("price"),
         "stance_valid_until": frozen.get("valid_until"),
         "expected_return": v2.get("annual_return"),
@@ -77,9 +78,23 @@ def _opportunity(row: dict, snapshot_date: date) -> str | None:
             and row["close_date"] <= row["stance_valid_until"]
             and snapshot_date.isoformat() <= row["stance_valid_until"]):
         return f"收盘价 {row['close']:g} 已不高于研究立场的等待价 {row['stance_price']:.2f}（有效至 {row['stance_valid_until']}）"
-    if row["stance_action"] == "现在分批" and _fresh(row["completed_at"], snapshot_date):
+    if row["stance_action"] in {"现在分批", "等证据"} and _fresh(row["completed_at"], snapshot_date):
         return "研究立场为现在分批（报告 7 日内）"
     return None
+
+
+def _checkpoint_detail(row: dict) -> str:
+    trigger = row["stance_add_trigger"]
+    if trigger is None:
+        return ""
+    # Research's T.op_cash financial table is denominated in 100 million CNY.
+    metric = "经营现金流" if trigger["metric"] == "T.op_cash" else trigger["metric"]
+    unit = "亿元" if trigger["metric"] == "T.op_cash" else "（单位与累计口径同财务表）"
+    op = {">=": "≥", "<=": "≤"}[trigger["op"]]
+    return (f"动作上限为首批（position-size tranches[0]，不足一手则为 0）；加仓检查点："
+            f"{trigger['period']} {metric} {op} {trigger['value']:g} {unit}（参考，不阻止首批）；"
+            "目标期间披露达到阈值且更新的有效研究确认后，才按立场加后续批次；未达到则复核是否减仓；"
+            "未披露不视为未达到。")
 
 
 def _evidence(row: dict) -> dict:
@@ -228,9 +243,9 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date,
             prompts.append({
                 "code": candidate["code"], "kind": "research_opportunity",
                 "detail": (f"{name} {candidate['code']}：{reason}；研究立场 {candidate['stance_action'] or '未记录'}。"
-                           "情景未经记分，按 position-size 定仓后再决定，不构成已形成的交易动作"),
+                           + _checkpoint_detail(candidate) + "情景未经记分，按 position-size 定仓后再决定，不构成已形成的交易动作"),
                 "evidence": _evidence(candidate) | {key: candidate[key] for key in (
-                    "stance_action", "stance_price", "stance_valid_until", "expected_return", "v2_zone")},
+                    "stance_action", "stance_price", "stance_valid_until", "stance_add_trigger", "expected_return", "v2_zone")},
             })
     if mismatches:
         research["reason"] = "；".join(mismatches)

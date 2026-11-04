@@ -146,3 +146,110 @@ def test_snapshot_assembly_threads_policy_restriction(card):
     closed = commands_monitor._with_research(base, result)
     monitor_contract.validate_monitor_snapshot(closed)
     assert closed["review_prompts"] == [] and closed["research"]["candidates"][0]["code"] == "688578"
+
+
+REFERENCE = FIXTURE.with_name("reference-evidence-cards.json")
+
+
+def reference_card(code):
+    return next(c for c in json.loads(REFERENCE.read_text())["cards"] if c["code"] == code)
+
+
+def new_checkpoint_card():
+    # Explicit contract perturbation: real captured card plus Research's support-fixture stance.
+    card = reference_card("002648")
+    card["stance"] = json.loads(FIXTURE.with_name("research-add-trigger.json").read_text())["stance"]
+    card["stance_calc"] = {"action": card["stance"]["action"],
+                           "add_trigger": deepcopy(card["stance"]["add_trigger"])}
+    return card
+
+
+@pytest.mark.parametrize("code,value", [("300750", 1000), ("002946", 15.1)])
+def test_legacy_evidence_wait_is_first_tranche_with_reference_checkpoint(code, value):
+    card = reference_card(code)
+    research, prompts, _ = run(card)
+    row = research["candidates"][0]
+    assert row["stance_action"] == "等证据"
+    assert row["stance_add_trigger"] == card["stance_calc"]["trigger"]
+    assert row["stance_add_trigger"]["value"] == value
+    detail = prompts[0]["detail"]
+    assert f"2026-12-31 经营现金流 ≥ {value:g} 亿元" in detail
+    assert "参考，不阻止首批" in detail and "tranches[0]" in detail
+    assert "更新的有效研究确认" in detail and "未达到则复核是否减仓" in detail
+    # Remove the independent support-zone condition to exercise the relaxed freshness rule alone.
+    card["current"]["valuation"]["v2"]["zone"] = "中性区"
+    completed = date.fromisoformat(card["completed_at"][:10])
+    from datetime import timedelta
+    assert run(card, completed + timedelta(days=7))[1]
+    assert not run(card, completed + timedelta(days=8))[1]
+    assert not run(card, completed - timedelta(days=1))[1]
+
+
+def test_new_checkpoint_projects_and_absence_does_not_invent_one():
+    card = new_checkpoint_card()
+    research, prompts, _ = run(card)
+    assert research["candidates"][0]["stance_add_trigger"] == card["stance_calc"]["add_trigger"]
+    assert "2026-03-31 经营现金流 ≥ 200 亿元" in prompts[0]["detail"]
+    plain = reference_card("002648")
+    research, prompts, _ = run(plain)
+    assert research["candidates"][0]["stance_add_trigger"] is None
+    assert "加仓检查点" not in prompts[0]["detail"]
+
+
+@pytest.mark.parametrize("patch", [
+    {"metric": "M.close"}, {"period": None}, {"period": "2026-13-31"},
+    {"op": ">"}, {"value": True}, {"value": None}, {"value": float("inf")}, {"extra": 1},
+])
+def test_checkpoint_shape_rejects_mutations(patch):
+    card = new_checkpoint_card()
+    card["stance_calc"]["add_trigger"].update(patch)
+    card["stance"]["add_trigger"] = deepcopy(card["stance_calc"]["add_trigger"])
+    with pytest.raises(monitor_contract.MonitorContractError):
+        run(card)
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("location", ["frozen", "row", "evidence", "missing_evidence"])
+def test_checkpoint_mismatch_rejected(legacy, location):
+    card = reference_card("300750") if legacy else new_checkpoint_card()
+    if location == "frozen":
+        card["stance_calc"]["trigger" if legacy else "add_trigger"]["value"] += 1
+        with pytest.raises(monitor_contract.MonitorContractError):
+            run(card)
+        return
+    research, prompts, _ = run(card)
+    if location == "row":
+        research["candidates"][0]["stance_add_trigger"] = None
+    elif location == "evidence":
+        prompts[0]["evidence"]["stance_add_trigger"] = None
+    else:
+        del prompts[0]["evidence"]["stance_add_trigger"]
+    with pytest.raises(monitor_contract.MonitorContractError):
+        monitor_contract._validate_research_fields({"research": research, "review_prompts": prompts}, set())
+
+
+def test_old_snapshot_without_additive_projection_remains_readable():
+    research, prompts, _ = run(reference_card("002648"))
+    del research["candidates"][0]["stance_add_trigger"], prompts[0]["evidence"]["stance_add_trigger"]
+    monitor_contract._validate_research_fields({"research": research, "review_prompts": prompts}, set())
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_checkpoint_does_not_bypass_eligibility_or_board_restriction(legacy):
+    card = reference_card("300750") if legacy else new_checkpoint_card()
+    for field, value in (("status", "待复核"), ("verdict", "需要谨慎")):
+        assert not run(card | {field: value})[1]
+    assert not run(card, holdings=[card["code"]])[1]
+    bad = deepcopy(card)
+    bad["stance_calc"]["action"] = "回避"
+    with pytest.raises(monitor_contract.MonitorContractError):
+        run(bad)
+    bad = deepcopy(card)
+    source, dest = ("trigger", "add_trigger") if legacy else ("add_trigger", "trigger")
+    bad["stance_calc"][dest] = bad["stance_calc"].pop(source)
+    with pytest.raises(monitor_contract.MonitorContractError):
+        run(bad)
+    card["code"] = "688578"  # Board-only mutation; financial inputs remain captured values.
+    payload = {"status": "ok", "cards": [card], "missing": []}
+    assert not monitor_research.summarize(payload, [], DAY, ["STAR"])[1]
+    assert monitor_research.summarize(payload, [], DAY, ["BSE"])[1]

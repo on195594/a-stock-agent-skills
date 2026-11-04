@@ -79,6 +79,15 @@ def size(snapshot: dict, code: str, price: float, framework: str, *, cash: float
     # shifted forward, so a "first tranche only" cap can always read tranches[0].
     tranches = [{"stage": stage, "cumulative_shares": _valid_quantity(code, math.floor(shares * fraction))}
                 for stage, fraction in TRANCHES]
+    research = snapshot.get("research") or {}
+    row = next((r for group in ("holdings", "candidates") for r in research.get(group, [])
+                if r["code"] == code), {})
+    frozen = (row.get("card") or {}).get("stance_calc") or {}
+    checkpoint = monitor_contract.stance_add_trigger(frozen)
+    note = "仅按风险预算给出规模上限；是否买入由研究立场与门禁决定，未核验涨跌停、滑点与可成交数量"
+    if checkpoint is not None:
+        note += (f"；加仓检查点仅供参考，不阻止首批；动作上限为首批 tranches[0]：{tranches[0]['cumulative_shares']} 股，"
+                 "不得反复以首批名义追加；目标期间披露达标且更新的有效研究确认后才加后续批次，未达标复核是否减仓")
     return {
         "version": "position-size-v1", "code": code, "price": price, "framework": label,
         "stop_loss_20": stop, "risk_per_share": per_share,
@@ -89,7 +98,7 @@ def size(snapshot: dict, code: str, price: float, framework: str, *, cash: float
         "stop_risk_pct": shares * per_share / total * 100, "tranches": tranches,
         "snapshot_as_of": snapshot.get("as_of"),
         "action_status": "not_formed", "execution_status": "not_checked",
-        "note": "仅按风险预算给出规模上限；是否买入由研究立场与门禁决定，未核验涨跌停、滑点与可成交数量",
+        "note": note,
     }
 
 
