@@ -160,7 +160,7 @@ a-stock-cache score-fundamentals <代码> <框架A-F> '<评分输入JSON v1>'
 
 > 本 skill 仅做首次配置层面的相对强度与集中度参考。减仓/止损/补仓等持仓操作及其精确仓位测算属于持仓监控职责，请使用 `/a-stock-monitor`。
 
-买入股数只取 `position-size` 输出；未取得已确认风险快照时不测算买入金额。
+买入股数只取 `position-size` 输出；未取得已确认风险快照时不测算买入金额。账户风险政策 `untradable_boards` 所列板块（快照 `account.risk_policy`）只研究、不形成买入动作，`position-size` 会拒绝定仓。
 
 **行业/风格集中度约束**：
 | 约束项 | 上限 | 触发时操作 |

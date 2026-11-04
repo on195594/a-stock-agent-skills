@@ -16,7 +16,7 @@ from pathlib import Path
 import re
 import sys
 
-from a_stock_agent_runtime import commands_holdings, domain, monitor_contract, risk_budget
+from a_stock_agent_runtime import boards, commands_holdings, domain, monitor_contract, risk_budget
 
 TRANCHES = (("1/3", 1 / 3), ("2/3", 2 / 3), ("1", 1))
 
@@ -60,6 +60,8 @@ def size(snapshot: dict, code: str, price: float, framework: str, *, cash: float
     if per_share <= 0:
         raise ValueError("第二档止损价不低于拟买入价，无法定仓")
     policy = account["risk_policy"]
+    if not boards.advisable(code, policy.get("untradable_boards")):
+        raise ValueError(f"账户无{boards.LABELS[boards.board(code)]}交易权限（风险政策 untradable_boards），不定仓；研究不受影响")
     holding = next((h for h in snapshot["holdings"] if h["code"] == code), None)
     existing = (holding or {}).get("stop_risk") or 0
     single = total * policy["max_position_risk_pct"] / 100 - existing

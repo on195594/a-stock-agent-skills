@@ -82,3 +82,18 @@ def test_cli_reads_snapshot_file_only(snapshot, tmp_path, capsys):
     assert cache.main(["position-size", "--snapshot", str(path), "--code", "600900", "--price", "29.5",
                        "--framework", "a"]) == 0
     assert json.loads(capsys.readouterr().out)["max_shares"] == 300
+
+
+def test_untradable_board_is_not_sized(snapshot):
+    """0.1.36: a policy's untradable_boards refuses sizing; other boards are unaffected."""
+    snapshot = personal(snapshot)
+    before = [position_size.size(snapshot, code, price, "A")["max_shares"]
+              for code, price in (("600900", 29.5), ("300750", 380.0), ("688578", 83.0))]
+    snapshot["account"]["risk_policy"] |= {"untradable_boards": ["STAR"]}
+    snapshot["account"]["risk_policy"]["field_sources"] |= {"untradable_boards": "policy_file"}
+    with pytest.raises(ValueError, match="科创板"):
+        position_size.size(snapshot, "688578", 83.0, "A")
+    # Main board and ChiNext sizing is unchanged by a STAR-only restriction.
+    assert [position_size.size(snapshot, code, price, "A")["max_shares"]
+            for code, price in (("600900", 29.5), ("300750", 380.0))] == before[:2]
+    assert before[2] == 361

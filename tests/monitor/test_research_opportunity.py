@@ -108,3 +108,41 @@ def test_boundary_rejects_malformed_stance_calc(card):
     card["stance_calc"] = {"action": "持有"}
     with pytest.raises(monitor_contract.MonitorContractError):
         monitor_contract.validate_research_cards({"cards": [card], "missing": []})
+
+
+def test_untradable_board_keeps_research_but_drops_advice(card):
+    """0.1.36: the owner's account cannot trade STAR; 688578 stays researched, never advised."""
+    payload = {"status": "ok", "cards": [card], "missing": []}
+    research, prompts, _ = monitor_research.summarize(payload, [], DAY, ["STAR"])
+    monitor_contract._validate_research_fields({"research": research, "review_prompts": prompts}, set(), ["STAR"])
+    row = research["candidates"][0]
+    assert row["code"] == "688578" and row["v2_zone"] == "测算支持区" and row["stance_action"] == "现在分批"
+    assert not [p for p in prompts if p["kind"] == "research_opportunity"]
+    assert "688578" in research["reason"] and "科创板" in research["reason"]
+    # BSE-only restriction leaves the STAR candidate advisable.
+    assert len(run(card)[1]) == 1
+    assert [p["kind"] for p in monitor_research.summarize(payload, [], DAY, ["BSE"])[1]] == ["research_opportunity"]
+
+
+def test_contract_rejects_opportunity_on_untradable_board(card):
+    research, prompts, _ = monitor_research.summarize({"status": "ok", "cards": [card], "missing": []}, [], DAY)
+    snapshot = {"research": research, "review_prompts": prompts}
+    monitor_contract._validate_research_fields(snapshot, set(), ["BSE"])
+    with pytest.raises(monitor_contract.MonitorContractError, match="cannot trade"):
+        monitor_contract._validate_research_fields(snapshot, set(), ["STAR"])
+
+
+def test_snapshot_assembly_threads_policy_restriction(card):
+    """The monitor command passes the policy's untradable_boards into the research summary."""
+    from a_stock_agent_runtime import commands_monitor
+    base = json.loads((FIXTURE.parents[1] / "monitor/agent-behavior-snapshots.json").read_text())["no_action"]
+    base["as_of"] = "2026-11-04T15:00:00+08:00"
+    base.pop("research", None), base.pop("review_prompts", None)
+    result = {"status": "ok", "cards": [card], "missing": []}
+    open_ = commands_monitor._with_research(deepcopy(base), deepcopy(result))
+    assert [p["kind"] for p in open_["review_prompts"]] == ["research_opportunity"]
+    base["account"]["risk_policy"] |= {"untradable_boards": ["STAR"]}
+    base["account"]["risk_policy"]["field_sources"] |= {"untradable_boards": "policy_file"}
+    closed = commands_monitor._with_research(base, result)
+    monitor_contract.validate_monitor_snapshot(closed)
+    assert closed["review_prompts"] == [] and closed["research"]["candidates"][0]["code"] == "688578"

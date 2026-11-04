@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import json
 from typing import Any
 
-from a_stock_agent_runtime import paths, risk_budget
+from a_stock_agent_runtime import boards, paths, risk_budget
 
 
 class RiskPolicyError(ValueError):
@@ -155,7 +155,22 @@ def _load_policy(
                 "off_account_strategy_cash must be a finite number >= 0"
             )
         value["off_account_strategy_cash"] = float(cash)
+    if "untradable_boards" in value:
+        value["untradable_boards"] = untradable_boards(value["untradable_boards"])
     return value
+
+
+def untradable_boards(value: object) -> list[str]:
+    """Validate a policy's boards the account cannot trade (docs/specs/2026-11-04-untradable-boards-spec.md)."""
+    if (
+        not isinstance(value, list)
+        or any(item not in boards.RESTRICTABLE for item in value)
+        or len(set(value)) != len(value)
+    ):
+        raise RiskPolicyError(
+            f"untradable_boards must be a list of distinct values from {', '.join(boards.RESTRICTABLE)}"
+        )
+    return list(value)
 
 
 def resolve_risk_parameters(
@@ -248,6 +263,10 @@ def resolve_risk_parameters(
                 effective[field] = float(override)
                 effective["field_sources"][field] = "cli"
                 effective["source"] = "cli_override"
+    if file_policy is not None and "untradable_boards" in file_policy:
+        # Only narrows advice, never authorizes risk, so it applies even without a matching scope.
+        effective["untradable_boards"] = file_policy["untradable_boards"]
+        effective["field_sources"]["untradable_boards"] = "policy_file"
     # Strategy cash held outside the broker account is still at the strategy's
     # disposal, so it belongs in the denominator; it never creates one by itself.
     off_account = effective.get("off_account_strategy_cash", 0.0)

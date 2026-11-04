@@ -13,6 +13,7 @@ from a_stock_lib.providers import TushareMarketDataProvider
 from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
 
 from a_stock_agent_runtime import (
+    boards,
     db,
     domain,
     market_quotes,
@@ -246,11 +247,8 @@ def _parse_add_holding_args(
 
 def _a_share_board(code: str) -> tuple[str, int]:
     """Return (board, minimum/integer-lot reference) for executable sizing."""
-    if code.startswith("688"):
-        return "STAR", 200
-    if code.startswith(("4", "8", "920")):
-        return "BSE", 100
-    return "MAIN", 100
+    name = boards.board(code)
+    return name, 200 if name == "STAR" else 100
 
 
 def _validate_buy_quantity(code: str, shares: int) -> str | None:

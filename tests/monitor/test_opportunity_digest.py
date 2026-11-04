@@ -158,3 +158,47 @@ def test_snapshot_rows_without_assumption_remain_readable(cards):
         del row["assumption"]
     monitor_contract._validate_research_fields(
         {"research": research, "review_prompts": prompts}, set(HOLDINGS))
+
+
+def test_untradable_board_never_becomes_a_switch_candidate(cards):
+    """0.1.36: ChiNext 300750 stays a candidate under a STAR-only restriction; relabelled as a STAR
+    code (identity change only, valuations untouched) it is excluded and a forged prompt is rejected."""
+    monitor_contract.validate_research_cards(cards)
+    day = date(2026, 11, 2)
+    research, prompts, _ = monitor_research.summarize({"status": "ok", **cards}, HOLDINGS, day, ["STAR"])
+    assert [p["code"] for p in prompts if p["kind"] == "opportunity_cost"] == ["300750"]
+    starred = deepcopy(cards)
+    for card in starred["cards"]:
+        if card["code"] == "300750":
+            card["code"] = "688750"
+    monitor_contract.validate_research_cards(starred)
+    research, prompts, _ = monitor_research.summarize({"status": "ok", **starred}, HOLDINGS, day, ["STAR"])
+    monitor_contract._validate_research_fields({"research": research, "review_prompts": prompts}, set(HOLDINGS), ["STAR"])
+    assert "688750" in [r["code"] for r in research["candidates"]]
+    # The next-best tradable candidate may take its place; the excluded code never appears.
+    assert all(c["candidate"]["code"] != "688750" for c in research["opportunity_costs"])
+    assert "688750" not in [p["code"] for p in prompts]
+    # Mutation: a snapshot built while ignoring the restriction names 688750; the contract rejects it.
+    ignored, ignored_prompts, _ = monitor_research.summarize({"status": "ok", **starred}, HOLDINGS, day)
+    assert "688750" in [p["code"] for p in ignored_prompts if p["kind"] == "opportunity_cost"]
+    monitor_contract._validate_research_fields({"research": ignored, "review_prompts": ignored_prompts}, set(HOLDINGS))
+    with pytest.raises(monitor_contract.MonitorContractError, match="cannot trade"):
+        monitor_contract._validate_research_fields(
+            {"research": ignored, "review_prompts": ignored_prompts}, set(HOLDINGS), ["STAR"])
+
+
+def test_legacy_holding_prompt_cannot_name_untradable_board(cards):
+    """Pre-0.1.30 shape (prompt on the holding, no research.opportunity_costs) obeys the restriction too."""
+    starred = deepcopy(cards)
+    for card in starred["cards"]:
+        if card["code"] == "300750":
+            card["code"] = "688750"
+    monitor_contract.validate_research_cards(starred)
+    research, _, _ = monitor_research.summarize({"status": "ok", **starred}, HOLDINGS, date(2026, 11, 2))
+    comparison = next(c for c in research.pop("opportunity_costs") if c["candidate"]["code"] == "688750")
+    legacy = {"research": research, "review_prompts": [{
+        "code": comparison["holding"]["code"], "kind": "opportunity_cost", "detail": "旧格式换仓提示",
+        "evidence": comparison}]}
+    monitor_contract._validate_research_fields(legacy, set(HOLDINGS))
+    with pytest.raises(monitor_contract.MonitorContractError):
+        monitor_contract._validate_research_fields(legacy, set(HOLDINGS), ["STAR"])

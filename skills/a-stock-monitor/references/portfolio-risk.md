@@ -93,6 +93,7 @@ a-stock-cache portfolio-scenario --snapshot <仓库外快照JSON> --sell <代码
   ```
 
   输出 `max_shares` 与 `tranches`（1/3、2/3、1 三阶段累计股数，不足一手的阶段为 0；首批恒为 `tranches[0]`）：股数 ×（买价 − 第二档止损）同时不超过单股剩余预算与组合剩余预算，并按板块交易单位取整。`budget_below_one_lot` 如实说明，不换别的上限。结果 `action_status=not_formed`、`execution_status=not_checked`，不核验涨跌停、滑点与可成交量。
+- 账户板块权限：风险政策可选字段 `untradable_boards`（`STAR`/`BSE`）所列板块照常研究，但不出机会提示、不作换仓候选、`position-size` 拒绝定仓；未提供账户范围时也生效，被排除代码写入 `research.reason`（[2026-11-04 板块权限规格](../../../docs/specs/2026-11-04-untradable-boards-spec.md)）。
 
 ### 行为与宏观检查
 

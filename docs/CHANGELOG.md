@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.36 — 2026-11-04
+
+- 按 [板块权限规格](specs/2026-11-04-untradable-boards-spec.md)（所有者 2026-11-04 说明账户暂无科创板权限）：风险政策可选字段 `untradable_boards`（`STAR`/`BSE`）所列板块照常研究，但不出 `research_opportunity`、不作 `opportunity_cost` 换仓候选、`position-size` 拒绝定仓；未提供账户范围时也生效；快照写入 `account.risk_policy.untradable_boards`，契约拒绝点名受限板块的建议。`schema_version` 与其余规则不变。
+
 ## 0.1.35 — 2026-11-04
 
 - 按 [进取不足诊断规格](specs/2026-11-04-proactive-decision-spec.md)（所有者 2026-11-04 授权）修正决策层：

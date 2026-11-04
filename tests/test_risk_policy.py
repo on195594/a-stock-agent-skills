@@ -576,3 +576,23 @@ def test_monitor_partial_mode_does_not_hide_policy_errors(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "风险参数不可用" in captured.err
+
+
+def test_untradable_boards_apply_with_or_without_account_scope(tmp_path):
+    """0.1.36: the restriction only narrows advice, so it applies even when limits cannot."""
+    path = _file(tmp_path / "policy.json", _policy(untradable_boards=["STAR"]))
+    applied = _resolve(policy_file=path, account_scope="fixture-account").risk_policy
+    assert applied["untradable_boards"] == ["STAR"] and applied["max_position_risk_pct"] == 1
+    unscoped = _resolve(policy_file=path, allow_missing_scope=True).risk_policy
+    assert unscoped["status"] == "not_applied_account_scope_required"
+    assert unscoped["untradable_boards"] == ["STAR"]
+    assert unscoped["field_sources"]["untradable_boards"] == "policy_file"
+    assert "untradable_boards" not in _resolve(policy_file=_file(tmp_path / "plain.json"),
+                                               account_scope="fixture-account").risk_policy
+
+
+@pytest.mark.parametrize("bad", ["STAR", ["CHINEXT"], ["STAR", "STAR"], [None], {}])
+def test_invalid_untradable_boards_fail_closed(bad, tmp_path):
+    path = _file(tmp_path / "policy.json", _policy(untradable_boards=bad))
+    with pytest.raises(risk_policy.RiskPolicyError, match="untradable_boards"):
+        _resolve(policy_file=path, account_scope="fixture-account")

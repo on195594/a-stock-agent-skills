@@ -147,6 +147,13 @@ evidence to equal the candidate row field by field and re-checks the date-free
 trigger (valid card, 值得继续研究, not 回避, and v2 support, 现在分批, or a reached
 等价格 price).
 
+The [0.1.36 specification](../specs/2026-11-04-untradable-boards-spec.md) adds the
+optional `account.risk_policy.untradable_boards` (distinct `STAR`/`BSE`, source
+`policy_file`), applied even when the policy's limits are not applied for a missing
+account scope. Candidates on those boards stay in `research.candidates`, are named in
+`research.reason`, and are never the subject of `research_opportunity` or an
+`opportunity_cost` comparison; the validator rejects either. `position-size` refuses them.
+
 A pending holding card adds `research_thesis_review` with `candidate=review` and
 pending event titles/types, ordered after `l3_watch` and before `governance_gate`.
 Like every other escalation it ends the clean fast path: `review_status=cleared`

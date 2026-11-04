@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from a_stock_agent_runtime import monitor_contract, research_client
+from a_stock_agent_runtime import boards, monitor_contract, research_client
 from a_stock_agent_runtime.trading_costs import COMMISSION_RATE, STAMP_TAX_RATE
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -86,8 +86,13 @@ def _evidence(row: dict) -> dict:
     return {key: row[key] for key in ("code", "report_id", "close_date", "close")}
 
 
-def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tuple[dict, list, list]:
-    """Return research, informational prompts, and thesis-only review escalations."""
+def summarize(result: dict, holding_codes: list[str], snapshot_date: date,
+              untradable_boards: list[str] | None = None) -> tuple[dict, list, list]:
+    """Return research, informational prompts, and thesis-only review escalations.
+
+    Candidates on a board the account cannot trade stay in research but are never named by
+    buy/switch advice (docs/specs/2026-11-04-untradable-boards-spec.md).
+    """
     cards = {card["code"]: card for card in result.get("cards", [])}
     missing = result.get("missing", [])
     research = {
@@ -112,6 +117,11 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
             "detail": f"论点卡状态未知：{result['reason']}", "evidence": {},
         })
     mismatches = []
+    blocked = [c["code"] for c in research["candidates"] if not boards.advisable(c["code"], untradable_boards)]
+    if blocked:
+        mismatches.append(f"{'、'.join(blocked)} 所属板块（{'、'.join(dict.fromkeys(boards.LABELS[boards.board(c)] for c in blocked))}）账户无交易权限（风险政策 untradable_boards），"
+                          "保留研究，不作机会提示或换仓候选")
+    advisable = [c for c in research["candidates"] if c["code"] not in blocked]
     for holding in research["holdings"]:
         code, card = holding["code"], holding["card"]
         if holding["card_status"] == "待复核":
@@ -135,7 +145,7 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
         if holding["neutral_return"] is None:
             continue
         best = None
-        for candidate in research["candidates"]:
+        for candidate in advisable:
             if (candidate["card_status"] != "有效"
                     or candidate["verdict"] != "值得继续研究"
                     or candidate["neutral_return"] is None):
@@ -212,7 +222,7 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
             ),
             "evidence": {"comparisons": comparisons},
         })
-    for candidate in research["candidates"]:
+    for candidate in advisable:
         if reason := _opportunity(candidate, snapshot_date):
             name = candidate["card"].get("name") or candidate["code"]
             prompts.append({

@@ -173,7 +173,9 @@ position, 18% portfolio, confirmed 2026-10-09) is in use and requires an explici
 matching `--account-scope`; no command created or edited it. An optional
 `off_account_strategy_cash` field adds strategy cash held outside the broker account
 to the denominator ([2026-10-22 spec](specs/2026-10-22-risk-denominator-and-breach-attribution-spec.md));
-it is not configured.
+it is not configured. An optional `untradable_boards` field (`STAR`, `BSE`) keeps those boards
+researched but out of buy/switch advice and sizing, and applies even without an account scope
+([2026-11-04 spec](specs/2026-11-04-untradable-boards-spec.md)).
 
 ## Write boundary
 

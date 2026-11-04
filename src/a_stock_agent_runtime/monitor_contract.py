@@ -8,6 +8,8 @@ import math
 import re
 from typing import Any
 
+from a_stock_agent_runtime import boards
+
 
 class MonitorContractError(ValueError):
     """A monitoring snapshot does not satisfy monitor-v1."""
@@ -207,7 +209,7 @@ def validate_research_cards(payload: dict) -> None:
         raise MonitorContractError("research response has duplicate codes")
 
 
-def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
+def _validate_research_fields(value: dict, holding_codes: set[str], untradable: list[str] | None = None) -> None:
     # Old snapshots remain readable; when present the additive pair is validated.
     if "research" not in value and "review_prompts" not in value:
         return
@@ -263,8 +265,13 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
     for code in _array(research["missing"], "research.missing"):
         _research_code(code)
     candidate_codes = {row["code"] for row in research["candidates"]}
+    # Candidates stay researched on any board; advice may only name boards the account can trade.
+    advisable_codes = {code for code in candidate_codes if boards.advisable(code, untradable)}
     for comparison in _array(research.get("opportunity_costs", []), "research.opportunity_costs"):
-        _opportunity_evidence(comparison, holding_codes, candidate_codes)
+        candidate = comparison.get("candidate") if isinstance(comparison, dict) else None
+        if isinstance(candidate, dict) and candidate.get("code") in candidate_codes - advisable_codes:
+            raise MonitorContractError("opportunity_cost names a board the account cannot trade")
+        _opportunity_evidence(comparison, holding_codes, advisable_codes)
     for raw in _array(value["review_prompts"], "review_prompts"):
         prompt = _object(raw, "review_prompt")
         _required(prompt, {"code", "kind", "detail", "evidence"}, "review_prompt")
@@ -277,6 +284,8 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
         elif kind == "research_opportunity":
             if prompt["code"] not in candidate_codes or status != "ok":
                 raise MonitorContractError("research_opportunity requires a researched candidate")
+            if prompt["code"] not in advisable_codes:
+                raise MonitorContractError("research_opportunity names a board the account cannot trade")
             _review_evidence_row(evidence)
             row = next(r for r in research["candidates"] if r["code"] == prompt["code"])
             fields = ("code", "report_id", "close_date", "close", *_RESEARCH_STANCE_FIELDS)
@@ -292,6 +301,8 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
         elif kind == "opportunity_cost" and "opportunity_costs" in research:
             if prompt["code"] not in candidate_codes or status != "ok":
                 raise MonitorContractError("opportunity_cost requires a researched candidate")
+            if prompt["code"] not in advisable_codes:
+                raise MonitorContractError("opportunity_cost names a board the account cannot trade")
             comparisons = _array(evidence.get("comparisons"), "opportunity_cost.comparisons")
             if not comparisons:
                 raise MonitorContractError("opportunity_cost requires comparisons")
@@ -303,7 +314,7 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
             if prompt["code"] not in holding_codes or status != "ok":
                 raise MonitorContractError("review prompt requires an active researched holding")
             if kind == "opportunity_cost":  # Pre-0.1.30 snapshots remain readable.
-                _opportunity_evidence(evidence, holding_codes, candidate_codes)
+                _opportunity_evidence(evidence, holding_codes, advisable_codes)
             else:
                 _review_evidence_row(evidence)
 
@@ -471,6 +482,13 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
         ):
             raise MonitorContractError(f"risk_policy.{field} must be positive")
         _nonempty(sources.get(field), f"risk_policy.field_sources.{field}")
+    # Added in 0.1.36; absent means every board is tradable.
+    if "untradable_boards" in policy:
+        boards_value = policy["untradable_boards"]
+        if (not isinstance(boards_value, list) or any(b not in boards.RESTRICTABLE for b in boards_value)
+                or len(set(boards_value)) != len(boards_value)
+                or sources.get("untradable_boards") != "policy_file"):
+            raise MonitorContractError("risk_policy.untradable_boards is invalid")
 
     coverage = _object(value["quote_coverage"], "quote_coverage")
     _required(coverage, {"priced", "active", "complete"}, "quote_coverage")
@@ -553,7 +571,8 @@ def validate_monitor_snapshot(payload: object) -> dict[str, Any]:
                     "within_budget requires complete holding risk evidence"
                 )
 
-    _validate_research_fields(value, {holding["code"] for holding in holdings})
+    _validate_research_fields(value, {holding["code"] for holding in holdings},
+                              account["risk_policy"].get("untradable_boards"))
 
     escalations = _array(value["escalations"], "escalations")
     for index, raw in enumerate(escalations):

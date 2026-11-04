@@ -996,6 +996,7 @@ def _with_research(payload: dict, result: dict | None) -> dict:
         result or {"status": "not_configured"},
         [holding["code"] for holding in payload["holdings"]],
         date.fromisoformat(payload["as_of"][:10]),
+        payload["account"]["risk_policy"].get("untradable_boards"),
     )
     payload["research"], payload["review_prompts"] = research, prompts
     payload["escalations"].extend(escalations)
