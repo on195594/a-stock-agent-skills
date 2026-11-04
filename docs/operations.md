@@ -323,6 +323,22 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.36 activation (2026-11-04)
+
+Owner instruction (Claude Code session, 2026-11-04: the broker account cannot trade STAR; keep it
+in research, exclude it from advice) activated `0.1.36-34ca42410a3a` for `claude`, `codex`, `hermes`
+and shared `~/.agents/skills/`, `--dry-run` then `--force`. Rollback manifest:
+`~/.local/share/a-stock-agent/rollback-1793772038958616040.json`; `0.1.35-8e2ef583632c` remains
+installed. Change: see `docs/specs/2026-11-04-untradable-boards-spec.md`. On the same instruction the
+owner's `risk-policy.json` gained only `"untradable_boards": ["STAR"]` (mode 0600 kept, no other key
+or value changed); remove that key once STAR trading is enabled. Validation: `scripts/check.sh`
+passed (1672 passed / 11 skipped) before the Codex finding fix, then targeted monitor/position/policy
+tests (470 passed) and Ruff. One real read-only `monitor-snapshot` (no account scope, as the Hermes
+scan runs): before the policy key, 688578 (Research report 85, 现在分批, v2 support) produced a
+`research_opportunity`; after it, 688578 stays a researched candidate, is named in `research.reason`
+and produces no prompt; ChiNext 300750 `opportunity_cost` unchanged. No account writes, trades,
+migrations, credentials or cron changes.
+
 ## 0.1.35 activation (2026-11-04)
 
 Owner-authorized (Claude Code session, 2026-11-04) activation of `0.1.35-8e2ef583632c` for `claude`,
