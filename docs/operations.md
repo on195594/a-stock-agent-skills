@@ -327,11 +327,9 @@ Owner-authorized (Claude Code session, 2026-11-04) activation of `0.1.35-8e2ef58
 `codex`, `hermes` and shared `~/.agents/skills/`, `--dry-run` then `--force` through the standard
 installer. Rollback manifest:
 `~/.local/share/a-stock-agent/rollback-1793770242662242160.json`; the previous runtime
-`0.1.34-4a2622904d48` remains installed. Change (spec `docs/specs/2026-11-04-proactive-decision-spec.md`):
-Research stance is the buy backbone, `incomplete` caps at the first tranche, the >=25% review items
-become review gaps, idle cash defaults to benchmark ETF 515800, new R0 `position-size`, and
-additive monitor-v1 research fields with `research_opportunity` prompts. Stop tiers, L3, P0–P3,
-W1, risk-policy values and monitor-v1 `schema_version` unchanged; Lib unchanged. Validation:
+`0.1.34-4a2622904d48` remains installed. Change: see
+`docs/specs/2026-11-04-proactive-decision-spec.md`; stop tiers, L3, P0–P3, W1, risk-policy values
+and monitor-v1 `schema_version` unchanged; Lib unchanged. Validation:
 `scripts/check.sh` passed (1661 passed / 11 skipped, Ruff, regulatory freshness, standalone QA,
 cron fixture); read-only Codex review, 6 findings fixed. Independent cwd checks confirmed the CLI
 links (`a-stock-cache`, `a-stock-fetch`, `a-stock-install`) and all client links. One real
