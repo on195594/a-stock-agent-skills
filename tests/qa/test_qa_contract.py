@@ -135,7 +135,10 @@ def test_investment_review_repairs_are_owned_by_execution_framework_and_rubric()
     assert "综合得分参考阈值" not in RESEARCH
     assert "可用资金 × 该股仓位建议比例" not in RESEARCH
     assert "唯一操作出口" in EXECUTION
-    assert "已批准的单股风险上限" in EXECUTION
+    # 2026-11-04 spec: stance is the backbone, the matrix only a reference, sizes from position-size.
+    assert "position-size" in EXECUTION and "不单独否决" in EXECUTION
+    assert "立场为现在分批，却仅因矩阵或 incomplete 整体写成“默认等待”" in RUBRIC
+    assert "incomplete 路径终止仓位建议" not in RUBRIC and "incomplete 不构成跳过理由" in RUBRIC
     assert "估值冲突" in resource
     assert "AISC" in resource
     assert "最高只能给格档" in resource
@@ -153,7 +156,7 @@ def test_second_investment_review_fail_closed_contract_has_reference_owners() ->
     assert "估值项进入 `incomplete`" in EXECUTION
     assert "评分上限仍为10/15" not in EXECUTION
     assert "估值项记0/15" in CYCLE
-    assert "只输出观察/试探/标准阶段标签" in EXECUTION
+    assert "缺总资产或已确认风险快照时不给股数" in EXECUTION
     assert "industry_status=stale_cache" in DATA_CACHE
     assert "关键估值能力与最新财报核验" in RUBRIC
     assert "正式来源身份核验" in RUBRIC
@@ -232,7 +235,7 @@ def test_research_qa_and_report_contract_share_incomplete_semantics() -> None:
     assert "无合法原因" in RUBRIC
     assert "基本面小计、配置评级、时机评级、综合分和矩阵均标为 `not_formed`" in RUBRIC
     assert "P1" in REPORT and "保留完整的基本面小计和配置评级" in REPORT
-    assert "综合分与仓位建议均明确写 `not_formed`" in REPORT
+    assert "动作上限降为“首批 1/3”" in REPORT and "不得整体默认等待" in REPORT
 
 
 def test_fundamentals_hit_minimum_data_card_contract_is_pinned_in_report_owner() -> (

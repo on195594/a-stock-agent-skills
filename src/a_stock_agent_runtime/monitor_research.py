@@ -49,7 +49,37 @@ def _row(code: str, card: dict | None) -> dict:
         "note": current.get("note") or valuation.get("reason") or current.get("reason"),
         # Research's caveat for rolled returns (e.g. unverified cumulative dividends).
         "assumption": valuation.get("assumption"),
+        **_stance(card, valuation),
     }
+
+
+def _stance(card: dict | None, valuation: dict) -> dict:
+    """Research V4 stance and the v2 probability-weighted return at the current close (0.1.35)."""
+    frozen = (card or {}).get("stance_calc") or {}
+    v2 = valuation.get("v2") or {}
+    return {
+        "stance_action": frozen.get("action"),
+        "stance_price": frozen.get("price"),
+        "stance_valid_until": frozen.get("valid_until"),
+        "expected_return": v2.get("annual_return"),
+        "v2_zone": v2.get("zone"),
+    }
+
+
+def _opportunity(row: dict, snapshot_date: date) -> str | None:
+    """Why a researched candidate is worth acting on now, or None. Research owns every number."""
+    if row["card_status"] != "有效" or row["verdict"] != "值得继续研究" or row["stance_action"] == "回避":
+        return None
+    if row["v2_zone"] == "测算支持区" and row["expected_return"] is not None:
+        return f"按情景概率加权的期望年化 {row['expected_return']:.2%}，处于测算支持区（≥10%）"
+    if (row["stance_action"] == "等价格" and row["stance_price"] is not None and row["close"] is not None
+            and row["close"] <= row["stance_price"] and row["close_date"] and row["stance_valid_until"]
+            and row["close_date"] <= row["stance_valid_until"]
+            and snapshot_date.isoformat() <= row["stance_valid_until"]):
+        return f"收盘价 {row['close']:g} 已不高于研究立场的等待价 {row['stance_price']:.2f}（有效至 {row['stance_valid_until']}）"
+    if row["stance_action"] == "现在分批" and _fresh(row["completed_at"], snapshot_date):
+        return "研究立场为现在分批（报告 7 日内）"
+    return None
 
 
 def _evidence(row: dict) -> dict:
@@ -182,6 +212,16 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date) -> tu
             ),
             "evidence": {"comparisons": comparisons},
         })
+    for candidate in research["candidates"]:
+        if reason := _opportunity(candidate, snapshot_date):
+            name = candidate["card"].get("name") or candidate["code"]
+            prompts.append({
+                "code": candidate["code"], "kind": "research_opportunity",
+                "detail": (f"{name} {candidate['code']}：{reason}；研究立场 {candidate['stance_action'] or '未记录'}。"
+                           "情景未经记分，按 position-size 定仓后再决定，不构成已形成的交易动作"),
+                "evidence": _evidence(candidate) | {key: candidate[key] for key in (
+                    "stance_action", "stance_price", "stance_valid_until", "expected_return", "v2_zone")},
+            })
     if mismatches:
         research["reason"] = "；".join(mismatches)
     return research, prompts, escalations

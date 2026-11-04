@@ -34,6 +34,7 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 ## 安全边界
 
 - 结构化状态缺失、过期、冲突或命令失败时 fail-closed：明确缺口，保持 `incomplete/not_formed`，不得补造分数、评级、矩阵或可交易结论。
+- 买入动作主干是 Research 有效论点卡立场（现在分批/等价格/等证据/回避），A–F 矩阵只作参考；某项 incomplete 只扣对应项，动作上限降为首批 1/3，不整体默认等待；股数只取 `a-stock-cache position-size`。见 [报告合同](references/report-contract.md) 第 1 节。
 - 分数、分类、风险门、估值冲突、组合风险、L3、建议动作和来源时效均以 runtime 的结构化合同为准；不得从自然语言标签重建。
 - 持仓、分析、预警、L3/Tier 与交易账本写入均属 W1。只有用户确认具体动作后才可追加全局 `--confirm-write`；读操作不得携带该参数。
 - 本 Skill 提供首次配置研究和公开证据问答；止损、减仓、补仓、L3 与已有持仓操作由 `a-stock-monitor` 处理。本框架基于公开信息，不构成投资建议。

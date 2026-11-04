@@ -117,6 +117,10 @@ CLI_ARGUMENT_CASES = {
         ["--snapshot", "/tmp/snapshot.json", "--sell", "600000:100", "--fees", "0"],
         ["--snapshot", "/tmp/snapshot.json", "--sell", "600000:100", "--sell", "600001:200", "--fees", "5", "--cash", "100"],
     ),
+    "position-size": (
+        ["--snapshot", "/tmp/snapshot.json", "--code", "600000", "--price", "10", "--framework", "B"],
+        ["--snapshot", "/tmp/snapshot.json", "--code", "600000", "--price", "10", "--framework", "B", "--cash", "1000"],
+    ),
     "portfolio-risk": (
         [],
         [

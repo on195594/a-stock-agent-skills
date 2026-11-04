@@ -117,7 +117,10 @@ def _required(item: dict[str, Any], fields: set[str], field: str) -> None:
 
 
 RESEARCH_STATUSES = frozenset({"ok", "not_configured", "unavailable", "skipped"})
-REVIEW_PROMPT_KINDS = frozenset({"valuation_stretched", "opportunity_cost", "research_unavailable"})
+REVIEW_PROMPT_KINDS = frozenset({"valuation_stretched", "opportunity_cost", "research_unavailable", "research_opportunity"})
+STANCE_ACTIONS = frozenset({"现在分批", "等价格", "等证据", "回避"})
+# Added in 0.1.35; optional so earlier snapshots remain readable, but all-or-none when present.
+_RESEARCH_STANCE_FIELDS = ("stance_action", "stance_price", "stance_valid_until", "expected_return", "v2_zone")
 _RESEARCH_ROW_FIELDS = {
     "code", "card", "card_status", "verdict", "report_id", "completed_at",
     "close", "close_date", "zone", "neutral_return", "conservative_return",
@@ -169,11 +172,22 @@ def _research_card(raw: Any) -> dict:
             _research_number(valuation.get(field))
         _optional_string(valuation.get("reason"), "research.card.valuation.reason")
         _optional_string(valuation.get("assumption"), "research.card.valuation.assumption")
+        if valuation.get("v2") is not None:
+            v2 = _object(valuation["v2"], "research.card.valuation.v2")
+            for field in ("annual_return", "support_below", "stretched_above"):
+                _research_number(v2.get(field))
+            _optional_string(v2.get("zone"), "research.card.valuation.v2.zone")
         if valuation["annual_returns"] is not None:
             returns = _object(valuation["annual_returns"], "research.card.annual_returns")
             _required(returns, {"保守", "中性", "乐观"}, "research.card.annual_returns")
             for number in returns.values():
                 _research_number(number)
+    # Research V4 frozen stance (Research 2026-11-04); older cards have none.
+    if card.get("stance_calc") is not None:
+        frozen = _object(card["stance_calc"], "research.card.stance_calc")
+        _supported(frozen.get("action"), STANCE_ACTIONS, "research.card.stance_calc.action")
+        _research_number(frozen.get("price"))
+        _research_date(frozen.get("valid_until"))
     return card
 
 
@@ -240,6 +254,7 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
                 if row["assumption"] != source.get("assumption"):
                     raise MonitorContractError("research assumption projection is inconsistent")
             _research_date(row["close_date"])
+            _research_stance(row)
         if len(codes) != len(set(codes)) or (
             group == "holdings" and set(codes) != holding_codes
             or group == "candidates" and set(codes) & holding_codes
@@ -259,6 +274,21 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
         if kind == "research_unavailable":
             if prompt["code"] is not None or status != "unavailable":
                 raise MonitorContractError("research_unavailable requires unavailable research")
+        elif kind == "research_opportunity":
+            if prompt["code"] not in candidate_codes or status != "ok":
+                raise MonitorContractError("research_opportunity requires a researched candidate")
+            _review_evidence_row(evidence)
+            row = next(r for r in research["candidates"] if r["code"] == prompt["code"])
+            fields = ("code", "report_id", "close_date", "close", *_RESEARCH_STANCE_FIELDS)
+            if set(evidence) != set(fields) or any(field not in row or evidence[field] != row[field] for field in fields):
+                raise MonitorContractError("research_opportunity evidence is inconsistent")
+            # Date-free part of the runtime trigger; the freshness/validity dates are runtime-only.
+            if (row["card_status"] != "有效" or row["verdict"] != "值得继续研究" or row["stance_action"] == "回避"
+                    or not (row["v2_zone"] == "测算支持区" and row["expected_return"] is not None
+                            or row["stance_action"] == "现在分批"
+                            or row["stance_action"] == "等价格" and row["stance_price"] is not None
+                            and row["close"] is not None and row["close"] <= row["stance_price"])):
+                raise MonitorContractError("research_opportunity candidate is not eligible")
         elif kind == "opportunity_cost" and "opportunity_costs" in research:
             if prompt["code"] not in candidate_codes or status != "ok":
                 raise MonitorContractError("opportunity_cost requires a researched candidate")
@@ -276,6 +306,22 @@ def _validate_research_fields(value: dict, holding_codes: set[str]) -> None:
                 _opportunity_evidence(evidence, holding_codes, candidate_codes)
             else:
                 _review_evidence_row(evidence)
+
+
+def _research_stance(row: dict) -> None:
+    present = [field in row for field in _RESEARCH_STANCE_FIELDS]
+    if not any(present):
+        return
+    if not all(present):
+        raise MonitorContractError("research stance projection is incomplete")
+    card = row["card"] or {}
+    frozen = card.get("stance_calc") or {}
+    v2 = ((card.get("current") or {}).get("valuation") or {}).get("v2") or {}
+    expected = {"stance_action": frozen.get("action"), "stance_price": frozen.get("price"),
+                "stance_valid_until": frozen.get("valid_until"),
+                "expected_return": v2.get("annual_return"), "v2_zone": v2.get("zone")}
+    if any(row[field] != value for field, value in expected.items()):
+        raise MonitorContractError("research stance projection is inconsistent")
 
 
 def _review_evidence_row(raw: Any) -> dict:

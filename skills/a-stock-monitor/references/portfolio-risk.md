@@ -78,9 +78,21 @@ a-stock-cache portfolio-scenario --snapshot <仓库外快照JSON> --sell <代码
 
 - B银行+D公用事业/水电市值占股票总市值≥60%：置顶风格集中提醒；
 - 第一大仓或单股权重≥25%：以①②③编号输出止损来源、L3逐条状态、估值退出距离；
-  缺任一项不得建议持有或加仓；
+  缺任一项列为复核缺口，加仓限为首批，不整体否决持有或加仓；权重本身不是上限，规模只受
+  风险预算约束（见下节）；
 - `portfolio-risk` 使用 `holdings.framework/framework_confident` 并按市值汇总。框架为
   `?` 时停止框架动作；需要变更时用 `holding-framework` 显式迁移并重算止损。
+
+### 闲置资金与风险预算定仓（[2026-11-04 规格](../../../docs/specs/2026-11-04-proactive-decision-spec.md)）
+
+- 未部署的股票资金默认持中证 800 ETF 515800（汇添富中证800ETF）作为基准仓，而不是现金。该仓不计单股止损、L3、单股风险预算与集中度；个股买入所需资金先卖它。买卖建议仍由所有者确认后执行（W1）。
+- 新仓或加仓的规模只取只读命令：
+
+  ```bash
+  a-stock-cache position-size --snapshot <仓库外快照JSON> --code <代码> --price <拟买入价> --framework <A-F> [--cash <可动用资金，含可卖出的基准ETF>]
+  ```
+
+  输出 `max_shares` 与 `tranches`（1/3、2/3、1 三阶段累计股数，不足一手的阶段为 0；首批恒为 `tranches[0]`）：股数 ×（买价 − 第二档止损）同时不超过单股剩余预算与组合剩余预算，并按板块交易单位取整。`budget_below_one_lot` 如实说明，不换别的上限。结果 `action_status=not_formed`、`execution_status=not_checked`，不核验涨跌停、滑点与可成交量。
 
 ### 行为与宏观检查
 

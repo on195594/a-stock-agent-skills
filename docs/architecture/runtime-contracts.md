@@ -130,6 +130,23 @@ holdings and maximum net advantage, with “情景未经记分，仅提示复核
 each distinct compared-card `assumption` as “Research 注：…”. Older snapshots
 without `opportunity_costs` retain validation of their per-holding prompt shape.
 
+The [0.1.35 specification](../specs/2026-11-04-proactive-decision-spec.md) adds
+optional row fields `stance_action`, `stance_price`, `stance_valid_until` (from the
+card's frozen `stance_calc`) and `expected_return`, `v2_zone` (from
+`current.valuation.v2`), all-or-none and checked against the card; older rows
+without them remain readable. Prompt kind `research_opportunity` is emitted for a
+valid L5 candidate with verdict 值得继续研究 when `v2_zone` is 测算支持区, a 等价格
+stance's price is reached on or before `stance_valid_until`, or a 现在分批 stance
+is 0–7 days old. Its evidence is the candidate row's `code`, `report_id`,
+`close_date`, `close` plus the five stance fields. It never changes action status;
+sizing comes only from the read-only `position-size` command (`position-size-v1`:
+second-tier stop, single-stock and portfolio stop-risk budgets, board lots,
+`tranches` as fixed 1/3, 2/3, 1 stages of cumulative shares where an unexecutable
+stage is 0, `action_status=not_formed`). The validator requires the prompt's
+evidence to equal the candidate row field by field and re-checks the date-free
+trigger (valid card, 值得继续研究, not 回避, and v2 support, 现在分批, or a reached
+等价格 price).
+
 A pending holding card adds `research_thesis_review` with `candidate=review` and
 pending event titles/types, ordered after `l3_watch` and before `governance_gate`.
 Like every other escalation it ends the clean fast path: `review_status=cleared`

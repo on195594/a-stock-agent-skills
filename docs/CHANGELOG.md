@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.35 — 2026-11-04
+
+- 按 [进取不足诊断规格](specs/2026-11-04-proactive-decision-spec.md)（所有者 2026-11-04 授权）修正决策层：
+  - Research 有效论点卡的立场为买入主干，A–F 矩阵降为参考；incomplete 只扣对应项，动作上限降为首批 1/3，不再默认等待；
+  - 第一大仓/单股≥25% 缺项改为复核缺口；
+  - 闲置资金默认持中证 800 ETF 515800。
+- 新增 R0 `position-size`：按单股/组合止损风险预算、框架第二档止损与板块交易单位给出最大股数与三批，不另设权重上限。
+- monitor-v1 研究行加法投影 `stance_action/stance_price/stance_valid_until/expected_return/v2_zone`；新增 `research_opportunity` 提示（不在仓候选：v2 测算支持区、等价格到价、7 日内现在分批）。`schema_version` 不变，旧快照与旧卡照常可读。
+- 止损、L3、P0–P3 定义、风险政策数值与 W1 不变。
+
 ## 0.1.34 — 2026-11-03
 
 - 换仓近失比较（名义中性差已 ≥3 个百分点、按候选不计累计分红口径扣费后不足）在 `research.reason` 同时写出计分红与候选不计累计分红两种扣费后优势，避免高股息候选被一句话掩盖。门槛、口径、提醒条件与 monitor-v1 schema 不变。
