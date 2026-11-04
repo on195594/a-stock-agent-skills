@@ -321,6 +321,27 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.35 activation (2026-11-04)
+
+Owner-authorized (Claude Code session, 2026-11-04) activation of `0.1.35-8e2ef583632c` for `claude`,
+`codex`, `hermes` and shared `~/.agents/skills/`, `--dry-run` then `--force` through the standard
+installer. Rollback manifest:
+`~/.local/share/a-stock-agent/rollback-1793770242662242160.json`; the previous runtime
+`0.1.34-4a2622904d48` remains installed. Change (spec `docs/specs/2026-11-04-proactive-decision-spec.md`):
+Research stance is the buy backbone, `incomplete` caps at the first tranche, the >=25% review items
+become review gaps, idle cash defaults to benchmark ETF 515800, new R0 `position-size`, and
+additive monitor-v1 research fields with `research_opportunity` prompts. Stop tiers, L3, P0–P3,
+W1, risk-policy values and monitor-v1 `schema_version` unchanged; Lib unchanged. Validation:
+`scripts/check.sh` passed (1661 passed / 11 skipped, Ruff, regulatory freshness, standalone QA,
+cron fixture); read-only Codex review, 6 findings fixed. Independent cwd checks confirmed the CLI
+links (`a-stock-cache`, `a-stock-fetch`, `a-stock-install`) and all client links. One real
+account `monitor-snapshot` (no `--portfolio-value`, read-only) after activation: runtime
+`0.1.35`, Research `ok` (5 candidates, 3 holdings); every production card predates Research
+`f65904e` (stance and v2 shipped 2026-11-04), so the stance fields are null and no
+`research_opportunity` fired, as specified for old cards. `position-size` on that snapshot failed
+closed for the missing confirmed denominator. No account writes, trades, migrations,
+credentials or cron changes.
+
 ## 0.1.34 activation (2026-11-03)
 
 Owner-authorized (Telegram msg 4137) activation of `0.1.34-4a2622904d48` for `claude`, `codex`,
