@@ -323,6 +323,20 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.37 activation (2026-11-04)
+
+Owner instruction (Claude Code session, 2026-11-04: evidence waits are reference only, not a necessary
+condition; Codex given full permissions for the plan) activated `0.1.37-1468abb5c873` for `claude`,
+`codex`, `hermes` and shared `~/.agents/skills/`, `--dry-run` then `--force`. Rollback manifest:
+`~/.local/share/a-stock-agent/rollback-1793776286779678880.json`; `0.1.36-34ca42410a3a` remains
+installed. Change: see `docs/specs/2026-11-04-reference-evidence-spec.md` (Research contract
+a-share-research b74713c). Validation: targeted tests 249 passed / 2 skipped and Ruff (Codex), read-only
+Codex review found one P2 (rounded checkpoint threshold), fixed in 1468abb with a mutation-checked test.
+One real read-only `monitor-snapshot` after activation: 300750 and 002946 (legacy 等证据) produce
+`research_opportunity` capped at the first tranche with the checkpoint marked reference; 002648 and
+601600 unchanged; 688578 still excluded by `untradable_boards`. No account writes, trades, migrations,
+credentials or cron changes.
+
 ## 0.1.36 activation (2026-11-04)
 
 Owner instruction (Claude Code session, 2026-11-04: the broker account cannot trade STAR; keep it
