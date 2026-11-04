@@ -196,6 +196,16 @@ def test_new_checkpoint_projects_and_absence_does_not_invent_one():
     assert "加仓检查点" not in prompts[0]["detail"]
 
 
+def test_checkpoint_threshold_is_shown_unrounded():
+    # Review P2: ':g' rounded 200.0001 to 200, so the shown threshold differed from the frozen one.
+    card = new_checkpoint_card()
+    for trigger in (card["stance"]["add_trigger"], card["stance_calc"]["add_trigger"]):
+        trigger["value"] = 200.0001
+    research, prompts, _ = run(card)
+    assert research["candidates"][0]["stance_add_trigger"]["value"] == 200.0001
+    assert "经营现金流 ≥ 200.0001 亿元" in prompts[0]["detail"]
+
+
 @pytest.mark.parametrize("patch", [
     {"metric": "M.close"}, {"period": None}, {"period": "2026-13-31"},
     {"op": ">"}, {"value": True}, {"value": None}, {"value": float("inf")}, {"extra": 1},

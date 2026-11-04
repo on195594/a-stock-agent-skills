@@ -91,8 +91,11 @@ def _checkpoint_detail(row: dict) -> str:
     metric = "经营现金流" if trigger["metric"] == "T.op_cash" else trigger["metric"]
     unit = "亿元" if trigger["metric"] == "T.op_cash" else "（单位与累计口径同财务表）"
     op = {">=": "≥", "<=": "≤"}[trigger["op"]]
+    # Shortest round-trip text so the shown threshold equals the frozen value exactly.
+    value = trigger["value"]
+    shown = str(int(value)) if float(value).is_integer() else repr(float(value))
     return (f"动作上限为首批（position-size tranches[0]，不足一手则为 0）；加仓检查点："
-            f"{trigger['period']} {metric} {op} {trigger['value']:g} {unit}（参考，不阻止首批）；"
+            f"{trigger['period']} {metric} {op} {shown} {unit}（参考，不阻止首批）；"
             "目标期间披露达到阈值且更新的有效研究确认后，才按立场加后续批次；未达到则复核是否减仓；"
             "未披露不视为未达到。")
 
