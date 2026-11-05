@@ -51,11 +51,12 @@ a-stock-cache portfolio-risk
 a-stock-cache check-holdings
 a-stock-cache dividend-check
 a-stock-cache benchmark-report
+a-stock-cache report-trades
 a-stock-fetch check <代码>
 ```
 
-`holdings` and `portfolio-risk` are read-only views; `dividend-check` and
-`benchmark-report` read TuShare but write nothing. `check-holdings` is an
+`holdings` and `portfolio-risk` are read-only views; `dividend-check`,
+`benchmark-report` and `report-trades` read TuShare but write nothing. `check-holdings` is an
 R1 routine check: it may refresh market data and record an alert, but it does
 not write holdings, transactions or other W1 investment state.
 

@@ -124,6 +124,10 @@ SCHEMA_MIGRATIONS = [
         "036-l3-evidence-cadence",
         "ALTER TABLE holding_l3_conditions ADD COLUMN evidence_cadence TEXT NOT NULL DEFAULT 'unspecified' CHECK(evidence_cadence IN ('quarterly','semiannual','annual','event','unspecified'))",
     ),
+    (
+        "037-holding-events-report-id",
+        "ALTER TABLE holding_events ADD COLUMN report_id INTEGER",
+    ),
 ]
 
 
@@ -234,6 +238,7 @@ def _create_core_tables(conn: sqlite3.Connection) -> None:
         realized_pnl REAL,
         notes TEXT,
         inferred INTEGER NOT NULL DEFAULT 0,
+        report_id INTEGER,
         created_at TEXT NOT NULL,
         CHECK (event_type IN ('buy', 'sell', 'dividend', 'adjustment'))
     )""")

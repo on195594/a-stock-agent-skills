@@ -320,6 +320,7 @@ def _resolve_holding_framework(
 
 def cmd_add_holding(args: list[str]) -> None:
     """Add a new holding lot and its baseline event; use buy-holding to add shares."""
+    report_id, args = _pop_report_id(args)
     code, trade_price, shares, notes, trade_options = _parse_add_holding_args(args)
     fees, tax, buy_date = _parse_trade_options(trade_options, 0)
     if tax:
@@ -333,6 +334,9 @@ def cmd_add_holding(args: list[str]) -> None:
 
     if fees and shares is None:
         print("错误：记录买入费用时必须提供股数", file=sys.stderr)
+        sys.exit(1)
+    if report_id is not None and shares is None:
+        print("错误：关联报告时必须提供股数，否则没有交易事件可关联", file=sys.stderr)
         sys.exit(1)
     economic_cost = (
         (trade_price * shares + fees) / shares if shares is not None else trade_price
@@ -392,8 +396,9 @@ def cmd_add_holding(args: list[str]) -> None:
         if shares is not None:
             conn.execute(
                 """INSERT INTO holding_events
-                   (holding_id, code, event_type, event_date, shares, price, fees, created_at)
-                   VALUES (?, ?, 'buy', ?, ?, ?, ?, ?)""",
+                   (holding_id, code, event_type, event_date, shares, price, fees,
+                    report_id, created_at)
+                   VALUES (?, ?, 'buy', ?, ?, ?, ?, ?, ?)""",
                 (
                     holding_id,
                     code,
@@ -401,6 +406,7 @@ def cmd_add_holding(args: list[str]) -> None:
                     shares,
                     trade_price,
                     fees,
+                    report_id,
                     domain.utc_now_iso(),
                 ),
             )
@@ -605,6 +611,18 @@ def cmd_holdings(args: list[str] | None = None) -> None:
     _print_closed_holdings(closed_rows, lifecycle_returns)
 
 
+def _pop_report_id(args: list[str]) -> tuple[int | None, list[str]]:
+    """Split off --report-id, the Research report a trade relied on."""
+    if "--report-id" not in args:
+        return None, args
+    index = args.index("--report-id")
+    value = args[index + 1] if index + 1 < len(args) else ""
+    if not (value.isascii() and value.isdecimal()) or int(value) <= 0:
+        print("错误：--report-id 需要 Research 报告编号（正整数）", file=sys.stderr)
+        sys.exit(1)
+    return int(value), args[:index] + args[index + 2 :]
+
+
 def _parse_trade_options(args: list[str], start: int) -> tuple[float, float, str]:
     fees = 0.0
     tax = 0.0
@@ -635,9 +653,10 @@ def _parse_trade_options(args: list[str], start: int) -> tuple[float, float, str
 
 def cmd_buy_holding(args: list[str]) -> None:
     """Add shares to the single open position without resetting its original buy date."""
+    report_id, args = _pop_report_id(args)
     if len(args) < 3:
         print(
-            "错误：需要参数 <代码> <买入价> <股数> [--fee 金额] [--date YYYY-MM-DD]",
+            "错误：需要参数 <代码> <买入价> <股数> [--fee 金额] [--date YYYY-MM-DD] [--report-id 编号]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -720,9 +739,10 @@ def cmd_buy_holding(args: list[str]) -> None:
         )
         conn.execute(
             """INSERT INTO holding_events
-               (holding_id, code, event_type, event_date, shares, price, fees, created_at)
-               VALUES (?, ?, 'buy', ?, ?, ?, ?, ?)""",
-            (holding_id, code, trade_date, buy_shares, buy_price, fees, now_iso),
+               (holding_id, code, event_type, event_date, shares, price, fees,
+                report_id, created_at)
+               VALUES (?, ?, 'buy', ?, ?, ?, ?, ?, ?)""",
+            (holding_id, code, trade_date, buy_shares, buy_price, fees, report_id, now_iso),
         )
         conn.commit()
     print(
@@ -733,10 +753,11 @@ def cmd_buy_holding(args: list[str]) -> None:
 
 def cmd_sell_holding(args: list[str], *, single_lot: bool = False) -> None:
     """Partially or fully sell open lots and record an auditable cash-flow event."""
+    report_id, args = _pop_report_id(args)
     if len(args) < 3:
         print(
             "错误：需要参数 <代码> <卖出价> <股数|all> "
-            "[--fee 金额] [--tax 金额] [--date YYYY-MM-DD]",
+            "[--fee 金额] [--tax 金额] [--date YYYY-MM-DD] [--report-id 编号]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -813,8 +834,8 @@ def cmd_sell_holding(args: list[str], *, single_lot: bool = False) -> None:
             conn.execute(
                 """INSERT INTO holding_events
                    (holding_id, code, event_type, event_date, shares, price,
-                    fees, tax, realized_pnl, created_at)
-                   VALUES (?, ?, 'sell', ?, ?, ?, ?, ?, ?, ?)""",
+                    fees, tax, realized_pnl, report_id, created_at)
+                   VALUES (?, ?, 'sell', ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     holding_id,
                     code,
@@ -824,6 +845,7 @@ def cmd_sell_holding(args: list[str], *, single_lot: bool = False) -> None:
                     allocated_fee,
                     allocated_tax,
                     realized,
+                    report_id,
                     now_iso,
                 ),
             )
@@ -1179,6 +1201,66 @@ def cmd_benchmark_report(args: list[str]) -> None:
     if any(row[8] for row in events):
         print("  ⚠️ 含推断补录的早期事件：结果为近似值，须与券商流水核对")
     print("  样本期短、交易少时只说明期间相对表现，不证明方法有效")
+
+
+def cmd_report_trades(args: list[str]) -> None:
+    """Show how trades linked to a Research report fared against the index."""
+    if args and (len(args) != 2 or args[0] != "--end"):
+        print("错误：用法 report-trades [--end YYYY-MM-DD]", file=sys.stderr)
+        sys.exit(1)
+    end = args[1] if args else domain.cst_today()
+    try:
+        date.fromisoformat(end)
+    except ValueError:
+        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
+        sys.exit(1)
+    with db.read_only_db_session() as conn:
+        linked = conn.execute(
+            """SELECT report_id, code, event_type, event_date, shares, price, realized_pnl
+               FROM holding_events
+               WHERE report_id IS NOT NULL AND event_date <= ?
+               ORDER BY report_id, event_date, id""",
+            (end,),
+        ).fetchall()
+        unlinked = conn.execute(
+            """SELECT COUNT(*) FROM holding_events
+               WHERE report_id IS NULL AND event_type IN ('buy', 'sell')
+                 AND event_date <= ?""",
+            (end,),
+        ).fetchone()[0]
+        actions = conn.execute(
+            """SELECT code, event_date FROM holding_events
+               WHERE event_date <= ?
+                 AND (event_type = 'dividend'
+                      OR (event_type = 'adjustment' AND notes LIKE 'dps=%'))""",
+            (end,),
+        ).fetchall()
+    print(f"关联报告的买卖 {len(linked)} 笔，未关联 {unlinked} 笔")
+    if not linked:
+        return
+    index_code, index_label = BENCHMARKS[0]
+    closes = _index_closes(index_code, min(row[3] for row in linked), end)
+    valuation_day = max(closes)
+    print(f"以下均算到 {valuation_day} 收盘，基准为{index_label}（交易日当天或下一交易日收盘起算）")
+    for report_id, code, event_type, day, shares, price, realized in linked:
+        start_days = [item for item in closes if item >= day]
+        if not start_days:
+            print(f"  报告 #{report_id} {code} {day}：晚于最新指数收盘，暂不计算")
+            continue
+        change = _close_on(code, valuation_day) / price - 1
+        index_change = closes[valuation_day] / closes[min(start_days)] - 1
+        label = "买入后" if event_type == "buy" else "卖出后"
+        line = (
+            f"  报告 #{report_id} {code} {day} {label} {shares}股 @ {price:.3f}："
+            f"股价 {change:+.2%}，基准 {index_change:+.2%}，"
+            f"差 {(change - index_change) * 100:+.2f}pp"
+        )
+        if realized is not None:
+            line += f"，已实现 {realized:+,.0f} 元"
+        if any(item == code and when > day for item, when in actions):
+            line += "；期间有分红或送转，股价未复权"
+        print(line)
+    print("  买入看差是否为正；卖出差为负说明卖出后跑输基准。笔数少时只说明这些交易之后的相对表现")
 
 
 def cmd_record_dividend(args: list[str]) -> None:

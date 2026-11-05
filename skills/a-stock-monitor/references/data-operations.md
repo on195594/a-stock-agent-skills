@@ -21,16 +21,17 @@
 ```bash
 # 全新股票第一次建仓；会固化持仓 framework、initial_shares 和最初 buy_date
 $CACHE --confirm-write add-holding <代码> <成交价> <股数> [--notes 备注] \
-  [--fee <金额>] [--date YYYY-MM-DD]
+  [--fee <金额>] [--date YYYY-MM-DD] [--report-id <报告编号>]
 
 # 已有持仓加仓；自动计算含买入费用的加权成本、重算框架止损线，
 # 保留最初 buy_date，并维护结构化 main_entry_date
-$CACHE --confirm-write buy-holding <代码> <买入价> <股数> [--fee <金额>] [--date YYYY-MM-DD]
+$CACHE --confirm-write buy-holding <代码> <买入价> <股数> [--fee <金额>] [--date YYYY-MM-DD] \
+  [--report-id <报告编号>]
 
 # 部分或全部卖出；校验交易所整手/零股申报约束，FIFO分配到lot，
 # 同步剩余股数并记录费用、印花税和已实现盈亏
 $CACHE --confirm-write sell-holding <代码> <卖出价> <股数|all> \
-  [--fee <金额>] [--tax <金额>] [--date YYYY-MM-DD]
+  [--fee <金额>] [--tax <金额>] [--date YYYY-MM-DD] [--report-id <报告编号>]
 
 # 记录实际到账的现金分红总额
 $CACHE --confirm-write record-dividend <代码> <现金总额> [YYYY-MM-DD]
@@ -40,7 +41,14 @@ $CACHE dividend-check [代码]
 
 # 用全部买卖现金流、费用税费、分红和剩余市值计算总回报及真实持有天数
 $CACHE position-return <代码> [当前价]
+
+# 只读：关联报告的每笔买卖之后，股价相对沪深300全收益的表现及未关联笔数
+$CACHE report-trades [--end YYYY-MM-DD]
 ```
+
+这笔交易依据了某份 Research 报告时，带 `--report-id`：用快照研究卡片的 `report_id`，
+不确定就问用户。没有依据报告（如止损、再平衡）就不带；不事后猜测，旧记录不回填。
+程序只校验编号是正整数，不核对编号与股票是否对应，写入前确认报告属于这只股票。
 
 成本对账或用户提供账户截图时先运行 `dividend-check`：命中项向用户确认是否到账后按其给出的命令记账
 （登记日后股数已变时它改给按应收总额的 `record-dividend`，含转增则只提示人工核对），

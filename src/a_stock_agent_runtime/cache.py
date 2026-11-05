@@ -65,6 +65,7 @@ COMMANDS = {
     "position-return": commands_holdings.cmd_position_return,
     "dividend-check": commands_holdings.cmd_dividend_check,
     "benchmark-report": commands_holdings.cmd_benchmark_report,
+    "report-trades": commands_holdings.cmd_report_trades,
     "portfolio-risk": commands_holdings.cmd_portfolio_risk,
     "check-holdings": commands_holdings.cmd_check_holdings,
     "stop-alert": commands_holdings.cmd_stop_alert,
@@ -111,6 +112,7 @@ COMMAND_CLASSIFICATION = {
             "monitor-snapshot",
             "dividend-check",
             "benchmark-report",
+            "report-trades",
             "daily-brief",
             "stop-alert",
         ),
@@ -227,6 +229,7 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "position-return": (("代码", None), ("当前价", "?")),
     "dividend-check": (("代码", "?"),),
     "benchmark-report": (),
+    "report-trades": (),
     "daily-brief": (),
     "stop-alert": (),
     "portfolio-risk": (),
@@ -245,9 +248,9 @@ _CLI_POSITIONALS: dict[str, tuple[tuple[str, str | None], ...]] = {
 _CLI_VALUE_OPTIONS = {
     "l3-add": ("--evidence-cadence",),
     "l3-update": ("--evidence-cadence",),
-    "add-holding": ("--notes", "--fee", "--date"),
-    "buy-holding": ("--fee", "--date"),
-    "sell-holding": ("--fee", "--tax", "--date"),
+    "add-holding": ("--notes", "--fee", "--date", "--report-id"),
+    "buy-holding": ("--fee", "--date", "--report-id"),
+    "sell-holding": ("--fee", "--tax", "--date", "--report-id"),
     "retro-add": ("--note", "--thesis", "--gap"),
     "retro-outliers": ("--loss",),
     "portfolio-risk": (
@@ -268,6 +271,7 @@ _CLI_VALUE_OPTIONS = {
     ),
     "performance-report": ("--input", "--benchmark"),
     "benchmark-report": ("--end",),
+    "report-trades": ("--end",),
 }
 
 
