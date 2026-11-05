@@ -324,6 +324,22 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.38 activation (2026-11-05)
+
+Owner instruction (Telegram msg 4205, 2026-11-05: add a report field to `holding_events`) activated
+`0.1.38-a2f5c75db5a5` for `claude`, `codex`, `hermes` and shared `~/.agents/skills/`, `--dry-run` then
+`--force`. Rollback manifest: `~/.local/share/a-stock-agent/rollback-1793882120911620640.json`;
+`0.1.37-1468abb5c873` remains installed. Change: `holding_events.report_id` (migration 037, additive and
+nullable, no backfill), `--report-id` on `add-holding` / `buy-holding` / `sell-holding`, and read-only
+`report-trades`. Schema: authorized by that instruction; backup
+`~/.local/share/a-stock-agent/backup-pre-0.1.38-*.db` taken with the Online Backup API, integrity ok.
+After migration the live ledger has 37 events (0 linked) and 10 holdings, unchanged, integrity ok.
+Validation: targeted tests 511 passed, installer and Skill gates 11 passed / 2 skipped, Ruff, hosted CI
+success on `a2f5c75`. `report-trades` ran with real TuShare data on a copy of the backup with three
+linked trades; the index changes match the raw closes. No account writes, trades, credentials or cron
+changes. Pointer rollback stays compatible because every insert names its columns; the column remains.
+No linked trade exists yet. Program checks do not confirm that a report belongs to the traded code.
+
 ## 0.1.37 activation (2026-11-04)
 
 Owner instruction (Claude Code session, 2026-11-04: evidence waits are reference only, not a necessary
