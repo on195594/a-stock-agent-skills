@@ -324,6 +324,30 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.39 activation (2026-11-05)
+
+Owner instruction (Telegram msg 4210, 2026-11-05: have Codex review the changes and fix what it finds)
+activated `0.1.39-bd54357dc441` for `claude`, `codex`, `hermes` and shared `~/.agents/skills/`,
+`--dry-run` then `--force`. Rollback manifest: `~/.local/share/a-stock-agent/rollback-1793884720435478280.json`;
+`0.1.38-a2f5c75db5a5` remains installed. No schema change; backup
+`~/.local/share/a-stock-agent/backup-pre-0.1.39-20261105-211641.db` (Online Backup API, integrity ok).
+Change: `report-trades` compares stock and index from the same closes, counts cash and share
+distributions by TuShare ex-date (cash pre-tax, not reinvested), names a stale close or an undated
+distribution instead of comparing, and exits 1 without a traceback when the index has no data.
+Validation: targeted tests 132 passed / 2 skipped including installer and Skill gates, six mutations of
+the new logic each caught by a test, Ruff, hosted CI success on `bd54357`. Real TuShare data on a copy of
+the backup, with all 25 priced trades linked only in that copy, produced a comparison for each. Four
+checked against `adj_factor` agree within 0.44pp, the gap being reinvestment (600036 +17.68% against
++18.12%, 600900 +10.47% against +10.66%, 601088 +4.82% against +5.17%, 002594 +10.75% against +10.71%).
+No real split fell inside these windows, so split handling rests on the tests. The live ledger stays at
+37 events, 0 linked. No account writes, trades, credentials or cron changes.
+
+Review evidence for 0.1.38 and this fix:
+`~/.local/share/a-share-research-evaluations/knowledge-ledger-20261105/code-review-skills.md`. Its gap on
+migration validation is confirmed: 0.1.38 was a migration, and the full local `check.sh` that
+`docs/development.md` asks for before committing one was not run, because the host's resource rule forbids
+undifferentiated full test runs. Targeted tests and hosted CI ran instead; that is not the same check.
+
 ## 0.1.38 activation (2026-11-05)
 
 Owner instruction (Telegram msg 4205, 2026-11-05: add a report field to `holding_events`) activated
