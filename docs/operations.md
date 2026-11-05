@@ -228,6 +228,52 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### 0.1.41 activation (2026-11-05)
+
+Owner explicitly authorized commit, push and publication in this Telegram session.
+Research `4c0e67d` was published first, closing the separate homepage/company-page
+card projection gap with one shared caution macro; positive live boundary cards,
+a normal card and a failed-card control passed browser checks.
+
+Activated **`0.1.41-86170bfe281c`** using the native installer (`--client all
+--mode symlink`, dry-run then force), only after hosted CI succeeded on the exact
+commit `86170bf` (run `42055914534`). The changed runtime area fixes the undated
+ex-dividend case where record date equals the return start: use the existing
+unknown/not-comparable result rather than a certain price-only return. Zero-day
+windows and known ex-dates at/inside the interval retain their prior semantics.
+No schema, eligibility, tranche, account gate, L3, W1 or investment-policy change.
+
+Local full `scripts/check.sh`: **1775 passed / 11 skipped**, Ruff, regulatory
+freshness, QA standalone and cron smoke passed. Research reused its exact-content
+91-test result. Installed runtime readback: version 0.1.41, all 31 modules match
+source, all 9 direct Skill targets match canonical paths, all 3 stable CLI help
+checks pass. Four installed pure-function controls verify unknown start, known
+inside ex-date, zero-day window and known start ex-date. No paid model turns or
+real-account report command were used for these controls.
+
+Read-only schema and protected records match before/after (10 holding rows,
+37 event rows). Research integrity/worker preflight passed, model calls remain
+915. The 21-card live homepage has two boundary cards; the phone company card
+shows its caution outside a fold, the normal card does not invent warnings.
+Production currently has no report with `open_questions`: that branch is covered
+by captured review questions combined with the captured valuation fixture, not
+claimed as a live positive notification or a fabricated production report.
+Temporary browser authorization was revoked through logout, confirmed in the
+session store, and its private storage-state file removed.
+
+Evidence: `~/.local/share/a-stock-agent/deployments/p2-0.1.41-20261105-232711/`
+(before/after account digests), `~/.hermes/projects/codex-p2-fix-20261105/`
+(tests, installed-runtime readback and browser checks), Research
+`deploy-4c0e67d-20261105-232943/`. Rollback manifest:
+`~/.local/share/a-stock-agent/rollback-1793892866379604360.json`.
+0.1.40 remains executable. The installer saves former symlink targets as plain
+text in its backup files; restore the three recorded old CLI targets, not a link
+to the backup file itself. Skill contents did not change in this release, so no
+text rollback or account DB restoration is needed. No paid research,
+notifications, trades, credentials, configuration or cron changes.
+
+### Historical 2026-10-27 baseline
+
 State as of **2026-10-27**, after explicit paired-release authorization.
 Previous activation and rollback evidence remains in `git show 638a0eb:docs/operations.md`.
 
