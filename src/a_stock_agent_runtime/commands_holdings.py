@@ -1140,12 +1140,17 @@ def _index_closes(ts_code: str, start: str, end: str) -> dict[str, float]:
     return dict(zip(frame["date"], frame["close"].astype(float)))
 
 
-def _close_on(code: str, day: str) -> float:
+def _close_result(code: str, day: str) -> MarketDataResult[float]:
     result = TushareMarketDataProvider(token=paths.tushare_token()).fetch_close_price(
         code, day
     )
     if result.status == "failed" or result.value is None:
         raise RuntimeError(f"{code} 在 {day} 无可用收盘价（{result.error_code}）")
+    return result
+
+
+def _close_on(code: str, day: str) -> float:
+    result = _close_result(code, day)
     if result.status == "degraded":
         print(
             f"价格参考：{code} {day} 使用 {result.source_as_of} 收盘价，"
@@ -1212,6 +1217,47 @@ def cmd_benchmark_report(args: list[str]) -> None:
     print("  样本期短、交易少时只说明期间相对表现，不证明方法有效")
 
 
+def total_return(
+    start_close: float, end_close: float, dividends: list[dict], start: str, end: str
+) -> float | None:
+    """Close-to-close return with cash and share distributions, or None if undatable.
+
+    Only distributions going ex after ``start`` and on or before ``end`` count: the
+    start close already reflects earlier ones. Cash is pre-tax and not reinvested.
+    """
+    if any(
+        not item["ex_date"] and start < item["record_date"] <= end for item in dividends
+    ):
+        return None
+    shares, cash = 1.0, 0.0
+    for item in sorted(
+        (i for i in dividends if i["ex_date"] and start < i["ex_date"] <= end),
+        key=lambda i: i["ex_date"],
+    ):
+        cash += shares * item["cash_div"]
+        shares *= 1 + item["split_ratio"]
+    return (shares * end_close + cash) / start_close - 1
+
+
+def _trade_comparison(
+    code: str, start: str, end: str, index_change: float, dividends: list[dict]
+) -> str:
+    """One trade against the index, both from the same close to the same close."""
+    start_close, end_close = _close_result(code, start), _close_result(code, end)
+    for closing, day, label in ((start_close, start, "起点"), (end_close, end, "期末")):
+        if closing.status != "ok":
+            return f"{label} {day} 没有当日收盘（行情停在 {closing.source_as_of}），不作比较"
+    change = total_return(
+        float(start_close.value), float(end_close.value), dividends, start, end
+    )
+    if change is None:
+        return "期间有分红或送转缺除权日，不作比较"
+    return (
+        f"含分红送转 {change:+.2%}，基准 {index_change:+.2%}，"
+        f"差 {(change - index_change) * 100:+.2f}pp"
+    )
+
+
 def cmd_report_trades(args: list[str]) -> None:
     """Show how trades linked to a Research report fared against the index."""
     if args and (len(args) != 2 or args[0] != "--end"):
@@ -1237,39 +1283,39 @@ def cmd_report_trades(args: list[str]) -> None:
                  AND event_date <= ?""",
             (end,),
         ).fetchone()[0]
-        actions = conn.execute(
-            """SELECT code, event_date FROM holding_events
-               WHERE event_date <= ?
-                 AND (event_type = 'dividend'
-                      OR (event_type = 'adjustment' AND notes LIKE 'dps=%'))""",
-            (end,),
-        ).fetchall()
     print(f"关联报告的买卖 {len(linked)} 笔，未关联 {unlinked} 笔")
     if not linked:
         return
     index_code, index_label = BENCHMARKS[0]
-    closes = _index_closes(index_code, min(row[3] for row in linked), end)
+    try:
+        closes = _index_closes(index_code, min(row[3] for row in linked), end)
+    except RuntimeError as exc:
+        print(f"错误：暂无法计算：{exc}；当天收盘未更新时稍后再查", file=sys.stderr)
+        sys.exit(1)
     valuation_day = max(closes)
     print(
-        f"以下均算到 {valuation_day} 收盘，基准为{index_label}（交易日当天或下一交易日收盘起算）"
+        f"以下均从交易日（非交易日顺延）收盘算到 {valuation_day} 收盘，基准为{index_label}"
     )
+    dividends: dict[str, list[dict]] = {}
     for report_id, code, event_type, day, shares, price, realized in linked:
+        label = "买入后" if event_type == "buy" else "卖出后"
+        line = f"  报告 #{report_id} {code} {day} {label} {shares}股 @ {price:.3f}："
         start_days = [item for item in closes if item >= day]
         if not start_days:
-            print(f"  报告 #{report_id} {code} {day}：晚于最新指数收盘，暂不计算")
+            print(line + "晚于最新指数收盘，暂不计算")
             continue
-        change = _close_on(code, valuation_day) / price - 1
-        index_change = closes[valuation_day] / closes[min(start_days)] - 1
-        label = "买入后" if event_type == "buy" else "卖出后"
-        line = (
-            f"  报告 #{report_id} {code} {day} {label} {shares}股 @ {price:.3f}："
-            f"股价 {change:+.2%}，基准 {index_change:+.2%}，"
-            f"差 {(change - index_change) * 100:+.2f}pp"
-        )
+        start = min(start_days)
+        index_change = closes[valuation_day] / closes[start] - 1
+        try:
+            if code not in dividends:
+                dividends[code] = _implemented_dividends(code)
+            line += _trade_comparison(
+                code, start, valuation_day, index_change, dividends[code]
+            )
+        except RuntimeError as exc:
+            line += f"暂不计算（{exc}）"
         if realized is not None:
             line += f"，已实现 {realized:+,.0f} 元"
-        if any(item == code and when > day for item, when in actions):
-            line += "；期间有分红或送转，股价未复权"
         print(line)
     print(
         "  买入看差是否为正；卖出差为负说明卖出后跑输基准。笔数少时只说明这些交易之后的相对表现"
