@@ -742,7 +742,16 @@ def cmd_buy_holding(args: list[str]) -> None:
                (holding_id, code, event_type, event_date, shares, price, fees,
                 report_id, created_at)
                VALUES (?, ?, 'buy', ?, ?, ?, ?, ?, ?)""",
-            (holding_id, code, trade_date, buy_shares, buy_price, fees, report_id, now_iso),
+            (
+                holding_id,
+                code,
+                trade_date,
+                buy_shares,
+                buy_price,
+                fees,
+                report_id,
+                now_iso,
+            ),
         )
         conn.commit()
     print(
@@ -1241,7 +1250,9 @@ def cmd_report_trades(args: list[str]) -> None:
     index_code, index_label = BENCHMARKS[0]
     closes = _index_closes(index_code, min(row[3] for row in linked), end)
     valuation_day = max(closes)
-    print(f"以下均算到 {valuation_day} 收盘，基准为{index_label}（交易日当天或下一交易日收盘起算）")
+    print(
+        f"以下均算到 {valuation_day} 收盘，基准为{index_label}（交易日当天或下一交易日收盘起算）"
+    )
     for report_id, code, event_type, day, shares, price, realized in linked:
         start_days = [item for item in closes if item >= day]
         if not start_days:
@@ -1260,7 +1271,9 @@ def cmd_report_trades(args: list[str]) -> None:
         if any(item == code and when > day for item, when in actions):
             line += "；期间有分红或送转，股价未复权"
         print(line)
-    print("  买入看差是否为正；卖出差为负说明卖出后跑输基准。笔数少时只说明这些交易之后的相对表现")
+    print(
+        "  买入看差是否为正；卖出差为负说明卖出后跑输基准。笔数少时只说明这些交易之后的相对表现"
+    )
 
 
 def cmd_record_dividend(args: list[str]) -> None:
