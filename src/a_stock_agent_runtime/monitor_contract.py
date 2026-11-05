@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date, datetime
 import json
 import math
@@ -168,6 +169,69 @@ def _research_trigger(value: Any) -> None:
         raise MonitorContractError("research add_trigger value must be finite")
 
 
+_RESEARCH_CAUTION_FIELDS = ("open_questions", "report_boundary", "current_boundary")
+
+
+def research_cautions(card: dict | None) -> dict:
+    """Preserve supplied cautions; an absent legacy field is not false or an empty list."""
+    card = card or {}
+    out = (
+        {"open_questions": deepcopy(card["open_questions"])}
+        if "open_questions" in card
+        else {}
+    )
+    for field, valuation in (
+        ("report_boundary", card.get("valuation_calc") or {}),
+        ("current_boundary", ((card.get("current") or {}).get("valuation") or {})),
+    ):
+        if "boundary" in valuation:
+            out[field] = valuation["boundary"]
+    return out
+
+
+def _research_caution_values(values: dict) -> None:
+    for field in ("report_boundary", "current_boundary"):
+        if (
+            field in values
+            and values[field] is not None
+            and type(values[field]) is not bool
+        ):
+            raise MonitorContractError(f"research {field} must be boolean or null")
+    if "open_questions" in values:
+        ids = []
+        for raw in _array(values["open_questions"], "research.open_questions"):
+            question = _object(raw, "research.open_question")
+            _required(question, {"id", "where", "problem"}, "research.open_question")
+            for field in ("id", "where", "problem"):
+                _nonempty(question[field], f"research.open_question.{field}")
+            ids.append(question["id"])
+        if len(ids) != len(set(ids)):
+            raise MonitorContractError("research open_questions has duplicate ids")
+
+
+def _research_boundary(valuation: dict) -> None:
+    if "boundary" not in valuation:
+        return
+    _research_caution_values({"report_boundary": valuation["boundary"]})
+    if valuation["boundary"] is not None:
+        for number in (
+            valuation.get("close"),
+            (valuation.get("v2") or {}).get("support_below"),
+        ):
+            _research_number(number)
+            if number is None or number <= 0:
+                raise MonitorContractError(
+                    "research boundary requires positive close and v2 hurdle"
+                )
+
+
+def _review_cautions(evidence: dict, card: dict | None) -> None:
+    actual = {key: evidence[key] for key in _RESEARCH_CAUTION_FIELDS if key in evidence}
+    _research_caution_values(actual)
+    if actual != research_cautions(card):
+        raise MonitorContractError("research caution evidence is inconsistent")
+
+
 def _research_card(raw: Any) -> dict:
     card = _object(raw, "research.card")
     _required(card, {"code", "origin", "status", "verdict", "report_id", "current", "pending_events"}, "research.card")
@@ -204,6 +268,15 @@ def _research_card(raw: Any) -> dict:
             _required(returns, {"保守", "中性", "乐观"}, "research.card.annual_returns")
             for number in returns.values():
                 _research_number(number)
+    frozen_value = card.get("valuation_calc")
+    if frozen_value is not None:
+        frozen_value = _object(frozen_value, "research.card.valuation_calc")
+        if frozen_value.get("v2") is not None:
+            _object(frozen_value["v2"], "research.card.valuation_calc.v2")
+        _research_boundary(frozen_value)
+    if current["valuation"] is not None:
+        _research_boundary(current["valuation"])
+    _research_caution_values(research_cautions(card))
     # Research V4 frozen stance (Research 2026-11-04); older cards have none.
     if card.get("stance_calc") is not None:
         frozen = _object(card["stance_calc"], "research.card.stance_calc")
@@ -294,6 +367,7 @@ def _validate_research_fields(value: dict, holding_codes: set[str], untradable: 
             raise MonitorContractError("research holding/candidate scope is inconsistent")
     for code in _array(research["missing"], "research.missing"):
         _research_code(code)
+    rows = {row["code"]: row for group in ("holdings", "candidates") for row in research[group]}
     candidate_codes = {row["code"] for row in research["candidates"]}
     # Candidates stay researched on any board; advice may only name boards the account can trade.
     advisable_codes = {code for code in candidate_codes if boards.advisable(code, untradable)}
@@ -301,7 +375,7 @@ def _validate_research_fields(value: dict, holding_codes: set[str], untradable: 
         candidate = comparison.get("candidate") if isinstance(comparison, dict) else None
         if isinstance(candidate, dict) and candidate.get("code") in candidate_codes - advisable_codes:
             raise MonitorContractError("opportunity_cost names a board the account cannot trade")
-        _opportunity_evidence(comparison, holding_codes, advisable_codes)
+        _opportunity_evidence(comparison, holding_codes, advisable_codes, rows)
     for raw in _array(value["review_prompts"], "review_prompts"):
         prompt = _object(raw, "review_prompt")
         _required(prompt, {"code", "kind", "detail", "evidence"}, "review_prompt")
@@ -321,7 +395,9 @@ def _validate_research_fields(value: dict, holding_codes: set[str], untradable: 
             fields = ("code", "report_id", "close_date", "close", *_RESEARCH_STANCE_FIELDS)
             if "stance_add_trigger" in row:
                 fields = (*fields, "stance_add_trigger")
-            if set(evidence) != set(fields) or any(field not in row or evidence[field] != row[field] for field in fields):
+            _review_cautions(evidence, row["card"])
+            expected = {field: row[field] for field in fields if field in row} | research_cautions(row["card"])
+            if any(field not in row for field in fields) or evidence != expected:
                 raise MonitorContractError("research_opportunity evidence is inconsistent")
             # Date-free part of the runtime trigger; the freshness/validity dates are runtime-only.
             if (row["card_status"] != "有效" or row["verdict"] != "值得继续研究" or row["stance_action"] == "回避"
@@ -339,16 +415,17 @@ def _validate_research_fields(value: dict, holding_codes: set[str], untradable: 
             if not comparisons:
                 raise MonitorContractError("opportunity_cost requires comparisons")
             for comparison in comparisons:
-                _opportunity_evidence(comparison, holding_codes, {prompt["code"]})
+                _opportunity_evidence(comparison, holding_codes, {prompt["code"]}, rows)
                 if comparison not in research["opportunity_costs"]:
                     raise MonitorContractError("opportunity_cost comparison missing from research")
         else:
             if prompt["code"] not in holding_codes or status != "ok":
                 raise MonitorContractError("review prompt requires an active researched holding")
             if kind == "opportunity_cost":  # Pre-0.1.30 snapshots remain readable.
-                _opportunity_evidence(evidence, holding_codes, advisable_codes)
+                _opportunity_evidence(evidence, holding_codes, advisable_codes, rows)
             else:
                 _review_evidence_row(evidence)
+                _review_cautions(evidence, rows[prompt["code"]]["card"])
 
 
 def _research_stance(row: dict) -> None:
@@ -384,14 +461,16 @@ def _review_evidence_row(raw: Any) -> dict:
     return item
 
 
-def _opportunity_evidence(raw: Any, holding_codes: set[str], candidate_codes: set[str]) -> None:
+def _opportunity_evidence(raw: Any, holding_codes: set[str], candidate_codes: set[str], rows: dict) -> None:
     evidence = _object(raw, "opportunity_cost.evidence")
     numbers = {"holding_neutral_return", "candidate_neutral_return", "candidate_horizon",
                "annual_switch_cost", "net_advantage"}
     _required(evidence, {"holding", "candidate"} | numbers, "opportunity_cost.evidence")
     for field, codes in (("holding", holding_codes), ("candidate", candidate_codes)):
-        if _review_evidence_row(evidence[field])["code"] not in codes:
+        code = _review_evidence_row(evidence[field])["code"]
+        if code not in codes:
             raise MonitorContractError("opportunity_cost evidence scope is inconsistent")
+        _review_cautions(evidence[field], rows[code]["card"])
     for field in numbers:
         _research_number(evidence[field])
         if evidence[field] is None:

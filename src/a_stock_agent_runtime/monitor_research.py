@@ -100,8 +100,50 @@ def _checkpoint_detail(row: dict) -> str:
             "未披露不视为未达到。")
 
 
+def _caution_detail(card: dict) -> str:
+    """Display Research's warnings without changing eligibility or recomputing its prices."""
+    cautions = monitor_contract.research_cautions(card)
+    parts = []
+    if cautions.get("report_boundary") is True:
+        parts.append(
+            "报告形成时为边界立场：同样材料重跑可能得出相反立场，不代表稳定的买入优势"
+        )
+    if cautions.get("current_boundary") is True:
+        parts.append("当前价格处于边界：现价与期望回报门槛价相差不超过5%")
+    if cautions.get("open_questions"):
+        parts.append(
+            "已通过复核，但以下问题尚未答完："
+            + "；".join(
+                f"[{q['id']} / {q['where']}] {q['problem']}"
+                for q in cautions["open_questions"]
+            )
+        )
+    unknown = []
+    if cautions.get("report_boundary") is None:
+        unknown.append("报告边界")
+    if (
+        card["current"].get("valuation") is not None
+        and cautions.get("current_boundary") is None
+    ):
+        unknown.append("当前边界")
+    if "open_questions" not in cautions:
+        unknown.append("未答问题记录")
+    if unknown:
+        parts.append(
+            "/".join(unknown) + "未提供或不可判定，不代表判断稳定或问题已完整回答"
+        )
+    if not parts:
+        return ""
+    return (
+        f"；Research 风险提示（{card['code']} 报告 #{card['report_id']}）："
+        + "；".join(parts)
+    )
+
+
 def _evidence(row: dict) -> dict:
-    return {key: row[key] for key in ("code", "report_id", "close_date", "close")}
+    return {
+        key: row[key] for key in ("code", "report_id", "close_date", "close")
+    } | monitor_contract.research_cautions(row["card"])
 
 
 def summarize(result: dict, holding_codes: list[str], snapshot_date: date,
@@ -157,7 +199,7 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date,
         if holding["zone"] == "测算透支区":
             prompts.append({
                 "code": code, "kind": "valuation_stretched",
-                "detail": f"{code} 收盘价 {holding['close']} 处于测算透支区，复核经营假设与退出倍数",
+                "detail": f"{code} 收盘价 {holding['close']} 处于测算透支区，复核经营假设与退出倍数" + _caution_detail(card),
                 "evidence": _evidence(holding),
             })
         if holding["neutral_return"] is None:
@@ -236,6 +278,7 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date,
                 f"{candidate.get('name') or code} {code} 中性年化 "
                 f"{comparisons[0]['candidate_neutral_return']:.2%}，按候选不计累计分红、持仓计全部分红，扣费后比 {names} "
                 f"高 ≥3 个百分点（最大差 {maximum * 100:.4f} 个百分点），仅冻结分红敏感性、非真实收益界限；情景未经记分，仅提示复核"
+                + "".join(_caution_detail(cards[c]) for c in dict.fromkeys(compared_codes))
                 + "".join(f"；Research 注：{caveat}" for caveat in caveats)
             ),
             "evidence": {"comparisons": comparisons},
@@ -246,7 +289,8 @@ def summarize(result: dict, holding_codes: list[str], snapshot_date: date,
             prompts.append({
                 "code": candidate["code"], "kind": "research_opportunity",
                 "detail": (f"{name} {candidate['code']}：{reason}；研究立场 {candidate['stance_action'] or '未记录'}。"
-                           + _checkpoint_detail(candidate) + "情景未经记分，按 position-size 定仓后再决定，不构成已形成的交易动作"),
+                           + _checkpoint_detail(candidate) + "情景未经记分，按 position-size 定仓后再决定，不构成已形成的交易动作"
+                           + _caution_detail(candidate["card"])),
                 "evidence": _evidence(candidate) | {key: candidate[key] for key in (
                     "stance_action", "stance_price", "stance_valid_until", "stance_add_trigger", "expected_return", "v2_zone")},
             })

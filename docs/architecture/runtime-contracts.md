@@ -183,6 +183,35 @@ including `risk_budget_exceeded`. Research prompts and errors cannot freeze risk
 confirm L3, authorize trades or write state. Production comparison remains an
 activation-time check requiring separate authorization.
 
+#### Research risk cautions (0.1.40)
+
+Research cards optionally supply `open_questions: [{id, where, problem}]` and
+`boundary: bool|null` in frozen `valuation_calc` and rolled `current.valuation`.
+The frozen summary also retains `close`, `as_of` and `v2.support_below` so its
+report-time basis remains inspectable. Research owns the ±5% calculation; Skills
+never recompute it. New fields do not rewrite reports or frozen stances.
+
+Rows retain these fields in the existing nested `card`, not another risk state.
+Review evidence adds only source-supplied `open_questions`, `report_boundary`,
+`current_boundary`; absent legacy keys stay absent, explicit null stays unknown.
+Each evidence value and its presence must match the source card, including both
+sides of opportunity comparisons. Question ids/locations/problems must be nonempty
+strings and ids distinct; flags must be bool/null, with positive price/hurdle
+basis when non-null. There is no duplicated threshold calculation in the validator.
+
+The existing `research_opportunity`, `opportunity_cost` and `valuation_stretched`
+details preserve specific boundary and unanswered-question cautions, labelled by
+code/report. Report-time and current boundary are distinct. Missing fields are
+not evidence of stability/completeness; `[]` means no recorded open questions,
+not certification that every user requirement was answered, and false is not
+statistical confidence. Older cards/snapshots remain readable (`schema_version=1`).
+Eligibility, freshness, account gates, first tranche, L3, action status and W1
+permissions are unchanged. Cautions create neither a new escalation nor automatic
+waiting/research. New snapshots require the matching runtime/validator pair: an
+older strict validator may reject the additional evidence keys. Activate runtime
+and Skill sources together; old cards and snapshots remain readable by the new
+validator. This is a source contract; activation is recorded separately.
+
 #### Coordinated S1 monitor-v1 extension (2026-09-17)
 
 `schema_version=1` is retained, but the new `risk_budget_exceeded` enumeration

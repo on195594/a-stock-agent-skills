@@ -4,6 +4,8 @@
 
 只读论点卡命令：`a-stock-cache research cards` 读取扫描范围内的卡片与无卡代码，`a-stock-cache research card <六位代码>` 读取单家公司卡片；二者不会发起研究。持仓监控已在一次 `monitor-snapshot` 中读取卡片，直接复用 `research` 与 `review_prompts`，不重复调用；卡片待复核时按其 `report_id` 读取相关报告并核对 `pending_events`，区间与回报暂停解读。`--no-research` 可跳过快照内的卡片读取，服务不可用不替代或改变账户门禁。
 
+卡片与报告的 `open_questions` 是复核明确留下的未答部分（含 `prior_status[i]`）；有效或 `passed=true` 不代表问题已经全部回答。卡片 `valuation_calc.boundary` 是报告形成时的边界，`current.valuation.boundary` 是当前滚动边界，两者不得互相覆盖。原样保留提醒 `detail` 中带代码/报告 ID 的“Research 风险提示”及具体未答问题；组合复盘即使无新提醒，也从现有嵌套卡片保留这些限制。不在 Skill 重算边界。旧卡缺字段或 null 均不能当作无风险，false 不代表立场已证明稳定；空问题数组仅表示没有记录的未答问题。警示不改变机会条件、有效状态、首批上限、账户风险门或 W1 权限，不默认等待、不自动付费补研。
+
 HTTP 401 时停止重试，交由 owner 修复凭据及环境覆盖；恢复后沿用原 request-id。日常研究不签发或轮换 Key，不取得网页登录或账户写权限；配置和轮换由项目运维文档维护。
 
 1. 先运行 `a-stock-cache research reports <六位代码>`，再按问题读取相关的 `research report <报告ID> --compact`。需核对关键原文或程序财务表时，才读取同一报告的完整 `research report <报告ID>`；精简视图不等于引文已核验。已在会话提供完整报告与证据时直接复用，不重复查询。
