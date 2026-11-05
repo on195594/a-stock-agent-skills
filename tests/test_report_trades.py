@@ -147,7 +147,12 @@ def test_same_day_trade_has_no_invented_gap_from_its_trade_price(monkeypatch, ca
     commands_holdings.cmd_add_holding(
         ["000001", "10.0", "500", "--date", "2026-06-01", "--report-id", "101"]
     )
-    _market(monkeypatch, {"2026-06-01": 100.0}, {"2026-06-01": _close(11.0)})
+    _market(
+        monkeypatch,
+        {"2026-06-01": 100.0},
+        {"2026-06-01": _close(11.0)},
+        [_dividend(None, cash=1.0, record_date="2026-06-01")],
+    )
     assert cache.main(["report-trades", "--end", "2026-06-01"]) == 0
     assert "含分红送转 +0.00%，基准 +0.00%，差 +0.00pp" in _lines(capsys)[1][0]
 
@@ -198,8 +203,9 @@ def test_total_return_counts_only_distributions_inside_the_window(items, expecte
     ) == pytest.approx(expected)
 
 
-def test_distribution_without_an_ex_date_blocks_the_comparison():
-    item = _dividend(None, cash=1.0, record_date="2026-07-01")
+@pytest.mark.parametrize("record_date", ["2026-06-01", "2026-07-01", "2026-10-21"])
+def test_distribution_without_an_ex_date_blocks_the_comparison(record_date):
+    item = _dividend(None, cash=1.0, record_date=record_date)
     assert (
         commands_holdings.total_return(10.0, 10.0, [item], "2026-06-01", "2026-10-21")
         is None
@@ -211,6 +217,34 @@ def test_distribution_without_an_ex_date_blocks_the_comparison():
         )
         == 0.0
     )
+
+
+def test_undated_start_day_distribution_does_not_become_a_certain_price_only_loss(
+    monkeypatch, capsys
+):
+    item = _dividend(None, cash=1.0, record_date="2026-06-01")
+    assert (
+        commands_holdings.total_return(10.0, 9.0, [item], "2026-06-01", "2026-06-03")
+        is None
+    )
+    known = _dividend("2026-06-02", cash=1.0, record_date="2026-06-01")
+    assert (
+        commands_holdings.total_return(10.0, 9.0, [known], "2026-06-01", "2026-06-03")
+        == 0.0
+    )
+    commands_holdings.cmd_add_holding(
+        ["000001", "10.0", "500", "--date", "2026-06-01", "--report-id", "101"]
+    )
+    _market(
+        monkeypatch,
+        {"2026-06-01": 100.0, "2026-06-03": 100.0},
+        {"2026-06-01": _close(10.0), "2026-06-03": _close(9.0)},
+        [item],
+    )
+    assert cache.main(["report-trades", "--end", "2026-06-03"]) == 0
+    line = _lines(capsys)[1][0]
+    assert "期间有分红或送转缺除权日，不作比较" in line
+    assert "含分红送转" not in line and "差" not in line
 
 
 @pytest.mark.parametrize(

@@ -1225,8 +1225,11 @@ def total_return(
     Only distributions going ex after ``start`` and on or before ``end`` count: the
     start close already reflects earlier ones. Cash is pre-tax and not reinvested.
     """
-    if any(
-        not item["ex_date"] and start < item["record_date"] <= end for item in dividends
+    # A record-date close still carries the entitlement; an unknown ex-date may follow it.
+    # A zero-length window has no later distribution to account for.
+    if start < end and any(
+        not item["ex_date"] and start <= item["record_date"] <= end
+        for item in dividends
     ):
         return None
     shares, cash = 1.0, 0.0
