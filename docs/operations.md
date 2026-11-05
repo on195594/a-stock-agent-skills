@@ -324,6 +324,45 @@ changed. Existing client sessions may cache old Skill text: reload Skills or
 start a new session (Pi supports `/reload`). Installation and discovery checks
 do not prove a running conversation has refreshed its context.
 
+## 0.1.40 activation (2026-11-05)
+
+Owner explicitly approved publication in this Telegram session after reviewing the
+paired Research/Skills warning fix. Activated `0.1.40-a50f5e6fc505` using the native
+installer (`--client all --mode symlink`, `--dry-run` then `--force`), after hosted
+CI succeeded on `a50f5e6` (run `42042143569`). Research `b8490e7` was published first.
+The previous 0.1.39 same-close trade comparison fixes remain included.
+
+Cards now preserve open questions and separate report/current boundary flags;
+opportunity, opportunity-cost and stretched-valuation details/evidence retain the
+specific cautions. Eligibility, first tranche, account gates, L3 and W1 rules are
+unchanged. Old cards/snapshots remain readable, missing/null is not a negative
+certificate, and no automatic waiting or paid research was introduced.
+
+Validation reused the exact-content candidate result: `scripts/check.sh` passed
+1772 tests / 11 skipped, Ruff, regulatory freshness, QA standalone and cron smoke;
+Research direct-call regression passed 142 tests. Live authenticated cards GET
+returned 8 cards; a real monitor snapshot uses runtime 0.1.40, Research status ok,
+and passed monitor-v1 including matching source-card cautions. Its business exit
+is 1 (`data_status=stale`, `review_status=blocked`) for existing account scope,
+portfolio denominator and evidence gaps; these were not relaxed or repaired as a
+side effect. The unchanged account/risk builder was compared to 0.1.39. Installed
+runtime replay of archived inputs also confirmed 4 positive boundary opportunities
+and 3 unanswered-question variants, explicitly not actual delivered notifications.
+31 runtime modules and 15 logical client/Skill views match source (Pi shares
+`.agents/skills` with Codex; AGY follows its configured shared path); all 3 CLI help
+checks pass. Existing client conversations may cache old Skill text; no paid client
+model turns were used to refresh them.
+
+Rollback manifest: `~/.local/share/a-stock-agent/rollback-1793887811227008640.json`;
+0.1.39 remains installed. Before the source-linked Skill text changed, its matching
+contents and link targets were saved under
+`~/.local/share/a-stock-agent/deployments/risk-warning-0.1.40-20261105-2203/`
+(`previous-skills/`, `before.json`); restore matching text and runtime together,
+preserving unrelated later edits, not the account DB. This release has no schema
+change. Read-only before/after checks confirm schema and both protected holdings
+and event-table digests unchanged (10 holding rows, 37 events). No trades,
+notifications, paid research, credentials, policy or cron changes.
+
 ## 0.1.39 activation (2026-11-05)
 
 Owner instruction (Telegram msg 4210, 2026-11-05: have Codex review the changes and fix what it finds)
