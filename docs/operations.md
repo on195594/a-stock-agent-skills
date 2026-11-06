@@ -256,6 +256,40 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### 0.1.43 stored-account-assets activation (2026-11-06)
+
+Owner explicitly requested commit, push and deployment after AGY re-verification.
+Activated **`0.1.43-ff3fc69a911e`** from commit `ff3fc69`, without a version bump,
+dependency change or investment-rule change. Reused the verified local full matrix
+(1952 passed / 11 skipped and the remaining automated gates); hosted
+[CI run 42207733895](https://github.com/on195594/a-stock-agent-skills/actions/runs/42207733895)
+passed the same full matrix. The native installer ran dry-run, then
+`--client all --mode symlink --force`.
+
+The active runtime now defaults to the saved same-account asset observation for
+risk denominators and daily briefs. Unknown valuation time remains unknown;
+a CLI-only timestamp cannot relabel a stored amount. Strict ledger date inputs,
+optional Research stance degradation and matching post-write Skill guidance are
+included in this activation.
+
+Readback verified all 9 Claude/Codex/Hermes Skill links and all 3 stable CLI links.
+All 59 runtime/Skill source files match the activated commit by SHA-256; installed
+versions remain suite 0.1.43 and a-stock-lib 0.10.2. All three CLI help commands
+passed with isolated state, absent config and notifications disabled. Installed
+runtime synthetic checks confirmed stored-asset reuse, unknown-time review,
+rejection of timestamp relabelling and noncanonical dates, without creating a
+database or modifying the synthetic observation. Runtime credentials, risk policy,
+real asset observation and daily-brief cron script retained their pre-activation
+content hashes. No account operations, schema migration or cron changes were made.
+The existing daily-brief wrapper uses the stable CLI through PATH and follows this
+activation automatically. Existing client sessions must reload Skills; live-session
+reload and actual model behavior were not verified.
+
+Evidence: `~/.local/share/a-stock-agent/deployments/stored-assets-0.1.43-ff3fc69a911e-20261106/`.
+Rollback manifest: `~/.local/share/a-stock-agent/rollback-1793963328603017080.json`.
+The previous `0.1.43-9ff3909d283f` runtime and frozen Skills remain available.
+The following documentation-only commit does not alter activated runtime/Skill bytes.
+
 ### 0.1.43 cleanup activation (2026-11-06)
 
 Owner explicitly requested commit, push and deployment after repository cleanup.
