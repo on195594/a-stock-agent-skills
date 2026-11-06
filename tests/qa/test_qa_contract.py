@@ -138,7 +138,10 @@ def test_investment_review_repairs_are_owned_by_execution_framework_and_rubric()
     # 2026-11-04 spec: stance is the backbone, the matrix only a reference, sizes from position-size.
     assert "position-size" in EXECUTION and "不单独否决" in EXECUTION
     assert "立场为现在分批，却仅因矩阵或 incomplete 整体写成“默认等待”" in RUBRIC
-    assert "incomplete 路径终止仓位建议" not in RUBRIC and "incomplete 不构成跳过理由" in RUBRIC
+    assert (
+        "incomplete 路径终止仓位建议" not in RUBRIC
+        and "incomplete 不构成跳过理由" in RUBRIC
+    )
     assert "估值冲突" in resource
     assert "AISC" in resource
     assert "最高只能给格档" in resource
@@ -265,6 +268,28 @@ def test_legacy_valuation_compatibility_is_fail_closed_without_read_backfill() -
     assert "处理为不具备买入资格" in DATA_CACHE
     assert "读取不得回填" in DATA_CACHE
     assert "legacy_field_absent" not in RESEARCH
+
+
+def test_price_check_requires_positive_provenance_not_absent_bad_wording() -> None:
+    section = RUBRIC.split("### 1.", 1)[1].split("### 2.", 1)[0]
+    passing = section.split("**PASS 信号**", 1)[1].split("**FAIL 信号**", 1)[0]
+    assert "必须有正面记录" in passing
+    assert "对应字段、来源与 as-of" in passing
+    assert "对应字段、来源与 as-of" in REPORT
+    assert "价格注明来自 `a-stock-fetch`/runtime" in REPORT
+    assert "正文记录价格缺失及原因" in REPORT
+    assert "正文明确记录价格缺失及原因" in passing
+    assert "报告无" not in passing
+    assert "仅未出现禁用措辞不构成 PASS" in section
+
+
+def test_checklist_rubric_distinguishes_brief_and_detailed_reports() -> None:
+    section = RUBRIC.split("### 6.", 1)[1].split("### 7.", 1)[0]
+    assert "默认五段简版" in section
+    assert "已展示的评分或评级可追溯至 runtime" in section
+    assert "用户要求详细审计" in section
+    assert "不得仅因五段简版未展开全部评分子项而判 FAIL" in section
+    assert "详细审计附加要求" in REPORT
 
 
 if __name__ == "__main__":

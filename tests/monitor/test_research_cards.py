@@ -14,15 +14,27 @@ import pytest
 import requests
 
 from a_stock_agent_runtime import (
-    cache, commands_monitor, monitor_contract, monitor_research, research_client,
+    cache,
+    commands_monitor,
+    monitor_contract,
+    monitor_research,
+    research_client,
 )
 from a_stock_agent_runtime.trading_costs import COMMISSION_RATE, STAMP_TAX_RATE
 from tests.helpers import mock_price_quotes
 from tests.monitor.test_monitor_snapshot import _quotes, _seed_holding
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures/monitor/research-cards.json"
-UNCHANGED = ("data_status", "valuation_status", "action_status", "data_gaps", "stop_reason",
-             "requires_user_confirmation", "account", "holdings")
+UNCHANGED = (
+    "data_status",
+    "valuation_status",
+    "action_status",
+    "data_gaps",
+    "stop_reason",
+    "requires_user_confirmation",
+    "account",
+    "holdings",
+)
 
 
 @pytest.fixture
@@ -42,7 +54,11 @@ def card(cards, code):
 
 @pytest.fixture
 def http(monkeypatch, cards):
-    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("https://research.example", "secret-test-token"))
+    monkeypatch.setattr(
+        research_client.paths,
+        "research_connection",
+        lambda: ("https://research.example", "secret-test-token"),
+    )
     calls = []
     state = {"status": 200, "body": cards}
 
@@ -61,20 +77,27 @@ def http(monkeypatch, cards):
 
 @pytest.fixture
 def run_snapshot(isolated_cache_database, monkeypatch, capsys, cards, http):
-    monkeypatch.setattr(commands_monitor.domain, "cst_now",
-                        lambda: datetime.fromisoformat("2026-11-02T19:00:00+08:00"))
+    monkeypatch.setattr(
+        commands_monitor.domain,
+        "cst_now",
+        lambda: datetime.fromisoformat("2026-11-02T19:00:00+08:00"),
+    )
     # Quote fixtures date themselves with cst_today; pin it to the same session.
     monkeypatch.setattr(commands_monitor.domain, "cst_today", lambda: "2026-11-02")
     _seed_holding(isolated_cache_database, code="600900")
     close = card(cards, "600900")["current"]["last_close"]
     # A hypothetical clean account at the captured close; no invented market price.
     with sqlite3.connect(isolated_cache_database) as conn:
-        conn.execute("UPDATE holdings SET cost_price=?, reference_cost=?, stop_loss_15=?, stop_loss_20=?",
-                     (close, close, close * .85, close * .8))
+        conn.execute(
+            "UPDATE holdings SET cost_price=?, reference_cost=?, stop_loss_15=?, stop_loss_20=?",
+            (close, close, close * 0.85, close * 0.8),
+        )
     mock_price_quotes(monkeypatch, lambda codes: _quotes(codes, price=close))
 
     def run(*args):
-        status = cache.main(["monitor-snapshot", "--portfolio-value", "100000", "--json", *args])
+        status = cache.main(
+            ["monitor-snapshot", "--portfolio-value", "100000", "--json", *args]
+        )
         captured = capsys.readouterr()
         return status, json.loads(captured.out)
 
@@ -92,7 +115,9 @@ def assert_gate_unchanged(baseline, actual, *, thesis_review=False):
         assert actual[field] == baseline[field], field
     if thesis_review:
         # A thesis review ends the clean fast path exactly like other escalations.
-        assert actual["stop_reason"] is None and actual["manifest"]["stop_reason"] is None
+        assert (
+            actual["stop_reason"] is None and actual["manifest"]["stop_reason"] is None
+        )
         assert actual["action_status"] in {"review_candidate", "trade_candidate"}
         return
     assert actual["manifest"]["stop_reason"] == baseline["manifest"]["stop_reason"]
@@ -101,8 +126,10 @@ def assert_gate_unchanged(baseline, actual, *, thesis_review=False):
         assert actual["escalations"] == baseline["escalations"]
 
 
-def test_real_cards_one_call_projection_and_prompts_do_not_enter_escalations(run_snapshot, cards, http):
-    assert STAMP_TAX_RATE == .0005 and COMMISSION_RATE == .00025
+def test_real_cards_one_call_projection_and_prompts_do_not_enter_escalations(
+    run_snapshot, cards, http
+):
+    assert STAMP_TAX_RATE == 0.0005 and COMMISSION_RATE == 0.00025
     _, baseline = run_snapshot("--no-research")
     result, actual = run_snapshot()
     assert result == 0 and actual["schema_version"] == 1
@@ -113,29 +140,45 @@ def test_real_cards_one_call_projection_and_prompts_do_not_enter_escalations(run
     assert len(stretched) == 1 and "29.74" in stretched[0]["detail"]
     row = actual["research"]["holdings"][0]
     assert row["card"] == card(cards, "600900")
-    assert row["neutral_return"] == row["card"]["current"]["valuation"]["annual_returns"]["中性"]
+    assert (
+        row["neutral_return"]
+        == row["card"]["current"]["valuation"]["annual_returns"]["中性"]
+    )
     assert row["conservative_return"] < 0  # Negative returns are valid evidence.
     opportunity = prompts(actual, "opportunity_cost")
     assert len(opportunity) == 1
     evidence = opportunity[0]["evidence"]["comparisons"][0]
     assert evidence["candidate"]["code"] == "600309"  # Better than the other valid L5.
-    assert evidence["holding"]["report_id"] == 3 and evidence["candidate"]["report_id"] == 10
-    assert evidence["holding"]["close_date"] == evidence["candidate"]["close_date"] == "2026-10-30"
+    assert (
+        evidence["holding"]["report_id"] == 3
+        and evidence["candidate"]["report_id"] == 10
+    )
+    assert (
+        evidence["holding"]["close_date"]
+        == evidence["candidate"]["close_date"]
+        == "2026-10-30"
+    )
     horizon = card(cards, "600309")["current"]["valuation"]["horizon"]
-    assert evidence["annual_switch_cost"] == pytest.approx(.001 / horizon)
+    assert evidence["annual_switch_cost"] == pytest.approx(0.001 / horizon)
     calls = http[1]
     assert len(calls) == 1
     method, url, kwargs = calls[0]
     assert (method, url) == ("GET", "https://research.example/api/cards")
-    assert kwargs["timeout"] == (10, 30) and kwargs["allow_redirects"] is False
-    assert kwargs["headers"] == {"Authorization": "Bearer secret-test-token", "X-Research-Version": "research-v1"}
+    assert kwargs["timeout"] == (2, 3) and kwargs["allow_redirects"] is False
+    assert kwargs["headers"] == {
+        "Authorization": "Bearer secret-test-token",
+        "X-Research-Version": "research-v1",
+    }
     assert kwargs["json"] is None and kwargs["params"] is None
 
 
 def test_pending_card_escalates_only_review_and_keeps_returns(run_snapshot, cards):
     _, baseline = run_snapshot("--no-research")
     holding = card(cards, "600900")
-    holding.update(status="待复核", pending_events=[{"title": "测试待复核公告", "kind": "major_risk"}])
+    holding.update(
+        status="待复核",
+        pending_events=[{"title": "测试待复核公告", "kind": "major_risk"}],
+    )
     holding["current"]["note"] = "待复核，区间暂停解读"
     _, actual = run_snapshot()
     assert_gate_unchanged(baseline, actual, thesis_review=True)
@@ -143,35 +186,60 @@ def test_pending_card_escalates_only_review_and_keeps_returns(run_snapshot, card
     assert actual["review_prompts"] == []
     assert len(actual["escalations"]) == 1
     escalation = actual["escalations"][0]
-    assert escalation["reason_code"] == "research_thesis_review" and escalation["candidate"] == "review"
+    assert (
+        escalation["reason_code"] == "research_thesis_review"
+        and escalation["candidate"] == "review"
+    )
     assert "测试待复核公告（major_risk）" in escalation["detail"]
     row = actual["research"]["holdings"][0]
     assert row["zone"] == "测算透支区" and row["neutral_return"] is not None
     assert row["note"] == holding["current"]["note"]
     order = commands_monitor._ESCALATION_REASON_ORDER
-    assert order.index("l3_watch") < order.index("research_thesis_review") < order.index("governance_gate")
+    assert (
+        order.index("l3_watch")
+        < order.index("research_thesis_review")
+        < order.index("governance_gate")
+    )
 
 
-@pytest.mark.parametrize("candidate_return,expected", [
-    (.0505, True),  # Synthetic exact threshold: .0505 - .02 - .001/2 = .03.
-    (.0495, False),  # 0.1pp below the net threshold.
-    (.05025, False),  # Gross passes, net fails: detects omitted transaction costs.
-    (.045, False),  # Detects a mutated 2pp threshold.
-])
+@pytest.mark.parametrize(
+    "candidate_return,expected",
+    [
+        (0.0505, True),  # Synthetic exact threshold: .0505 - .02 - .001/2 = .03.
+        (0.0495, False),  # 0.1pp below the net threshold.
+        (0.05025, False),  # Gross passes, net fails: detects omitted transaction costs.
+        (0.045, False),  # Detects a mutated 2pp threshold.
+    ],
+)
 def test_net_opportunity_threshold(run_snapshot, cards, candidate_return, expected):
     # Only these boundary return/horizon inputs are synthetic, not market data.
     held, candidate = card(cards, "600900"), card(cards, "600309")
     cards["cards"][:] = [held, candidate]
-    held["current"]["valuation"]["annual_returns"]["中性"] = .02
+    held["current"]["valuation"]["annual_returns"]["中性"] = 0.02
     candidate["current"]["valuation"]["annual_returns"]["中性"] = candidate_return
-    held["current"]["valuation"]["neutral_return_without_dividends"] = .02
-    candidate["current"]["valuation"]["neutral_return_without_dividends"] = candidate_return
+    held["current"]["valuation"]["neutral_return_without_dividends"] = 0.02
+    candidate["current"]["valuation"]["neutral_return_without_dividends"] = (
+        candidate_return
+    )
     candidate["current"]["valuation"]["horizon"] = 2
     _, payload = run_snapshot()
     assert bool(prompts(payload, "opportunity_cost")) is expected
 
 
-@pytest.mark.parametrize("change", ["verdict", "pending", "external", "null_return", "null_valuation", "no_horizon", "zero_horizon", "negative_horizon", "missing_date"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "verdict",
+        "pending",
+        "external",
+        "null_return",
+        "null_valuation",
+        "no_horizon",
+        "zero_horizon",
+        "negative_horizon",
+        "missing_date",
+    ],
+)
 def test_ineligible_candidate_never_prompts(run_snapshot, cards, change):
     held, candidate = card(cards, "600900"), card(cards, "600309")
     cards["cards"][:] = [held, candidate]
@@ -189,7 +257,11 @@ def test_ineligible_candidate_never_prompts(run_snapshot, cards, change):
     elif change == "missing_date":
         candidate["current"]["last_close_date"] = None
     else:
-        valuation["horizon"] = {"no_horizon": None, "zero_horizon": 0, "negative_horizon": -1}[change]
+        valuation["horizon"] = {
+            "no_horizon": None,
+            "zero_horizon": 0,
+            "negative_horizon": -1,
+        }[change]
     _, payload = run_snapshot()
     assert payload["research"]["status"] == "ok"
     assert not prompts(payload, "opportunity_cost") and payload["escalations"] == []
@@ -199,35 +271,56 @@ def test_ineligible_candidate_never_prompts(run_snapshot, cards, change):
 def test_close_date_comparison(run_snapshot, cards, days, expected):
     held, candidate = card(cards, "600900"), card(cards, "600309")
     cards["cards"][:] = [held, candidate]
-    candidate["current"]["last_close_date"] = (date.fromisoformat(held["current"]["last_close_date"]) + timedelta(days=days)).isoformat()
+    candidate["current"]["last_close_date"] = (
+        date.fromisoformat(held["current"]["last_close_date"]) + timedelta(days=days)
+    ).isoformat()
     _, payload = run_snapshot()
     assert bool(prompts(payload, "opportunity_cost")) is expected
     if not expected:
         assert "超过3日" in payload["research"]["reason"]
 
 
-@pytest.mark.parametrize("case,status", [
-    ("unconfigured", "not_configured"), ("skip", "skipped"),
-    ("timeout", "unavailable"), ("version", "unavailable"), ("http", "unavailable"),
-    ("shape", "unavailable"), ("nan", "unavailable"), ("unsafe_url", "unavailable"),
-])
-def test_optional_failures_preserve_all_gates(run_snapshot, http, monkeypatch, case, status):
+@pytest.mark.parametrize(
+    "case,status",
+    [
+        ("unconfigured", "not_configured"),
+        ("skip", "skipped"),
+        ("timeout", "unavailable"),
+        ("version", "unavailable"),
+        ("http", "unavailable"),
+        ("shape", "unavailable"),
+        ("nan", "unavailable"),
+        ("unsafe_url", "unavailable"),
+    ],
+)
+def test_optional_failures_preserve_all_gates(
+    run_snapshot, http, monkeypatch, case, status
+):
     _, baseline = run_snapshot("--no-research")
     state, calls = http
     if case == "unconfigured":
-        monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("", ""))
+        monkeypatch.setattr(
+            research_client.paths, "research_connection", lambda: ("", "")
+        )
     elif case == "timeout":
         state["exception"] = requests.ReadTimeout("secret-test-token")
     elif case == "version":
         state["body"] = {"version": "research-v2"}
     elif case == "http":
-        state.update(status=503, body={"version": "research-v1", "error": "secret-test-token\n不可用"})
+        state.update(
+            status=503,
+            body={"version": "research-v1", "error": "secret-test-token\n不可用"},
+        )
     elif case == "shape":
         state["body"] = {"version": "research-v1", "cards": []}
     elif case == "nan":
         state["body"]["cards"][0]["current"]["last_close"] = float("nan")
     elif case == "unsafe_url":
-        monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("http://research.example", "secret-test-token"))
+        monkeypatch.setattr(
+            research_client.paths,
+            "research_connection",
+            lambda: ("http://research.example", "secret-test-token"),
+        )
     result, payload = run_snapshot(*(["--no-research"] if case == "skip" else []))
     assert result == 0 and payload["research"]["status"] == status
     assert_gate_unchanged(baseline, payload)
@@ -241,16 +334,37 @@ def test_missing_cards_and_l5_scope(run_snapshot, cards):
     held["origin"] = "l5"  # In-scope holding must not also become a candidate.
     _, payload = run_snapshot()
     assert "600900" not in {r["code"] for r in payload["research"]["candidates"]}
-    cards["cards"][:] = [c for c in cards["cards"] if c["code"] not in {"600900", "600309"}]
-    cards["missing"] = [{"code": "600900", "origin": "external"}, {"code": "600309", "origin": "l5"}]
+    cards["cards"][:] = [
+        c for c in cards["cards"] if c["code"] not in {"600900", "600309"}
+    ]
+    cards["missing"] = [
+        {"code": "600900", "origin": "external"},
+        {"code": "600309", "origin": "l5"},
+    ]
     _, payload = run_snapshot()
     assert payload["research"]["holdings"][0]["card"] is None
     assert payload["research"]["missing"] == ["600900", "600309"]
-    assert next(r for r in payload["research"]["candidates"] if r["code"] == "600309")["card"] is None
+    assert (
+        next(r for r in payload["research"]["candidates"] if r["code"] == "600309")[
+            "card"
+        ]
+        is None
+    )
     assert not payload["review_prompts"]
 
 
-@pytest.mark.parametrize("mutation", ["status", "kind", "return", "card_status", "scope", "missing_evidence", "thesis_trade"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "status",
+        "kind",
+        "return",
+        "card_status",
+        "scope",
+        "missing_evidence",
+        "thesis_trade",
+    ],
+)
 def test_additive_contract_rejects_invalid_research(run_snapshot, cards, mutation):
     if mutation == "thesis_trade":
         card(cards, "600900")["status"] = "待复核"
@@ -274,14 +388,18 @@ def test_additive_contract_rejects_invalid_research(run_snapshot, cards, mutatio
         monitor_contract.validate_monitor_snapshot(value)
 
 
-def test_pending_research_does_not_unblock_existing_monitor_failure(run_snapshot, cards, monkeypatch):
+def test_pending_research_does_not_unblock_existing_monitor_failure(
+    run_snapshot, cards, monkeypatch
+):
     mock_price_quotes(monkeypatch, lambda codes: {})
     _, baseline = run_snapshot("--no-research")
     card(cards, "600900")["status"] = "待复核"
     result, actual = run_snapshot()
     assert result == 1 and actual["review_status"] == "blocked"
     assert_gate_unchanged(baseline, actual, thesis_review=True)
-    assert any(e["reason_code"] == "research_thesis_review" for e in actual["escalations"])
+    assert any(
+        e["reason_code"] == "research_thesis_review" for e in actual["escalations"]
+    )
 
 
 def test_unavailable_database_still_reports_optional_research(http, capsys):
@@ -293,10 +411,14 @@ def test_unavailable_database_still_reports_optional_research(http, capsys):
 
 
 def test_malformed_json_does_not_leak_response(monkeypatch):
-    monkeypatch.setattr(research_client.paths, "research_connection", lambda: ("https://research.example", "secret-test-token"))
+    monkeypatch.setattr(
+        research_client.paths,
+        "research_connection",
+        lambda: ("https://research.example", "secret-test-token"),
+    )
     response = requests.Response()
     response.status_code = 200
-    response._content = b'secret-test-token not json'
+    response._content = b"secret-test-token not json"
     monkeypatch.setattr(research_client.requests, "request", lambda *a, **k: response)
     result = monitor_research.fetch_cards()
     assert result == {"status": "unavailable", "reason": "Research 响应不是有效 JSON"}
@@ -304,8 +426,11 @@ def test_malformed_json_does_not_leak_response(monkeypatch):
 
 def test_opportunity_freshness_uses_snapshot_as_of(run_snapshot, monkeypatch):
     # Advance the snapshot clock only; original report timestamps stay unchanged.
-    monkeypatch.setattr(commands_monitor.domain, "cst_now",
-                        lambda: datetime.fromisoformat("2026-11-10T19:00:00+08:00"))
+    monkeypatch.setattr(
+        commands_monitor.domain,
+        "cst_now",
+        lambda: datetime.fromisoformat("2026-11-10T19:00:00+08:00"),
+    )
     _, payload = run_snapshot()
     assert payload["as_of"].startswith("2026-11-10")
     assert len(payload["research"]["opportunity_costs"]) == 1
@@ -316,14 +441,23 @@ def test_cash_uncertainty_can_remove_advantage_without_removing_card_returns(car
     held, candidate = card(cards, "600900"), card(cards, "600309")
     result = {"status": "ok", "cards": [held, candidate], "missing": []}
     # Boundary mutation: nominal candidate beats holding, but its ex-dividend endpoint does not.
-    candidate["current"]["valuation"]["neutral_return_without_dividends"] = held["current"]["valuation"]["annual_returns"]["中性"]
-    research, notices, escalations = monitor_research.summarize(result, ["600900"], date(2026, 11, 2))
-    assert not research["opportunity_costs"] and '现金流未核对' in research['reason']
-    assert not [n for n in notices if n['kind'] == 'opportunity_cost'] and not escalations
-    assert research['candidates'][0]['neutral_return'] == candidate['current']['valuation']['annual_returns']['中性']
-    del candidate['current']['valuation']['neutral_return_without_dividends']
+    candidate["current"]["valuation"]["neutral_return_without_dividends"] = held[
+        "current"
+    ]["valuation"]["annual_returns"]["中性"]
+    research, notices, escalations = monitor_research.summarize(
+        result, ["600900"], date(2026, 11, 2)
+    )
+    assert not research["opportunity_costs"] and "现金流未核对" in research["reason"]
+    assert (
+        not [n for n in notices if n["kind"] == "opportunity_cost"] and not escalations
+    )
+    assert (
+        research["candidates"][0]["neutral_return"]
+        == candidate["current"]["valuation"]["annual_returns"]["中性"]
+    )
+    del candidate["current"]["valuation"]["neutral_return_without_dividends"]
     research, _, _ = monitor_research.summarize(result, ["600900"], date(2026, 11, 2))
-    assert not research['opportunity_costs'] and '缺少适用' in research['reason']
+    assert not research["opportunity_costs"] and "缺少适用" in research["reason"]
 
 
 def test_captured_maotai_changjiang_sensitivity_reverses_nominal_advantage(cards):
@@ -332,17 +466,32 @@ def test_captured_maotai_changjiang_sensitivity_reverses_nominal_advantage(cards
     candidate.update(origin="l5", verdict="值得继续研究")
     # Recomputed by Research valuation.at from valuation-stored-20261101.json,
     # matching these captured reports: exit_cap/current_cap ** (1/horizon) - 1.
-    held['current']['valuation']['neutral_return_without_dividends'] = -0.004238281527728428
-    candidate['current']['valuation']['neutral_return_without_dividends'] = 0.0335926372960775
-    nominal = (candidate['current']['valuation']['annual_returns']['中性']
-               - held['current']['valuation']['annual_returns']['中性']
-               - .001 / candidate['current']['valuation']['horizon'])
-    assert nominal > .03
-    result = {'status': 'ok', 'cards': [held, candidate], 'missing': []}
-    research, notices, _ = monitor_research.summarize(result, ['600900'], date(2026, 11, 2))
-    assert not research['opportunity_costs']
-    assert '现金流未核对' in research['reason']
-    robust = .0335926372960775 - held['current']['valuation']['annual_returns']['中性'] - .001 / candidate['current']['valuation']['horizon']
+    held["current"]["valuation"][
+        "neutral_return_without_dividends"
+    ] = -0.004238281527728428
+    candidate["current"]["valuation"]["neutral_return_without_dividends"] = (
+        0.0335926372960775
+    )
+    nominal = (
+        candidate["current"]["valuation"]["annual_returns"]["中性"]
+        - held["current"]["valuation"]["annual_returns"]["中性"]
+        - 0.001 / candidate["current"]["valuation"]["horizon"]
+    )
+    assert nominal > 0.03
+    result = {"status": "ok", "cards": [held, candidate], "missing": []}
+    research, notices, _ = monitor_research.summarize(
+        result, ["600900"], date(2026, 11, 2)
+    )
+    assert not research["opportunity_costs"]
+    assert "现金流未核对" in research["reason"]
+    robust = (
+        0.0335926372960775
+        - held["current"]["valuation"]["annual_returns"]["中性"]
+        - 0.001 / candidate["current"]["valuation"]["horizon"]
+    )
     # Near-miss reason carries both bases (about 3.92pp nominal vs 1.20pp robust).
-    assert f"计分红 {nominal * 100:.2f} 个百分点，候选不计累计分红 {robust * 100:.2f} 个百分点" in research['reason']
-    assert not [n for n in notices if n['kind'] == 'opportunity_cost']
+    assert (
+        f"计分红 {nominal * 100:.2f} 个百分点，候选不计累计分红 {robust * 100:.2f} 个百分点"
+        in research["reason"]
+    )
+    assert not [n for n in notices if n["kind"] == "opportunity_cost"]

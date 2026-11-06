@@ -12,11 +12,11 @@ export RUFF_CACHE_DIR="${RUFF_CACHE_DIR:-/tmp/ruff_cache}"
 
 if command -v uv >/dev/null 2>&1; then
     uv sync --frozen
-    uv run pytest -q
+    uv run pytest -q -x
     uv run ruff check .
     uv run python scripts/check_regulatory_freshness.py
 elif [ -d ".venv/bin" ]; then
-    .venv/bin/pytest -q
+    .venv/bin/pytest -q -x
     .venv/bin/ruff check .
     .venv/bin/python scripts/check_regulatory_freshness.py
 else

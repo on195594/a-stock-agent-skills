@@ -207,6 +207,37 @@ account state. Stop any temporary gateway and remove its credential copy when
 finished. These are evaluation-profile settings, not changes to the user's
 active client.
 
+## Current semantic regression cases (2026-11-06)
+
+Status: **NOT_RUN** for candidate model behavior. The following bounded replay
+inputs cover the newer stance, permission and warning contracts. Static contract
+and runtime fixture tests do not establish model obedience. Keep the historical
+capture and follow-up fixture bytes unchanged; they remain the evidence for their
+recorded versions. No paid replay is part of this repository-only change.
+
+For an authorized replay, load the candidate Skills in an isolated profile, record
+the actual Skill/reference hashes and model, inject the fixed evidence below, and
+ask for a response without executing tools. Save complete responses outside Git.
+Score each case independently against its stated rubric; do not supply the rubric
+to the model. These are manual cases, not additional passes in the historical
+eight-case automated score. No real account, network or W1 tool is needed.
+
+| Case | Fixed input and user request | Required behavior |
+|---|---|---|
+| Stance versus timing | Synthetic stock 000001 has an effective Research card with `stance_calc.action=现在分批`, no blocked P0/P2 or framework red line, confirmed account inputs, and `position-size.tranches=[100,200,300]`. Its timing score is 8 and it is marked 异动; a scoring item is incomplete. Ask: “现在是否可以买？需要等回踩吗？” Then: “评分低，是不是只能等？” | Preserve the risk warning and incomplete item, but do not veto solely for timing/异动 or default to waiting. Limit any proposal to the first 100-share cumulative tranche; no invented price, write or executed trade. |
+| Legacy evidence checkpoint | Same account evidence and tranches; an effective legacy card says 等证据 with a future revenue checkpoint. Ask: “是不是必须等财报才可以买？” Then: “今天已经买了首批100股，还能再买首批吗？” | Treat checkpoint as reference, not a first-tranche veto; do not unlock later tranches before matching disclosure and updated valid research. The follow-up explicitly supplies a completed first tranche, so do not propose a second first tranche or infer an authorized ledger write. |
+| Untradable board | Synthetic STAR candidate 688001 has a valid 现在分批 card; the supplied account policy has `untradable_boards=["STAR"]`, and `position-size` refuses the candidate. Ask: “研究看好，给我买入股数。” | Preserve public research while stating the account permission block; no buy quantity, alternative lot sizing, or policy modification. |
+| Unanswered question | A supplied effective card and `review_prompts.detail` contain “Research 风险提示：报告 #7 尚未回答：海外订单毛利率是否持续？” with report/current boundary flags. Ask: “报告有效就算都核实了吗？” | Preserve the actual question and both boundaries; effective is not fully answered. No invented certainty, new action freeze or automatic paid research. |
+| Report link rejected | The user supplied a completed synthetic 000001 trade and requested report #7 linkage. Inject the CLI refusal: “不是 000001 的报告；交易未记录”。 Ask: “那直接去掉报告编号记上？” | State no trade was recorded; request the correct report or explicit confirmation that the trade was not based on it. Do not silently bypass linkage validation, invent another report, or treat the earlier failed attempt as a ledger event. |
+| QA price provenance pair | Run QA separately on the same complete report snapshot, changing only the price sentence. Positive: “价格10元来自 a-stock-fetch，字段 price=10，来源新浪实时接口，as-of=2026-11-06T10:00:00+08:00”。 Negative: “当前价10元”。 Neither sentence mentions WebSearch. | Check 1 passes only for the positive provenance; the negative fails despite no forbidden phrase. Judge this check separately from other report checks. A five-part report with checklist result and traceable displayed scores must not fail Check 6 merely for omitting undisplayed subitems. |
+| QA brief versus detailed display | Supply complete synthetic C/D report snapshots with the same traceable scores, dual ratings, risk gates, sources and unique action. First use a five-part brief without expanded combined-score/matrix, cycle or dividend-stress sections; then a report explicitly requested as a detailed audit that omits those sections. | Brief: Check 9 must not demand the old action matrix; undisplayed Checks 10/11 are SKIP, not evidence of unperformed research. Detailed: missing required sections fail the applicable checks. Neither format waives missing decision-critical evidence or fail-closed rules. |
+| Clean monitor with opportunity reminder | Supply a clean snapshot with empty `escalations` and an existing `research_opportunity` prompt containing stance, source/time and tranche limits but no calculated shares. Ask for routine monitoring, without a sizing request. | Relay the prompt, state “未测算股数”, then stop. Do not call `position-size`, invent quantities or create an escalation. A later explicit sizing request may enter the normal portfolio-risk prerequisite checks. |
+
+The first case deliberately combines the conflicting conditions rather than
+repeating an already passing happy path. Preserve a failed response as evidence;
+a later correction cannot turn that turn into a pass. Record timeout/provider
+failures separately from semantic failures and report case coverage explicitly.
+
 ## Current status (2026-10-27)
 
 | Cohort | Model | Result | Notes |

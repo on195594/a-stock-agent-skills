@@ -22,6 +22,10 @@ remote research records do not grant W1 account writes. Explicit HTTPS configura
 request IDs keep retries and credentials bounded. Errors remain visible; there is no
 automatic provider fallback or polling loop. Evidence does not replace decision-v1/
 monitor-v1 or their authorization boundaries.
+Optional monitoring card reads use a `(2, 3)` second connect/read timeout and retain
+`unavailable` degradation; ordinary Research requests keep `(10, 30)`. These are
+transport timeouts, not a strict end-to-end deadline. Existing snapshot `preflight`
+timing includes the card request; no extra telemetry store is introduced.
 `a-stock-qa` continues to check only the Research Skill's text rubric, not the
 peer application's report format or Monitor output.
 
@@ -336,3 +340,16 @@ Production A-stock CLIs, databases, holdings and market-data credentials are
 not exposed to this capture. This capture is historical: the test checks its
 recorded Skill bytes at its recorded commit, not today's edited Skills. It does
 not qualify the S1 budget extension or current production clients.
+
+### Linked trade report validation and price reuse
+
+Before recording a linked trade, the runtime verifies the returned report's stock
+code, completed/passed state and a valid timezone-aware creation timestamp. It
+compares the timestamp's Shanghai calendar date with the trade date and rejects
+unknown or malformed evidence. Same-day report/trade ordering remains unknown.
+Unlinked trades do not call Research. This does not solve later report deletion
+or ID reuse; the existing deletion caution in operations still applies.
+
+`report-trades` reuses closing-price results, including freshness metadata and
+failures, by `(code, day)` only within one invocation. A subsequent invocation
+fetches again. No persistent price cache, new schema or retry loop is added.

@@ -126,3 +126,19 @@ def test_a_framework_inputs_and_external_risk_contract_match_qa() -> None:
     assert "外部集中风险覆盖" in rubric
     assert "外部集中风险[" not in framework_a
     assert "gross_margin_stable" not in main
+
+
+def test_reference_scores_cannot_reintroduce_a_second_trade_decision() -> None:
+    execution = REFERENCES["execution"].read_text(encoding="utf-8")
+    assert "异动只影响上述择时参考评分" in execution
+    assert "不单独把有效 Research 立场改为等待" in execution
+    assert "双轨矩阵仅供参考" in execution
+    assert "股数只取 `position-size`" in execution
+    for obsolete in (
+        "建议等待回踩确认",
+        "仓位由两者共同决定",
+        "积极买入2/3仓",
+        "| 买入1/3仓",
+        "时机较差，等待",
+    ):
+        assert obsolete not in execution

@@ -205,6 +205,23 @@ one canonical holdings task remains. Hermes no-agent jobs running read-only
 
 ## Backup and rollback
 
+The current installer prepares the runtime and all three Skill snapshots under
+one new release directory before switching any client or CLI entry. Symlink mode
+uses the release snapshot; copy mode copies it. An existing release directory is
+never rebuilt, even with `--force`. Use a new committed release identity for changed
+content; retain failed candidate directories for diagnosis rather than overwriting
+an active or ambiguous release.
+
+All replacement entries are prepared and checked before activation. A failed
+switch restores entries already touched, including previously absent paths.
+The rollback manifest records each entry's kind, backup and original symlink target;
+symlink backups remain text files, not executable links. This handles ordinary
+caught installation failures, not power loss or a killed installer. If automatic
+restoration fails, the installer reports the affected path and manifest for recovery.
+These source changes do not convert existing source-linked installations until
+an explicitly authorized activation.
+
+
 For a state migration use `scripts/migrate_state.py`; it uses SQLite's Online
 Backup API and records integrity, schema and count invariants. Never copy a
 production database into the repository. The installer creates its rollback
@@ -227,6 +244,52 @@ state contract, pointer-only rollback is not sufficient: stop affected writers
 under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
+
+### 0.1.43 maintenance candidate (2026-11-06, awaiting activation)
+
+The current working tree freezes runtime/Skill installation together, validates
+linked report code/time before ledger writes, reuses prices within `report-trades`
+and bounds optional Research card transport waits. Skill/report/QA guidance now
+agrees on the single action, brief-report display and clean-monitor stop boundary.
+Markdown link checks include optional titles. Copy-mode replacement handles old
+files and symlinks, including rollback after unlinking an old entry.
+
+Independent AGY `gemini-3.8-flash-high` source review completed in three groups.
+The reproduced copy-mode failure and QA display conflict were fixed; the Monitor
+sizing ambiguity was clarified. The proposed rollback-record timing change was
+rejected after a failure-injection check proved that recording before directory
+removal is necessary for recovery. Source review findings require this evidence
+check; they are not automatically confirmed defects.
+
+The latest fixes passed 9 targeted installation cases and 70 Skill/QA/validation
+tests, plus 17 runtime-free QA contract assertions, Ruff and the project validator.
+Before the authorized commit/deploy, the complete local `scripts/check.sh` passed:
+1852 passed, 11 skipped, Ruff, regulatory freshness, standalone QA and cron smoke.
+This supersedes the earlier 1837/11 result. Candidate model behavior remains
+NOT_RUN in [behavior evaluation](agent-behavior-eval.md#current-semantic-regression-cases-2026-11-06).
+The owner has authorized commit and deployment. Activation awaits successful
+hosted CI; until then the frozen production release below remains active. No
+schema, account, credentials or cron change is part of this release.
+
+Task evidence and the superseded temporary source copy were archived outside Git
+under `~/.local/share/a-stock-agent/reviews/maintenance-20261106/` before temporary
+files were removed. The archive includes its file hashes and verification result;
+old review reports describe pre-fix sources, not outstanding implementation work.
+
+### Source-linked Skills frozen before repository maintenance (2026-11-06)
+
+Owner explicitly confirmed freezing the old production Skill text before applying
+the reviewed repository improvements. All nine Claude/Codex/Hermes Skill links
+now point into `runtime/0.1.42-14cbe7ff9acc/skills/`, including the shared
+`~/.agents/skills` entries. The 28 tracked Skill files and their three referenced
+specifications were copied from clean source `bf426aa27ae3`; all 31 file hashes
+match the old content. CLI links remain on `0.1.42-14cbe7ff9acc`.
+Manifest and prior link targets:
+`~/.local/share/a-stock-agent/deployments/skill-source-freeze-1793936019349043840/manifest.json`.
+This only isolates production from source edits; the new repository changes are
+not activated. No account, schema, credentials or cron changes. Returning links
+to source after maintenance would expose new text, so it is not a content-preserving
+rollback and requires a separate activation decision.
 
 ### 0.1.42 activation (2026-11-06)
 

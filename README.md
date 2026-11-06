@@ -116,7 +116,9 @@ a-stock-install  installer entrypoint
 
 The client adapters install the same Skill content at their own discovery
 locations; the canonical files under `skills/` remain the only source of
-truth. On this host, Pi and AGY also discover the shared `~/.agents/skills`
+truth. New installations snapshot all three Skills beside the release runtime;
+symlink mode points to that snapshot, not the editable checkout. Copy mode uses
+the same snapshot. Existing installations change only on an authorized activation. On this host, Pi and AGY also discover the shared `~/.agents/skills`
 entries, so `--client all` updates them too; see the operations record for
 verified paths and session reload limits.
 

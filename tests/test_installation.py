@@ -250,7 +250,7 @@ def test_copy_install_excludes_generated_files_from_payload_and_hash(
     monkeypatch.setattr(
         install, "_build_suite_wheel", lambda *args: tmp_path / "fake.whl"
     )
-    monkeypatch.setattr(install, "_install_runtime", lambda *args: None)
+    monkeypatch.setattr(install, "_install_runtime", _fake_runtime)
     assert (
         install.main(
             [
@@ -294,3 +294,165 @@ def test_backups_are_unique_within_one_second(tmp_path) -> None:
     assert first != second
     assert first.read_text(encoding="utf-8") == "first"
     assert second.read_text(encoding="utf-8") == "second"
+
+
+def _fake_runtime(source, root, *args):
+    release = install._release(source)
+    venv = root / ".local/share/a-stock-agent/runtime" / release / "venv"
+    (venv / "bin").mkdir(parents=True)
+    for name in install.CONSOLE_SCRIPTS:
+        command = venv / "bin" / name
+        command.write_text("#!/bin/sh\nexit 0\n")
+        command.chmod(0o700)
+    return venv, release
+
+
+@pytest.fixture
+def staged_install(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text('[project]\nversion = "0.1.42"\n')
+    for skill in install.SKILLS:
+        directory = source / "skills" / skill
+        directory.mkdir(parents=True)
+        (directory / "SKILL.md").write_text("original " + skill)
+    home = tmp_path / "home"
+    monkeypatch.setenv("PATH", f"{home / '.local/bin'}:{os.environ.get('PATH', '')}")
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/fake/uv")
+    monkeypatch.setattr(
+        install, "_build_suite_wheel", lambda *args: tmp_path / "fake.whl"
+    )
+    monkeypatch.setattr(install, "_install_runtime", _fake_runtime)
+    return (
+        source,
+        home,
+        [
+            "--source",
+            str(source),
+            "--target-root",
+            str(home),
+            "--client",
+            "codex",
+            "--force",
+        ],
+    )
+
+
+def test_symlink_install_freezes_skill_text(staged_install):
+    source, home, args = staged_install
+    assert install.main(args) == 0
+    target = home / ".agents/skills/a-stock-research"
+    assert target.is_symlink()
+    assert target.resolve().is_relative_to(home / ".local/share/a-stock-agent/runtime")
+    (source / "skills/a-stock-research/SKILL.md").write_text("unreleased edit")
+    assert (target / "SKILL.md").read_text() == "original a-stock-research"
+
+
+@pytest.mark.parametrize("old_kind", ["symlink", "dangling_symlink", "file"])
+@pytest.mark.parametrize("fail_replace", [False, True])
+def test_copy_install_replaces_nondirectory_or_restores_on_failure(
+    staged_install, monkeypatch, old_kind, fail_replace
+):
+    _, home, args = staged_install
+    target = home / ".agents/skills/a-stock-research"
+    target.parent.mkdir(parents=True)
+    previous = home / "previous-skill"
+    if old_kind == "symlink":
+        previous.mkdir()
+        (previous / "SKILL.md").write_text("previous content")
+    if old_kind == "file":
+        target.write_text("previous file")
+    else:
+        target.symlink_to(previous)
+    replace = os.replace
+
+    def replace_candidate(source, destination):
+        if Path(destination) == target:
+            assert not target.exists() and not target.is_symlink()
+            if fail_replace:
+                raise OSError("injected failure after unlink")
+        replace(source, destination)
+
+    monkeypatch.setattr(install.os, "replace", replace_candidate)
+    assert install.main(args + ["--mode", "copy"]) == int(fail_replace)
+    if fail_replace:
+        if old_kind == "file":
+            assert target.read_text() == "previous file"
+        else:
+            assert target.is_symlink()
+            assert os.readlink(target) == str(previous)
+        assert not (home / ".local/bin/a-stock-cache").exists()
+    else:
+        assert target.is_dir() and not target.is_symlink()
+        assert (target / "SKILL.md").read_text() == "original a-stock-research"
+        assert (target / ".a-stock-suite-manifest.json").is_file()
+        assert (home / ".local/bin/a-stock-cache").is_file()
+    if old_kind == "symlink":
+        assert (previous / "SKILL.md").read_text() == "previous content"
+    assert not list(home.rglob("*.install-*"))
+
+
+def test_switch_failure_restores_links_directories_and_absent_entries(
+    staged_install, monkeypatch
+):
+    _, home, args = staged_install
+    old_skill = home / ".agents/skills/a-stock-research"
+    old_skill.mkdir(parents=True)
+    (old_skill / "SKILL.md").write_text("previous copy")
+    old_monitor = home / ".agents/skills/a-stock-monitor"
+    old_monitor.symlink_to("missing-old-target")
+    old_bin = home / ".local/bin"
+    old_bin.mkdir(parents=True)
+    for name in install.CONSOLE_SCRIPTS:
+        (old_bin / name).symlink_to("previous-" + name)
+    replace = os.replace
+
+    def fail_second_cli(source, target):
+        if Path(target).name == "a-stock-fetch":
+            raise OSError("injected activation failure")
+        replace(source, target)
+
+    monkeypatch.setattr(install.os, "replace", fail_second_cli)
+    assert install.main(args) == 1
+    assert not old_skill.is_symlink()
+    assert (old_skill / "SKILL.md").read_text() == "previous copy"
+    assert os.readlink(old_monitor) == "missing-old-target"
+    assert not (home / ".agents/skills/a-stock-qa").exists()
+    for name in install.CONSOLE_SCRIPTS:
+        assert os.readlink(old_bin / name) == "previous-" + name
+    assert not list(home.rglob("*.install-*"))
+
+
+def test_preparation_failure_does_not_switch_existing_entries(
+    staged_install, monkeypatch
+):
+    _, home, args = staged_install
+    target = home / ".agents/skills/a-stock-research"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_text("previous")
+    copytree = shutil.copytree
+
+    def fail_snapshot(source, destination, *positional, **keywords):
+        if Path(destination).name == "a-stock-monitor":
+            raise OSError("injected snapshot failure")
+        return copytree(source, destination, *positional, **keywords)
+
+    monkeypatch.setattr(install.shutil, "copytree", fail_snapshot)
+    assert install.main(args) == 1
+    assert (target / "SKILL.md").read_text() == "previous"
+    assert not (home / ".local/bin/a-stock-cache").exists()
+
+
+def test_runtime_refuses_to_overwrite_existing_release(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text('[project]\nversion = "0.1.42"\n')
+    root = tmp_path / "home"
+    runtime = root / ".local/share/a-stock-agent/runtime" / install._release(source)
+    runtime.mkdir(parents=True)
+    sentinel = runtime / "active"
+    sentinel.write_text("preserve")
+    monkeypatch.setattr(install, "_lib_release", lambda _: ("0", "url", "hash"))
+    with pytest.raises(FileExistsError):
+        install._install_runtime(source, root, None, None, tmp_path / "fake.whl")
+    assert sentinel.read_text() == "preserve"

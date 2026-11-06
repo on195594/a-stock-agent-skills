@@ -34,23 +34,23 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 保留退出码并解析 stdout；业务不完整时命令可能输出有效 JSON 后退出非零。解析前不得额外调用 `holdings`、Wiki、Web 或子代理。
 
 - 先比对用户最新确认的持仓与快照；股数、清仓事实或账户范围冲突时，不把旧账本风险汇总当作当前账户结果，按下表账户差异路由请求最小对账资料，不改写快照或心算补齐。
-- runtime 返回干净快速路径且无上述账户冲突时，输出结构化 `action_status`、异常项、覆盖率、as-of 与 `stop_reason`，立即停止。
+- runtime 返回干净快速路径且无上述账户冲突时，输出结构化 `action_status`、异常项、覆盖率、as-of 与 `stop_reason`，完成默认交付后立即停止；即使 `escalations` 为空，也须转述已有 `review_prompts`，不得为研究提醒新增升级项或改变动作状态。
 - runtime 返回阻断、复核候选、触发、到期、异常或冲突时，仅对 `escalations` 指定的持仓和证据进入 Level 2。
 - 缺少 required 数据时不得输出确定性无动作、继续持有或仓位不变；点名最小补数动作（如针对 governance_gates 过期指明执行 `a-stock-fetch fetch <代码>`；`regulatory_gate` 仍 incomplete 时按数据操作资料的“P0 监管门证据补录”，每个年报期一次），并冻结相关交易与风险变更。
 
 ### Level 2：按升级项展开
 
-只加载与 runtime 升级原因或上述账户差异相符的资料。L3 触发或候选必须先读下表的日常监控与 L3 资料完成复核；写入待确认不替代这一步。`l3_watch` 是已核实的观察项：冻结该股新增风险，`next_review` 前不重复核实，只在首屏列出。升级项需要公司公开证据时，按 [Research 服务](references/research-service.md) 先读已有报告，仅对关键缺口发起追问/纠错；结果返回父级复核，不直接改变账户动作：
+只加载与 runtime 升级原因、上述账户差异、已有研究提醒或用户明确请求相符的资料。读取提醒转述或组合比较资料不等于新增升级项；无升级项时也可按下表读取，但不追加取证或行情调用。L3 触发或候选必须先读下表的日常监控与 L3 资料完成复核；写入待确认不替代这一步。`l3_watch` 是已核实的观察项：冻结该股新增风险，`next_review` 前不重复核实，只在首屏列出。升级项需要公司公开证据时，按 [Research 服务](references/research-service.md) 先读已有报告，仅对关键缺口发起追问/纠错；结果返回父级复核，不直接改变账户动作：
 
 | 升级原因 | Reference |
 |---|---|
 | `research_thesis_review`（论点卡待复核，只影响复核状态） | 同下行“日常异常、公告、活动预警或 L3”资料；需要证据时按上文 Research 服务读对应报告 |
 | 日常异常、公告、活动预警或 L3 | `references/daily-monitoring-and-l3.md` |
-| 估值退出、技术候选或年度复核 | `references/valuation-and-annual-review.md` |
+| `review_prompts` 研究提醒、估值退出、技术候选或年度复核 | `references/valuation-and-annual-review.md` |
 | C/D 加仓复核 | `references/step3.5-cd-accumulation.md` |
 | A/E/F Tier 复核 | `references/step4-tier-system.md` |
 | 账户差异、已成交补账或状态更新 | `references/data-operations.md` |
-| `risk_budget_exceeded`、组合再平衡、任何加仓或用户指定数量的假设比较 | `references/portfolio-risk.md` |
+| `risk_budget_exceeded`、组合复盘/换仓比较、任何加仓或用户指定数量的假设比较 | `references/portfolio-risk.md` |
 
 `risk_budget_exceeded` 的 `code=null` 表示组合级只读复核：仅用本轮汇总、持仓和 `data_gaps`，不重查价、不心算补全风险、不调用 W1。兼容默认/显式覆盖不等于个人预算，禁止改参数绕过超限；超预算不能 clean/no_action，已有合法交易候选不降级。超限原因只引用明细中的 principal/unrealized_gain 与 `denominator_components`；快照未给出的卖出标的或股数不得提出。
 
@@ -68,9 +68,9 @@ a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
 ## 默认交付
 
 - 首屏只写：本次结论、研究提醒（不影响动作状态）、相较上次的关键变化、首要风险、最小待办、下次改变判断的条件；仅比较本会话或用户提供的上次结论，不额外检索历史；无可比记录则说明首次基线，不编造变化。保留快照状态/覆盖率/as-of/停止原因；计算与完整证据按需展开。
-- 在结论后逐条转述 `review_prompts`，标明“研究提醒（不影响动作状态）”；无提醒则简写“无”。`valuation_stretched` 只提醒复核经营假设与退出倍数，不计入 L3、不冻结；`opportunity_cost` 按候选合并（时效规则见估值复查资料），保留各持仓双方报告 ID、收盘日及扣费后的差值，并注明情景未经记分，仅提示复核，`detail` 中的“Research 注”原样保留；`research_unavailable` 表示论点卡状态未知；`research_opportunity` 为不在仓候选的建仓机会（v2 测算支持区、等价格已到价或 7 日内“现在分批”（含旧“等证据”）），原样转述期望年化、立场、等待价、首批上限与参考加仓检查点，并按组合风险资料用 `position-size` 给出分批股数，用户确认后才算动作。不得从提醒推导卖出股数、比例或候选买入数量。
+- 在结论后逐条转述 `review_prompts`，标明“研究提醒（不影响动作状态）”；无提醒则简写“无”。有提醒时按上表估值复查资料保留字段与限制；不得从提醒推导卖出股数、比例或候选买入数量。
 - 原样保留提醒中的“Research 风险提示”、报告/当前边界和具体 `open_questions`；有效不等于已完整作答，旧卡缺字段不等于无风险，false 不等于立场稳定。不因此新增等待、升级项或自动付费研究。
-- 用户要求组合复盘或换仓比较时，从 `research.opportunity_costs` 取全部达标比较（不受 7 日时效限制），结合 `research.holdings/candidates` 给一张表：区间、保守/中性/乐观年化回报、卡片状态、收盘日、风险占用。持仓风险只引用本轮 `holdings[].stop_risk/stop_risk_pct`；候选未给风险占用则标未知，不假设买入数量补算。行带 `assumption` 时在表下原样注明（回报按 Research 假设测算，非已核实的换仓回报差）；待复核卡保留区间和回报，但注明“区间暂停解读”；null 保留未知，不当零。
+- 用户要求组合复盘或换仓比较时，按上表组合风险资料展示已有快照中的比较，不补造风险、股数或缺失值。
 - `research.status=not_configured/unavailable/skipped` 不改变原有门禁、动作和停止条件；需要跳过读取时用 `--no-research`。Research 估值公式归服务所有，Skill 不复算，提醒规则见估值复查资料。
 - 持有逻辑、现价新增价值、账户风险贡献分开；不能新增不等于必须卖出，未确认退出也不等于可以加仓。不得仅因浮盈或“防御股”标签确定卖出顺序。
 - 账户、证据和用户目标未变时，追问不改变行动结论，不凭空增加价格或股数；发现前次错误应明确纠正并解释依据，不能为保持一致延续错误。

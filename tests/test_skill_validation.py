@@ -77,3 +77,31 @@ def test_thin_skill_regression_is_rejected(tmp_path, mutation, message) -> None:
     skill.write_text(mutation(skill.read_text(encoding="utf-8")), encoding="utf-8")
 
     assert any(message in error for error in validate(tmp_path))
+
+
+def test_copied_skill_suite_needs_no_repository_docs(tmp_path) -> None:
+    _copy_skills(tmp_path)
+    assert validate(tmp_path) == []
+
+
+@pytest.mark.parametrize("link", ["missing.md", "../../../README.md"])
+@pytest.mark.parametrize("title", ["", ' "资料标题"', " '资料标题'", " (资料标题)"])
+def test_reference_markdown_links_cannot_escape_the_package_suite(
+    tmp_path, link, title
+):
+    _copy_skills(tmp_path)
+    (tmp_path / "README.md").write_text("This exists only in the source repository.")
+    reference = tmp_path / "skills/a-stock-research/references/extra.md"
+    reference.write_text(f"[reference]({link}{title})")
+    assert any("nonportable or missing Markdown link" in e for e in validate(tmp_path))
+
+
+@pytest.mark.parametrize("title", ["", ' "资料标题"', " '资料标题'", " (资料标题)"])
+def test_reference_links_allow_sibling_skills_urls_and_fragments(tmp_path, title):
+    _copy_skills(tmp_path)
+    reference = tmp_path / "skills/a-stock-research/references/extra.md"
+    reference.write_text(
+        f"[sibling](../../a-stock-monitor/SKILL.md#路由{title})\n"
+        f"[web](https://example.com/source{title}) [anchor](#local{title})\n"
+    )
+    assert validate(tmp_path) == []

@@ -503,3 +503,96 @@ def test_gate_runs_before_the_write_transaction(monkeypatch, catalog):
     for command in LINKERS:
         with pytest.raises(SystemExit):
             LINKERS[command](["--report-id", "999999"])
+
+
+@pytest.mark.parametrize("command", LINKERS)
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"code": "002648.SZ"},
+        {"code": "000001.invalid"},
+        {"created_at": ""},
+        {"created_at": "0000invalid"},
+        {"created_at": "2026-11-04"},
+        {"created_at": "2026-11-04T12:00:00"},
+        {"created_at": "2026-02-30T12:00:00+08:00"},
+        {"created_at": "9999-12-31T23:00:00-08:00"},
+    ],
+)
+def test_invalid_report_row_cannot_bypass_the_local_gate(
+    monkeypatch, capsys, command, changes
+):
+    before = _prepared(command)
+    monkeypatch.setattr(commands_holdings, "_require_report", REAL_REQUIRE_REPORT)
+    report = {**_report(94), **changes}
+    # Deliberately do not filter: the client must also verify external rows.
+    monkeypatch.setattr(
+        research_client, "request_json", lambda *_, **__: {"reports": [report]}
+    )
+    with pytest.raises(SystemExit):
+        LINKERS[command](["--report-id", "94"])
+    assert "交易未记录" in capsys.readouterr().err
+    assert _events() == before
+
+
+@pytest.mark.parametrize(
+    "stamp,accepted",
+    [("2026-11-05T15:59:59+00:00", True), ("2026-11-05T16:00:00+00:00", False)],
+)
+def test_report_date_uses_the_shanghai_calendar(monkeypatch, stamp, accepted):
+    monkeypatch.setattr(commands_holdings, "_require_report", REAL_REQUIRE_REPORT)
+    monkeypatch.setattr(
+        research_client,
+        "request_json",
+        lambda *_, **__: {"reports": [_report(94, created_at=stamp)]},
+    )
+    if accepted:
+        LINKERS["add"](["--report-id", "94"])
+        assert _events()[-1][2] == 94
+    else:
+        with pytest.raises(SystemExit):
+            LINKERS["add"](["--report-id", "94"])
+        assert _events() == []
+
+
+@pytest.mark.parametrize("outcome", ["ok", "degraded", "failed"])
+def test_report_trades_reuses_prices_and_failures_only_within_one_command(
+    monkeypatch, capsys, outcome
+):
+    for code in ("000001", "600900"):
+        commands_holdings.cmd_add_holding(
+            [code, "10.0", "500", "--date", "2026-06-01", "--report-id", "101"]
+        )
+        commands_holdings.cmd_buy_holding(
+            [code, "10.0", "100", "--date", "2026-06-01", "--report-id", "102"]
+        )
+        commands_holdings.cmd_buy_holding(
+            [code, "10.0", "100", "--date", "2026-10-21", "--report-id", "103"]
+        )
+    _market(monkeypatch, {"2026-06-01": 100.0, "2026-10-21": 100.0}, {})
+    calls = []
+
+    def quote(code, day):
+        calls.append((code, day))
+        if outcome == "failed":
+            raise RuntimeError("fixture unavailable")
+        return _close(10.0, freshness=1 if outcome == "degraded" else 0)
+
+    monkeypatch.setattr(commands_holdings, "_close_result", quote)
+    for _ in range(2):
+        calls.clear()
+        assert cache.main(["report-trades", "--end", "2026-10-21"]) == 0
+        _, lines = _lines(capsys)
+        assert len(lines) == 6
+        assert sorted(calls) == [
+            ("000001", "2026-06-01"),
+            ("000001", "2026-10-21"),
+            ("600900", "2026-06-01"),
+            ("600900", "2026-10-21"),
+        ]
+        if outcome == "degraded":
+            assert all("不作比较" in line for line in lines)
+        elif outcome == "failed":
+            assert all("fixture unavailable" in line for line in lines)
+        else:
+            assert all("含分红送转 +0.00%" in line for line in lines)

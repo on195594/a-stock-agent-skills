@@ -181,6 +181,9 @@ def _install_runtime(
     runtime_root = root / ".local" / "share" / "a-stock-agent" / "runtime" / release
     venv = runtime_root / "venv"
     runtime_root.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    runtime_root.mkdir(
+        mode=0o700
+    )  # Never rebuild an existing, possibly active release.
     subprocess.run(
         [sys.executable, "-m", "venv", str(venv)],
         check=True,
@@ -312,15 +315,14 @@ def _install_runtime(
     (runtime_root / "a-stock-lib-install.json").write_text(
         json.dumps(metadata, indent=2), encoding="utf-8"
     )
-    bin_dir = root / ".local" / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    for name in CONSOLE_SCRIPTS:
-        command = venv / "bin" / name
-        link = bin_dir / name
-        if link.exists() or link.is_symlink():
-            link.unlink()
-        link.symlink_to(command)
     return venv, release
+
+
+def _remove_entry(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -395,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
         for client in clients:
             for skill in SKILLS:
                 print(
-                    f"DRY-RUN {args.mode} {source / 'skills' / skill} -> {_target(root, client, skill)}"
+                    f"DRY-RUN {args.mode} release snapshot {skill} -> {_target(root, client, skill)}"
                 )
         print(
             f"DRY-RUN runtime -> {root / '.local/share/a-stock-agent/runtime' / release / 'venv'}"
@@ -419,64 +421,100 @@ def main(argv: list[str] | None = None) -> int:
         print(f"refusing to replace existing path: {existing[0]}", file=sys.stderr)
         return 1
     suite_temp = tempfile.TemporaryDirectory(prefix="a-stock-agent-wheel-")
+    staged: list[tuple[Path, Path]] = []
+    rollback: list[dict[str, str]] = []
+    changed: list[dict[str, str]] = []
     try:
         suite_wheel = _build_suite_wheel(source, Path(suite_temp.name))
-        command_targets = [
-            root / ".local" / "bin" / name
-            for name in CONSOLE_SCRIPTS
-            if (root / ".local" / "bin" / name).exists()
-            or (root / ".local" / "bin" / name).is_symlink()
-        ]
-        rollback: list[dict[str, str]] = []
-        for destination in [*existing, *command_targets]:
-            backup = _backup(destination, root)
-            rollback.append({"target": str(destination), "backup": str(backup)})
-        manifest_path = (
-            root
-            / ".local"
-            / "share"
-            / "a-stock-agent"
-            / f"rollback-{time.time_ns()}.json"
+        venv, release = _install_runtime(
+            source, root, lib_source, lib_wheel, suite_wheel
         )
-        manifest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        manifest_path.write_text(
-            json.dumps({"release": release, "entries": rollback}, indent=2),
-            encoding="utf-8",
-        )
-
-        _install_runtime(source, root, lib_source, lib_wheel, suite_wheel)
-        for source_skill, destination in targets:
-            if destination.exists() or destination.is_symlink():
-                if destination.is_dir() and not destination.is_symlink():
-                    shutil.rmtree(destination)
-                else:
-                    destination.unlink()
+        release_skills = venv.parent / "skills"
+        for skill in SKILLS:
+            shutil.copytree(
+                source / "skills" / skill, release_skills / skill, ignore=_SKILL_IGNORE
+            )
+        for _, destination in targets:
+            source_skill = release_skills / destination.name
             destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            candidate = destination.with_name(
+                f".{destination.name}.install-{time.time_ns()}"
+            )
+            staged.append((candidate, destination))
             if args.mode == "symlink":
-                destination.symlink_to(source_skill)
+                candidate.symlink_to(source_skill)
             else:
-                shutil.copytree(
-                    source_skill, destination, symlinks=True, ignore=_SKILL_IGNORE
-                )
+                shutil.copytree(source_skill, candidate)
                 manifest = {
                     "release": release,
                     "source": str(source),
                     "source_hash": _tree_hash(source_skill),
                     "installed_at": time.time(),
                 }
-                (destination / ".a-stock-suite-manifest.json").write_text(
+                (candidate / ".a-stock-suite-manifest.json").write_text(
                     json.dumps(manifest, indent=2), encoding="utf-8"
                 )
-        for client in clients:
-            for skill in SKILLS:
-                if not (_target(root, client, skill) / "SKILL.md").is_file():
-                    raise RuntimeError(
-                        f"client discovery validation failed: {_target(root, client, skill)}"
-                    )
+            if not (candidate / "SKILL.md").is_file():
+                raise RuntimeError(f"client discovery validation failed: {candidate}")
+        bin_dir = root / ".local" / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        for name in CONSOLE_SCRIPTS:
+            command = venv / "bin" / name
+            if not command.is_file() or not os.access(command, os.X_OK):
+                raise RuntimeError(f"missing executable: {command}")
+            destination = bin_dir / name
+            candidate = destination.with_name(f".{name}.install-{time.time_ns()}")
+            staged.append((candidate, destination))
+            candidate.symlink_to(command)
+        for _, destination in staged:
+            entry = {"target": str(destination), "kind": "absent"}
+            if destination.exists() or destination.is_symlink():
+                entry["backup"] = str(_backup(destination, root))
+                entry["kind"] = "symlink" if destination.is_symlink() else "copy"
+                if destination.is_symlink():
+                    entry["link_target"] = os.readlink(destination)
+            rollback.append(entry)
+        manifest_path = (
+            root / ".local/share/a-stock-agent" / f"rollback-{time.time_ns()}.json"
+        )
+        manifest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        manifest_path.write_text(
+            json.dumps({"release": release, "entries": rollback}, indent=2),
+            encoding="utf-8",
+        )
+        for (candidate, destination), entry in zip(staged, rollback, strict=True):
+            changed.append(entry)
+            if destination.is_dir() and not destination.is_symlink():
+                shutil.rmtree(destination)
+            elif not candidate.is_symlink() and candidate.is_dir():
+                # A directory cannot replace a file or symlink with rename(2).
+                if destination.is_symlink() or destination.is_file():
+                    destination.unlink()
+            os.replace(candidate, destination)
         print(f"installed release {release}; rollback manifest: {manifest_path}")
         return 0
     except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as exc:
         print(f"install failed: {exc}", file=sys.stderr)
+        for entry in reversed(changed):
+            try:
+                destination = Path(entry["target"])
+                _remove_entry(destination)
+                if entry["kind"] == "symlink":
+                    destination.symlink_to(entry["link_target"])
+                elif entry["kind"] == "copy":
+                    backup = Path(entry["backup"])
+                    if backup.is_dir():
+                        shutil.copytree(backup, destination, symlinks=True)
+                    else:
+                        shutil.copy2(backup, destination)
+            except OSError as restore_error:
+                print(
+                    f"restore failed for {entry['target']}: {restore_error}; "
+                    f"use {manifest_path}",
+                    file=sys.stderr,
+                )
         return 1
     finally:
+        for candidate, _ in staged:
+            _remove_entry(candidate)
         suite_temp.cleanup()

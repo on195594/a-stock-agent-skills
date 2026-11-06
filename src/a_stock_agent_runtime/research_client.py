@@ -53,7 +53,9 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         action = actions.add_parser(name, help=label)
         action.add_argument("id", type=_positive_id)
     actions.add_parser("budget", help="读取研究调用上限；不是费用报价，不启动研究")
-    resume = actions.add_parser("resume", help="凭原请求编号只读找回任务；不重提、不付费重跑")
+    resume = actions.add_parser(
+        "resume", help="凭原请求编号只读找回任务；不重提、不付费重跑"
+    )
     resume.add_argument("--request-id", required=True)
     # Explicit opt-in preserves the existing full report wire contract.
     actions.choices["report"].add_argument("--compact", action="store_true")
@@ -75,7 +77,9 @@ class ResearchNotConfigured(ValueError):
     """The optional Research connection has not been configured."""
 
 
-def request_json(path: str, *, body=None, params=None, new_endpoint=False) -> dict:
+def request_json(
+    path: str, *, body=None, params=None, new_endpoint=False, timeout=(10, 30)
+) -> dict:
     """One versioned request, with shared credential and transport safeguards."""
     base, token = paths.research_connection()
     if not base or not token:
@@ -92,7 +96,7 @@ def request_json(path: str, *, body=None, params=None, new_endpoint=False) -> di
         },
         params=params,
         json=body,
-        timeout=(10, 30),
+        timeout=timeout,
         allow_redirects=False,
     )
     if response.status_code == 401:
@@ -107,11 +111,17 @@ def request_json(path: str, *, body=None, params=None, new_endpoint=False) -> di
             failure = response.json()
         except ValueError:
             failure = None
-        if (isinstance(failure, dict) and failure.get("version") == "research-v1"
-                and isinstance(failure.get("error"), str)):
+        if (
+            isinstance(failure, dict)
+            and failure.get("version") == "research-v1"
+            and isinstance(failure.get("error"), str)
+        ):
             # Only the public error field, bounded and stripped of control characters/secrets.
             public_error = failure["error"].replace(token, "[REDACTED]")
-            detail = "：" + "".join(char for char in public_error if char.isprintable())[:600]
+            detail = (
+                "："
+                + "".join(char for char in public_error if char.isprintable())[:600]
+            )
         elif response.status_code == 404 and new_endpoint:
             detail = "；服务可能尚未部署此读取接口，请核对配套服务版本"
         raise ValueError(
@@ -166,18 +176,30 @@ def cmd_research(argv: list[str]) -> int:
                 "text": args.text,
             }
         payload = request_json(
-            path, body=body, params=params,
+            path,
+            body=body,
+            params=params,
             new_endpoint=args.action in {"resume", "budget", "cards", "card"}
-            or args.action == "report" and args.compact,
+            or args.action == "report"
+            and args.compact,
         )
-        if args.action == "report" and args.compact and payload.get("view") != "compact":
-            raise ValueError("Research 服务尚未支持精简视图；需要原文时显式去掉 --compact，不自动重开研究")
+        if (
+            args.action == "report"
+            and args.compact
+            and payload.get("view") != "compact"
+        ):
+            raise ValueError(
+                "Research 服务尚未支持精简视图；需要原文时显式去掉 --compact，不自动重开研究"
+            )
     except requests.RequestException as exc:
         print(
             f"Research 连接失败：{type(exc).__name__}；"
-            + (f"提交结果可能未知。先只读找回任务：a-stock-cache research resume "
-               f"--request-id {shlex.quote(args.request_id)}；勿换编号重复提交"
-               if args.action in {"start", "feedback"} else "读取失败；不会自动重提研究"),
+            + (
+                f"提交结果可能未知。先只读找回任务：a-stock-cache research resume "
+                f"--request-id {shlex.quote(args.request_id)}；勿换编号重复提交"
+                if args.action in {"start", "feedback"}
+                else "读取失败；不会自动重提研究"
+            ),
             file=sys.stderr,
         )
         return 1

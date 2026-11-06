@@ -6,7 +6,7 @@ import json
 import math
 import sqlite3
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 from a_stock_lib.market_data import MarketDataResult
@@ -632,22 +632,38 @@ def _require_report(report_id: int | None, code: str, trade_date: str) -> None:
         return
     report = None
     try:
-        # The server filters by six-digit code, so its .SH/.SZ suffix needs no handling here.
         reports = research_client.request_json("/api/reports", params={"code": code})
         report = next((r for r in reports["reports"] if r["id"] == report_id), None)
-        if report is None:
+        if report is None or report["code"] not in (
+            code,
+            f"{code}.SH",
+            f"{code}.SZ",
+            f"{code}.BJ",
+        ):
             problem = f"不是 {code} 的报告（编号不存在或属于其他股票）"
         elif (report["status"], report["passed"]) != ("done", 1):
             problem = f"未通过复核（{report['name']}）"
-        # Research timestamps are +08:00, the same calendar as ledger trade dates.
-        elif report["created_at"][:10] > trade_date:
-            problem = f"生成于 {report['created_at'][:10]}，晚于交易日 {trade_date}"
         else:
-            problem = None
+            created_at = datetime.fromisoformat(report["created_at"])
+            if created_at.utcoffset() is None:
+                raise ValueError("报告生成时间缺少时区")
+            report_day = created_at.astimezone(timezone(timedelta(hours=8))).date()
+            problem = (
+                f"生成于 {report_day}，晚于交易日 {trade_date}"
+                if report_day > date.fromisoformat(trade_date)
+                else None
+            )
     except requests.RequestException as exc:
         # Transport exception text may contain credentials or response bodies.
         problem = f"无法向 Research 核对（{type(exc).__name__}）"
-    except (OSError, RuntimeError, ValueError, LookupError, TypeError) as exc:
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        LookupError,
+        TypeError,
+        OverflowError,
+    ) as exc:
         problem = f"无法向 Research 核对（{exc}）"
     if problem:
         print(
@@ -1284,10 +1300,14 @@ def total_return(
 
 
 def _trade_comparison(
-    code: str, start: str, end: str, index_change: float, dividends: list[dict]
+    start: str,
+    end: str,
+    index_change: float,
+    dividends: list[dict],
+    start_close: MarketDataResult[float],
+    end_close: MarketDataResult[float],
 ) -> str:
     """One trade against the index, both from the same close to the same close."""
-    start_close, end_close = _close_result(code, start), _close_result(code, end)
     for closing, day, label in ((start_close, start, "起点"), (end_close, end, "期末")):
         if closing.status != "ok":
             return f"{label} {day} 没有当日收盘（行情停在 {closing.source_as_of}），不作比较"
@@ -1341,6 +1361,20 @@ def cmd_report_trades(args: list[str]) -> None:
         f"以下均从交易日（非交易日顺延）收盘算到 {valuation_day} 收盘，基准为{index_label}"
     )
     dividends: dict[str, list[dict]] = {}
+    prices: dict[tuple[str, str], MarketDataResult[float] | RuntimeError] = {}
+
+    def close(code: str, day: str) -> MarketDataResult[float]:
+        key = (code, day)
+        if key not in prices:
+            try:
+                prices[key] = _close_result(code, day)
+            except RuntimeError as exc:
+                prices[key] = exc
+        result = prices[key]
+        if isinstance(result, RuntimeError):
+            raise result
+        return result
+
     for report_id, code, event_type, day, shares, price, realized in linked:
         label = "买入后" if event_type == "buy" else "卖出后"
         line = f"  报告 #{report_id} {code} {day} {label} {shares}股 @ {price:.3f}："
@@ -1354,7 +1388,12 @@ def cmd_report_trades(args: list[str]) -> None:
             if code not in dividends:
                 dividends[code] = _implemented_dividends(code)
             line += _trade_comparison(
-                code, start, valuation_day, index_change, dividends[code]
+                start,
+                valuation_day,
+                index_change,
+                dividends[code],
+                close(code, start),
+                close(code, valuation_day),
             )
         except RuntimeError as exc:
             line += f"暂不计算（{exc}）"

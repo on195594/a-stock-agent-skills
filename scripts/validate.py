@@ -7,6 +7,7 @@ import argparse
 from pathlib import Path
 import re
 import sys
+from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -103,6 +104,23 @@ def validate(root: Path = ROOT, installed_root: Path | None = None) -> list[str]
                 errors.append(f"mutable file packaged: {path}")
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
+            if path.suffix == ".md" and scan_root == root / "skills":
+                # All three packages ship together; repository docs do not.
+                for link in re.findall(
+                    r"""\]\(([^\s)]+)(?:\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?\s*\)""",
+                    text,
+                ):
+                    parsed = urlsplit(link)
+                    if parsed.scheme or parsed.netloc or not parsed.path:
+                        continue
+                    target = (path.parent / unquote(parsed.path)).resolve()
+                    if (
+                        not target.is_relative_to(scan_root.resolve())
+                        or not target.is_file()
+                    ):
+                        errors.append(
+                            f"{path}: nonportable or missing Markdown link {link}"
+                        )
             if re.search(r"(?:~|/home/[^/]+)/\.(?:claude|agents|hermes)/skills", text):
                 errors.append(f"host path in business content: {path}")
             if (root / "skills") in path.parents and re.search(

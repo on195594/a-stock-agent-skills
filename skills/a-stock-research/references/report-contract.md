@@ -20,13 +20,13 @@
 - `等待`：Research 立场为“等价格”且未到价或已过期时，必须写出程序等待价及有效期；没有有效论点卡时，写清缺什么；
 - `买入候选`：Research 立场为“现在分批”（包括旧“等证据”卡），或“等价格”的价格已到且在有效期内。
 
-动作主干是 Research 有效论点卡的 `stance_calc`（[2026-11-04 规格](../../../docs/specs/2026-11-04-proactive-decision-spec.md)）。A–F 评分与双轨矩阵只作质地与择时参考，不单独否决。某个门禁或评分项 `incomplete/not_formed` 时，只扣对应项：列出缺口及其影响，动作上限降为“首批 1/3”，不得整体默认等待，也不得写成已确认公司不值得买或已确认高估。卡片待复核或无卡时，先按 Research 服务资料补研究，不用矩阵替代立场。
+动作主干是 Research 有效论点卡的 `stance_calc`（[2026-11-04 规格](https://github.com/on195594/a-stock-agent-skills/blob/master/docs/specs/2026-11-04-proactive-decision-spec.md)）。A–F 评分与双轨矩阵只作质地与择时参考，不单独否决。某个门禁或评分项 `incomplete/not_formed` 时，只扣对应项：列出缺口及其影响，动作上限降为“首批 1/3”，不得整体默认等待，也不得写成已确认公司不值得买或已确认高估。卡片待复核或无卡时，先按 Research 服务资料补研究，不用矩阵替代立场。
 
-按 [0.1.37 参考证据规格](../../../docs/specs/2026-11-04-reference-evidence-spec.md)，新报告立场只取现在分批/等价格/回避。现在分批的 `stance_calc.add_trigger` 和旧等证据的 `stance_calc.trigger` 都是加仓检查点（参考，不阻止首批），动作上限为 `position-size.tranches[0]`（不足一手为 0，不能移用第二批）。目标期间实际披露达到阈值，且有更新的有效 Research 研究确认后，才按立场加后续批次；未达到列为复核项，复核是否减仓，未披露不等于未达到。不得反复以“首批”名义追加，不以期间日期已到、股价或旧卡自动解锁。无检查点时不补造。阈值按卡片投影原值与财务表单位、累计口径引用，不在 Skills 重算；行业趋势轮动、宏观政策与外部条件复用 Research 已取证判断，不以缺少某类资料自动要求等待。
+按 [0.1.37 参考证据规格](https://github.com/on195594/a-stock-agent-skills/blob/master/docs/specs/2026-11-04-reference-evidence-spec.md)，新报告立场只取现在分批/等价格/回避。现在分批的 `stance_calc.add_trigger` 和旧等证据的 `stance_calc.trigger` 都是加仓检查点（参考，不阻止首批），动作上限为 `position-size.tranches[0]`（不足一手为 0，不能移用第二批）。目标期间实际披露达到阈值，且有更新的有效 Research 研究确认后，才按立场加后续批次；未达到列为复核项，复核是否减仓，未披露不等于未达到。不得反复以“首批”名义追加，不以期间日期已到、股价或旧卡自动解锁。无检查点时不补造。阈值按卡片投影原值与财务表单位、累计口径引用，不在 Skills 重算；行业趋势轮动、宏观政策与外部条件复用 Research 已取证判断，不以缺少某类资料自动要求等待。
 
 ### 2. FUNDAMENTALS_HIT 最小数据卡
 
-展示股票/代码、当前价/quote as-of/来源、行业与框架、缓存路径，以及：
+展示股票/代码、当前价/quote as-of/来源、行业与框架、缓存路径。价格注明来自 `a-stock-fetch`/runtime，保留对应字段、来源与 as-of；字段名照实际输出记录，不补造。runtime 未返回有效价格时，正文记录价格缺失及原因，不用网页补价、不输出依赖该价格的确定性结果。另展示：
 
 - `price_change_5d`；
 - `pe_static`/`pe_percentile_5y`；真实 `pe_ttm_true`/`net_profit_ttm_yoy`/`peg_ttm`；
@@ -40,6 +40,8 @@
 ### 3. 基本面与估值
 
 展示确定性 scorer 的 subtotal、rule version/hash、关键强弱项与最新报告方向；未运行或被P0/P2阻断时写 `not_formed`，不得人工加总。
+
+在本段列出配置评级和时机评级作为参考；未形成时按下节风险门及缺失原因写 `not_formed`。简版不要求展开综合分或仓位矩阵，不由评级推导第二套动作。
 
 估值只使用适用框架主轴：A看PE5年分位；B看PB10年分位；C/D按各自周期/股息/FCF；E看真实PEG或PE5年分位；F盈利看真实TTM PEG，亏损看PS但在现金跑道/稀释规则落地前只定性观察。不同报告期 BPS 的 `latest_report_update` 不阻断 A/E/F；`pb_percentile_eligible=false` 只阻断依赖PB历史分位的分支。
 

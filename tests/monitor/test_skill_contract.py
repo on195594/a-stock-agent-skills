@@ -74,7 +74,10 @@ def test_generic_single_holding_request_has_bounded_delivery_contract():
     assert "### Level 1：默认快照" in SKILL
     assert "monitor-snapshot --portfolio-value <账户总资产> --json" in SKILL
     assert "干净快速路径" in SKILL and "立即停止" in SKILL
-    assert "只加载与 runtime 升级原因或上述账户差异相符的资料" in SKILL
+    assert (
+        "只加载与 runtime 升级原因、上述账户差异、已有研究提醒或用户明确请求相符的资料"
+        in SKILL
+    )
     assert "默认不启动研究子代理" in SKILL
     assert "a-stock-qa` 尚无 monitor rubric" in SKILL
     assert "监控任务不得调用它" in SKILL
@@ -287,13 +290,29 @@ def test_l3_cadence_commands_include_required_positionals():
 
 def test_research_prompts_preserve_action_and_route_pending_cards():
     for marker in (
-        "研究提醒（不影响动作状态）", "逐条转述 `review_prompts`",
-        "`research.holdings/candidates`", "保守/中性/乐观年化回报",
-        "风险占用", "不得从提醒推导卖出股数、比例或候选买入数量",
-        "结束干净快速路径（`action_status=review_candidate`）", "--no-research",
+        "研究提醒（不影响动作状态）",
+        "逐条转述 `review_prompts`",
+        "不得从提醒推导卖出股数、比例或候选买入数量",
+        "结束干净快速路径（`action_status=review_candidate`）",
+        "--no-research",
     ):
         assert marker in SKILL
     assert "| `research_thesis_review`" in SKILL
     assert "report_id" in DAILY_MONITORING and "区间暂停解读" in DAILY_MONITORING
     assert "不进入 `escalations`" in VALUATION_REVIEW
     assert "3 个百分点" in VALUATION_REVIEW and "0.025%" in VALUATION_REVIEW
+
+    assert "`review_prompts` 研究提醒" in SKILL
+    assert "完成默认交付后立即停止" in SKILL
+    assert "即使 `escalations` 为空，也须转述已有 `review_prompts`" in SKILL
+    assert "无升级项时也可按下表读取，但不追加取证或行情调用" in SKILL
+    assert "组合复盘/换仓比较" in SKILL
+    for marker in (
+        "`research.holdings/candidates`",
+        "保守/中性/乐观年化回报",
+        "风险占用",
+    ):
+        assert marker in PORTFOLIO_RISK
+        assert marker not in SKILL
+    for marker in ("Research 注", "参考加仓检查点", "情景未经记分"):
+        assert marker in VALUATION_REVIEW

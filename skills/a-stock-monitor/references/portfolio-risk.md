@@ -83,7 +83,7 @@ a-stock-cache portfolio-scenario --snapshot <仓库外快照JSON> --sell <代码
 - `portfolio-risk` 使用 `holdings.framework/framework_confident` 并按市值汇总。框架为
   `?` 时停止框架动作；需要变更时用 `holding-framework` 显式迁移并重算止损。
 
-### 闲置资金与风险预算定仓（[2026-11-04 规格](../../../docs/specs/2026-11-04-proactive-decision-spec.md)）
+### 闲置资金与风险预算定仓（[2026-11-04 规格](https://github.com/on195594/a-stock-agent-skills/blob/master/docs/specs/2026-11-04-proactive-decision-spec.md)）
 
 - 未部署的股票资金默认持中证 800 ETF 515800（汇添富中证800ETF）作为基准仓，而不是现金。该仓不计单股止损、L3、单股风险预算与集中度；个股买入所需资金先卖它。买卖建议仍由所有者确认后执行（W1）。
 - 新仓或加仓的规模只取只读命令：
@@ -93,7 +93,11 @@ a-stock-cache portfolio-scenario --snapshot <仓库外快照JSON> --sell <代码
   ```
 
   输出 `max_shares` 与 `tranches`（1/3、2/3、1 三阶段累计股数，不足一手的阶段为 0；首批恒为 `tranches[0]`）：股数 ×（买价 − 第二档止损）同时不超过单股剩余预算与组合剩余预算，并按板块交易单位取整。`budget_below_one_lot` 如实说明，不换别的上限。现在分批带 `add_trigger` 或旧等证据带 `trigger` 时，动作只限 `tranches[0]`，检查点参考不阻止首批；不得将 `max_shares` 当成当前可买股数，也不得反复以首批名义追加。披露达标且更新有效研究确认后才加后续批次，未达标复核是否减仓。结果 `action_status=not_formed`、`execution_status=not_checked`，不核验涨跌停、滑点与可成交量。
-- 账户板块权限：风险政策可选字段 `untradable_boards`（`STAR`/`BSE`）所列板块照常研究，但不出机会提示、不作换仓候选、`position-size` 拒绝定仓；未提供账户范围时也生效，被排除代码写入 `research.reason`（[2026-11-04 板块权限规格](../../../docs/specs/2026-11-04-untradable-boards-spec.md)）。
+- 账户板块权限：风险政策可选字段 `untradable_boards`（`STAR`/`BSE`）所列板块照常研究，但不出机会提示、不作换仓候选、`position-size` 拒绝定仓；未提供账户范围时也生效，被排除代码写入 `research.reason`（[2026-11-04 板块权限规格](https://github.com/on195594/a-stock-agent-skills/blob/master/docs/specs/2026-11-04-untradable-boards-spec.md)）。
+
+### 组合复盘与换仓比较
+
+- 用户要求组合复盘或换仓比较时，从 `research.opportunity_costs` 取全部达标比较（不受 7 日时效限制），结合 `research.holdings/candidates` 给一张表：区间、保守/中性/乐观年化回报、卡片状态、收盘日、风险占用。持仓风险只引用本轮 `holdings[].stop_risk/stop_risk_pct`；候选未给风险占用则标未知，不假设买入数量补算。行带 `assumption` 时在表下原样注明（回报按 Research 假设测算，非已核实的换仓回报差）；待复核卡保留区间和回报，但注明“区间暂停解读”；null 保留未知，不当零。
 
 ### 行为与宏观检查
 
