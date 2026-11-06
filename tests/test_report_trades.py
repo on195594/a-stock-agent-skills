@@ -1,9 +1,18 @@
 """Ledger trades linked to the Research report they relied on."""
 
 import pytest
+import requests
 from a_stock_lib.market_data import MarketDataResult
 
-from a_stock_agent_runtime import cache, commands_holdings, db, schema
+from a_stock_agent_runtime import cache, commands_holdings, db, research_client, schema
+
+REAL_REQUIRE_REPORT = commands_holdings._require_report
+
+
+@pytest.fixture(autouse=True)
+def _research_backs_every_link(monkeypatch):
+    # Ledger and comparison tests below are about storage; the gate has its own tests.
+    monkeypatch.setattr(commands_holdings, "_require_report", lambda *_: None)
 
 
 def _events():
@@ -335,3 +344,162 @@ def test_old_inserts_without_the_column_still_work_for_rollback():
         )
         conn.commit()
     assert _events()[-1] == ("buy", 100, None)
+
+
+def _report(
+    report_id,
+    code="000001.SZ",
+    status="done",
+    passed=1,
+    created_at="2026-11-04T16:04:57+08:00",
+):
+    return {
+        "id": report_id,
+        "run_id": report_id,
+        "code": code,
+        "name": "平安银行",
+        "created_at": created_at,
+        "period": "2026Q3",
+        "passed": passed,
+        "status": status,
+    }
+
+
+@pytest.fixture
+def catalog(monkeypatch):
+    """The real gate against a stub of GET /api/reports, filtered by code like the server."""
+    monkeypatch.setattr(commands_holdings, "_require_report", REAL_REQUIRE_REPORT)
+    rows = [
+        _report(94),
+        _report(92, code="002648.SZ"),
+        _report(106, status="failed", passed=0),
+        _report(110, created_at="2026-11-05T19:35:32+08:00"),
+    ]
+    calls = []
+
+    def request_json(path, *, params=None, **_):
+        calls.append((path, params))
+        return {
+            "version": "research-v1",
+            "reports": [r for r in rows if r["code"][:6] == params["code"]],
+        }
+
+    monkeypatch.setattr(research_client, "request_json", request_json)
+    return calls
+
+
+def _open_position():
+    commands_holdings.cmd_add_holding(["000001", "10.0", "500", "--date", "2026-11-01"])
+
+
+LINKERS = {
+    "add": lambda link: commands_holdings.cmd_add_holding(
+        ["000001", "10.0", "500", "--date", "2026-11-05", *link]
+    ),
+    "buy": lambda link: commands_holdings.cmd_buy_holding(
+        ["000001", "10.0", "100", "--date", "2026-11-05", *link]
+    ),
+    "sell": lambda link: commands_holdings.cmd_sell_holding(
+        ["000001", "10.0", "100", "--date", "2026-11-05", *link]
+    ),
+}
+
+
+def _prepared(command):
+    if command != "add":
+        _open_position()
+    return _events()
+
+
+@pytest.mark.parametrize("command", LINKERS)
+@pytest.mark.parametrize(
+    "report_id, reason",
+    [
+        ("999999", "编号不存在或属于其他股票"),  # unknown id
+        ("92", "编号不存在或属于其他股票"),  # exists, but another stock's report
+        ("106", "未通过复核"),
+    ],
+)
+def test_unbacked_link_writes_nothing(catalog, capsys, command, report_id, reason):
+    before = _prepared(command)
+    with pytest.raises(SystemExit):
+        LINKERS[command](["--report-id", report_id])
+    captured = capsys.readouterr()
+    assert reason in captured.err and "交易未记录" in captured.err
+    assert _events() == before
+
+
+@pytest.mark.parametrize("command", LINKERS)
+def test_report_newer_than_the_trade_date_is_refused(catalog, capsys, command):
+    before = _prepared(command)
+    with pytest.raises(SystemExit):
+        LINKERS[command](["--date", "2026-11-04", "--report-id", "110"])
+    assert "晚于交易日 2026-11-04" in capsys.readouterr().err
+    assert _events() == before
+
+
+@pytest.mark.parametrize("command", LINKERS)
+def test_backed_link_is_stored_and_echoes_the_report(catalog, capsys, command):
+    _prepared(command)
+    LINKERS[command](["--report-id", "94"])
+    assert _events()[-1][2] == 94
+    assert "已核对报告 #94：平安银行 2026-11-04T16:04" in capsys.readouterr().out
+    assert catalog == [("/api/reports", {"code": "000001"})]
+
+
+def test_report_from_the_trade_day_itself_is_accepted(catalog):
+    LINKERS["add"](["--report-id", "110"])
+    assert _events()[-1][2] == 110
+
+
+def test_unlinked_trade_never_calls_research(catalog):
+    LINKERS["add"]([])
+    assert catalog == []
+    assert _events()[-1][2] is None
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        requests.ConnectionError("https://user:secret@research"),
+        research_client.ResearchNotConfigured("请配置 A_STOCK_RESEARCH_URL"),
+        ValueError("Research HTTP 503"),
+    ],
+)
+def test_unavailable_research_writes_nothing_and_hides_transport_text(
+    monkeypatch, capsys, failure
+):
+    monkeypatch.setattr(commands_holdings, "_require_report", REAL_REQUIRE_REPORT)
+
+    def fail(*_, **__):
+        raise failure
+
+    monkeypatch.setattr(research_client, "request_json", fail)
+    with pytest.raises(SystemExit):
+        LINKERS["add"](["--report-id", "94"])
+    err = capsys.readouterr().err
+    assert "无法向 Research 核对" in err and "交易未记录" in err
+    assert "secret" not in err
+    assert _events() == []
+
+
+def test_malformed_research_payload_writes_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(commands_holdings, "_require_report", REAL_REQUIRE_REPORT)
+    monkeypatch.setattr(
+        research_client, "request_json", lambda *_, **__: {"version": "research-v1"}
+    )
+    with pytest.raises(SystemExit):
+        LINKERS["add"](["--report-id", "94"])
+    assert "无法向 Research 核对" in capsys.readouterr().err
+    assert _events() == []
+
+
+def test_gate_runs_before_the_write_transaction(monkeypatch, catalog):
+    # A slow Research call must not hold the ledger's write lock.
+    def no_session(*_, **__):
+        raise AssertionError("gate must refuse before opening the ledger")
+
+    monkeypatch.setattr(db, "db_session", no_session)
+    for command in LINKERS:
+        with pytest.raises(SystemExit):
+            LINKERS[command](["--report-id", "999999"])

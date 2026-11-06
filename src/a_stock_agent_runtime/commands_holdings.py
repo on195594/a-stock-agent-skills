@@ -8,6 +8,7 @@ import sqlite3
 import sys
 from datetime import date, datetime
 
+import requests
 from a_stock_lib.market_data import MarketDataResult
 from a_stock_lib.providers import TushareMarketDataProvider
 from a_stock_lib.providers.tushare_fundamentals import TushareFundamentalsProvider
@@ -18,6 +19,7 @@ from a_stock_agent_runtime import (
     domain,
     market_quotes,
     paths,
+    research_client,
     risk_budget,
     risk_gates,
     risk_policy,
@@ -338,6 +340,7 @@ def cmd_add_holding(args: list[str]) -> None:
     if report_id is not None and shares is None:
         print("错误：关联报告时必须提供股数，否则没有交易事件可关联", file=sys.stderr)
         sys.exit(1)
+    _require_report(report_id, code, buy_date)
     economic_cost = (
         (trade_price * shares + fees) / shares if shares is not None else trade_price
     )
@@ -623,6 +626,42 @@ def _pop_report_id(args: list[str]) -> tuple[int | None, list[str]]:
     return int(value), args[:index] + args[index + 2 :]
 
 
+def _require_report(report_id: int | None, code: str, trade_date: str) -> None:
+    """Refuse a link Research cannot back: ledger events cannot be corrected later."""
+    if report_id is None:
+        return
+    report = None
+    try:
+        # The server filters by six-digit code, so its .SH/.SZ suffix needs no handling here.
+        reports = research_client.request_json("/api/reports", params={"code": code})
+        report = next((r for r in reports["reports"] if r["id"] == report_id), None)
+        if report is None:
+            problem = f"不是 {code} 的报告（编号不存在或属于其他股票）"
+        elif (report["status"], report["passed"]) != ("done", 1):
+            problem = f"未通过复核（{report['name']}）"
+        # Research timestamps are +08:00, the same calendar as ledger trade dates.
+        elif report["created_at"][:10] > trade_date:
+            problem = f"生成于 {report['created_at'][:10]}，晚于交易日 {trade_date}"
+        else:
+            problem = None
+    except requests.RequestException as exc:
+        # Transport exception text may contain credentials or response bodies.
+        problem = f"无法向 Research 核对（{type(exc).__name__}）"
+    except (OSError, RuntimeError, ValueError, LookupError, TypeError) as exc:
+        problem = f"无法向 Research 核对（{exc}）"
+    if problem:
+        print(
+            f"错误：报告 #{report_id} {problem}；交易未记录。"
+            "修正编号或稍后重试，确未依据报告才去掉 --report-id",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(
+        f"已核对报告 #{report_id}：{report['name']} {report['created_at'][:16]}"
+        "（同股票有多份时确认是决策时读的那份）"
+    )
+
+
 def _parse_trade_options(args: list[str], start: int) -> tuple[float, float, str]:
     fees = 0.0
     tax = 0.0
@@ -677,6 +716,7 @@ def cmd_buy_holding(args: list[str]) -> None:
     if tax:
         print("错误：买入事件不接受 --tax，请仅记录实际买入费用 --fee", file=sys.stderr)
         sys.exit(1)
+    _require_report(report_id, code, trade_date)
     with db.db_session() as conn:
         conn.execute("BEGIN IMMEDIATE")
         holding_id, _, framework = _single_open_holding(conn, code)
@@ -784,6 +824,7 @@ def cmd_sell_holding(args: list[str], *, single_lot: bool = False) -> None:
     else:
         requested_shares = None
     fees, tax, exit_date = _parse_trade_options(args, 3)
+    _require_report(report_id, code, exit_date)
 
     with db.db_session() as conn:
         conn.execute("BEGIN IMMEDIATE")
