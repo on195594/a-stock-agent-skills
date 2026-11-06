@@ -245,7 +245,28 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
-### 0.1.43 maintenance candidate (2026-11-06, awaiting activation)
+### 0.1.43 activation (2026-11-06)
+
+Owner explicitly requested commit and deployment in the maintenance session.
+Activated **`0.1.43-14838df3a862`** from commit `14838df` after full local validation
+(1852 passed / 11 skipped and all `scripts/check.sh` gates) and successful hosted
+[CI run 42170735829](https://github.com/on195594/a-stock-agent-skills/actions/runs/42170735829).
+The native installer ran dry-run, then `--client all --mode symlink --force`.
+
+Readback verified all 9 Claude/Codex/Hermes Skill links and all 3 stable CLI links
+point into that release. All 59 runtime/Skill source files match the committed
+source by SHA-256; installed versions are suite 0.1.43 and a-stock-lib 0.10.2.
+CLI help smoke passed with isolated state, absent config and notifications disabled.
+No account operations, schema migration, credentials or cron changes were made.
+Existing client sessions must reload Skills; live-session reload and candidate
+model behavior replay were not verified by this deployment.
+
+Evidence: `~/.local/share/a-stock-agent/deployments/maintenance-0.1.43-20261106/`.
+Rollback manifest: `~/.local/share/a-stock-agent/rollback-1793944289034472640.json`.
+The old `0.1.42-14cbe7ff9acc` runtime and frozen Skill snapshot remain available.
+The deployment-record commit does not change the activated runtime/Skill bytes.
+
+### 0.1.43 maintenance review and validation (2026-11-06)
 
 The current working tree freezes runtime/Skill installation together, validates
 linked report code/time before ledger writes, reuses prices within `report-trades`
@@ -267,8 +288,7 @@ Before the authorized commit/deploy, the complete local `scripts/check.sh` passe
 1852 passed, 11 skipped, Ruff, regulatory freshness, standalone QA and cron smoke.
 This supersedes the earlier 1837/11 result. Candidate model behavior remains
 NOT_RUN in [behavior evaluation](agent-behavior-eval.md#current-semantic-regression-cases-2026-11-06).
-The owner has authorized commit and deployment. Activation awaits successful
-hosted CI; until then the frozen production release below remains active. No
+The candidate was subsequently committed and activated as recorded above. No
 schema, account, credentials or cron change is part of this release.
 
 Task evidence and the superseded temporary source copy were archived outside Git
@@ -280,14 +300,14 @@ old review reports describe pre-fix sources, not outstanding implementation work
 
 Owner explicitly confirmed freezing the old production Skill text before applying
 the reviewed repository improvements. All nine Claude/Codex/Hermes Skill links
-now point into `runtime/0.1.42-14cbe7ff9acc/skills/`, including the shared
+were first frozen into `runtime/0.1.42-14cbe7ff9acc/skills/`, including the shared
 `~/.agents/skills` entries. The 28 tracked Skill files and their three referenced
 specifications were copied from clean source `bf426aa27ae3`; all 31 file hashes
-match the old content. CLI links remain on `0.1.42-14cbe7ff9acc`.
+match the old content. CLI links remained on `0.1.42-14cbe7ff9acc` during that freeze.
 Manifest and prior link targets:
 `~/.local/share/a-stock-agent/deployments/skill-source-freeze-1793936019349043840/manifest.json`.
-This only isolates production from source edits; the new repository changes are
-not activated. No account, schema, credentials or cron changes. Returning links
+That freeze only isolated production from source edits; it did not activate the
+new repository changes. It was superseded by the 0.1.43 activation above. No account, schema, credentials or cron changes. Returning links
 to source after maintenance would expose new text, so it is not a content-preserving
 rollback and requires a separate activation decision.
 
