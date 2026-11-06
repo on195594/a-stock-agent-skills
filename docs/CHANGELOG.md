@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Repository-only maintenance; no version bump or deployment:
+
+- Remove the test-only dividend-yield wrapper; regressions exercise the production
+  dividend-basis implementation directly, without changing calculation rules.
+- Group dividend and Provider unit-conversion tests in
+  `tests/research/test_fetcher_dividends.py`, consolidate redundant scenarios and
+  freeze both the clock and default report periods.
+- Align README and development guidance on test ownership, targeted fail-fast
+  validation and throttled full-matrix runs.
+
 ## 0.1.43 — 2026-11-06
 
 - 安装器为 runtime 与三项 Skill 创建同版本快照，切换失败恢复入口；修复软链接转 copy 模式。

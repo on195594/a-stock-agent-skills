@@ -985,7 +985,7 @@ def _fetch_dividends_tushare(code: str) -> Any:
     ).copy()
     # TuShare reports per-share figures (cash_div 0.56 = 0.56 yuan/share,
     # stk_co_rate 0.2 = 0.2 bonus share/share) while every downstream consumer
-    # -- compute_dividend_yield, compute_dps_ttm, detect_split_ratio -- expects
+    # -- _compute_dividend_basis, compute_dps_ttm, detect_split_ratio -- expects
     # the AKShare per-10-share convention and divides by 10. Normalise here, at
     # the adapter, so those three stay correct for both sources.
     if {"stk_bo_rate", "stk_co_rate"} <= set(frame.columns):
@@ -1140,14 +1140,6 @@ def _compute_dividend_basis(
     return yield_pct, per_share, None, target_year, periods
 
 
-def compute_dividend_yield(
-    div_df: Any, current_price: float | None
-) -> tuple[float | None, float | None, str | None]:
-    """Return the existing annual dividend yield/DPS contract before split adjustment."""
-    dy, dps, reason, _, _ = _compute_dividend_basis(div_df, current_price)
-    return dy, dps, reason
-
-
 def _compute_dividends(
     div_df: Any, current_price: float | None, latest_report_year: int | None
 ) -> dict:
@@ -1165,8 +1157,10 @@ def _compute_dividends(
     if reason is None:
         dy, dps, reason, year, periods = _compute_dividend_basis(div_df, current_price)
         dps_ttm = compute_dps_ttm(div_df)
-    ttm_reason = reason if div_df is None or isinstance(div_df, (str, tuple)) else (
-        "无有效TTM分红金额记录" if dps_ttm is None else None
+    ttm_reason = (
+        reason
+        if div_df is None or isinstance(div_df, (str, tuple))
+        else ("无有效TTM分红金额记录" if dps_ttm is None else None)
     )
     if split_ratio > 0:
         dps = round(dps / (1 + split_ratio), 4) if dps is not None else None
@@ -2382,7 +2376,9 @@ def build_quarter_check(code: str, frames: dict[str, Any]) -> dict:
     import pandas as pd
 
     rows = {
-        key: _deduplicated_report_rows(frames.get(key), prefer_corrected=key == "deducted")
+        key: _deduplicated_report_rows(
+            frames.get(key), prefer_corrected=key == "deducted"
+        )
         for key in ("income", "cashflow", "balance", "deducted")
     }
     periods = [
@@ -2457,9 +2453,11 @@ def build_quarter_check(code: str, frames: dict[str, Any]) -> dict:
         ("net_profit_attributable_ttm", "income", "n_income_attr_p"),
     ):
         value = None
-        required = [latest] if latest is not None and latest.month == 12 else [
-            latest, prior, year_end
-        ]
+        required = (
+            [latest]
+            if latest is not None and latest.month == 12
+            else [latest, prior, year_end]
+        )
         if latest is not None and all(
             number(frame, period, column) is not None for period in required
         ):
@@ -2541,12 +2539,15 @@ def cmd_quarter(args: list[str]) -> None:
                     else ("ERROR", f"{source}: provider不支持")
                 )
                 frame = (
-                    _tushare_frame(raw, source) if not _is_timed_call_error(raw) else raw
+                    _tushare_frame(raw, source)
+                    if not _is_timed_call_error(raw)
+                    else raw
                 )
                 if frame is None or isinstance(frame, (str, tuple)):
                     errors[key] = str(frame or "数据源无返回")
                     frame = None
                 frames[key] = frame
+
             # The provider's indicator projection does not include deducted profit.
             def fetch_deducted():
                 return tushare.pro_api(paths.tushare_token()).fina_indicator(
@@ -2565,7 +2566,9 @@ def cmd_quarter(args: list[str]) -> None:
             if "deducted" in errors:
                 for name, metric in fields.items():
                     if name.startswith("deducted_net_profit"):
-                        metric["reason"] = f"扣非净利润直接源不可用: {errors['deducted']}"
+                        metric["reason"] = (
+                            f"扣非净利润直接源不可用: {errors['deducted']}"
+                        )
             quote = None
             try:
                 quote = _fetch_realtime_quote(code)
@@ -2580,7 +2583,8 @@ def cmd_quarter(args: list[str]) -> None:
                 else []
             )
             price.update(
-                source=getattr(quote, "source", None), as_of=getattr(quote, "as_of", None)
+                source=getattr(quote, "source", None),
+                as_of=getattr(quote, "as_of", None),
             )
             fields["price"] = price
             # Use fetch's financial adapter for the same split cutoff year.
@@ -2623,7 +2627,9 @@ def cmd_quarter(args: list[str]) -> None:
                     and price["value"] is not None
                     and bond_value["value"] is not None
                 ):
-                    value = price["value"] * (bond_value["value"] / 100 + spread / 10000)
+                    value = price["value"] * (
+                        bond_value["value"] / 100 + spread / 10000
+                    )
                 fields[f"dps_at_{spread}bp_spread"] = _quarter_metric(
                     value,
                     "dividend_spread_threshold",

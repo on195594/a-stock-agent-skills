@@ -53,7 +53,7 @@ Run heavy commands with `nice -n 15` or a CPU quota. Run `bash scripts/check.sh`
 **or** the commands below, not both for unchanged code.
 
 ```bash
-uv run pytest -q -x
+nice -n 15 uv run pytest -q -x
 uv run ruff check .
 uv run python scripts/check_regulatory_freshness.py
 python3 -I tests/qa/standalone_smoke.py
@@ -71,13 +71,13 @@ system `python3 -I`; do not add a second subprocess wrapper in pytest.
 Useful focused checks:
 
 ```bash
-uv run pytest tests/test_cli_contract.py tests/test_command_classification.py -q
-uv run pytest tests/test_research_client.py tests/test_portfolio_scenario.py -q
-uv run pytest tests/test_installation.py tests/test_state_migration.py -q
-uv run pytest tests/test_l3_thesis_versioning.py tests/test_cli_contract.py -q
-uv run pytest tests/test_risk_policy.py tests/test_performance.py -q
-uv run pytest tests/test_agent_behavior_eval.py -q
-uv run pytest tests/monitor tests/qa tests/research -q
+nice -n 15 uv run pytest tests/test_cli_contract.py tests/test_command_classification.py -q -x
+nice -n 15 uv run pytest tests/test_research_client.py tests/test_portfolio_scenario.py -q -x
+nice -n 15 uv run pytest tests/test_installation.py tests/test_state_migration.py -q -x
+nice -n 15 uv run pytest tests/test_l3_thesis_versioning.py tests/test_cli_contract.py -q -x
+nice -n 15 uv run pytest tests/test_risk_policy.py tests/test_performance.py -q -x
+nice -n 15 uv run pytest tests/test_agent_behavior_eval.py -q -x
+nice -n 15 uv run pytest tests/research/test_fetcher_dividends.py -q -x
 bash tests/test_check_holdings_cron.sh
 ```
 
@@ -175,6 +175,24 @@ only when tracing or changing their rules. Migration and review evidence may con
 must not contain credentials, database copies, WAL/SHM files or runtime logs.
 Use relative links for repository documents. Historical evidence is retained
 for auditability and is not a scratch directory.
+
+## Test ownership and layout
+
+Keep regression tests beside their functional owner rather than adding to broad
+catch-all coverage files:
+
+- `tests/research/`: fetching, valuation and Research-specific contracts;
+  `test_fetcher_dividends.py` owns dividend fiscal-year/TTM, missing-data and
+  Provider unit-conversion regressions. Its clock and report periods are fixed.
+- `tests/monitor/`: holding and monitoring scenarios.
+- `tests/qa/`: portable report checks, including the runtime-free standalone smoke.
+- `tests/test_*.py`: runtime CLI, application contracts and operations tooling.
+- `tests/fixtures/` and `tests/helpers.py`: shared fixture evidence and helpers.
+
+Test the production owner directly, not an otherwise-unused wrapper kept alive
+only by tests. Consolidate redundant scenarios, but retain distinct regulatory,
+missing-data and permission boundaries. Historical authorization specs are not
+redundant test data.
 
 ## Generated files
 

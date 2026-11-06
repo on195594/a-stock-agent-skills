@@ -144,10 +144,12 @@ credential, runtime log or Telegram token in the repository.
 
 ## Development checks
 
-Run the automated test and validation gates with one command:
+For ordinary changes, run targeted tests with `-x` and lint/format checks on
+changed Python files. Use the [validation matrix](docs/development.md#validation-matrix)
+to decide when the full automated gate is required:
 
 ```bash
-bash scripts/check.sh
+nice -n 15 bash scripts/check.sh
 ```
 
 Before committing, also run `git diff --check` and review the final diff.
@@ -162,13 +164,15 @@ cron, backup and rollback procedures.
 ```text
 skills/                    canonical Agent Skills and references
 src/a_stock_agent_runtime/ shared runtime and CLI implementations
-tests/                     unit, contract and fixture tests
+tests/                     runtime tests; research/, monitor/, qa/ by owner
+tests/fixtures/            shared fixture evidence
 scripts/                   installer, migration, validation and cron helpers
 docs/architecture/         runtime contract and ownership architecture
 docs/specs/                retained investment/risk-rule specifications
 docs/migration/            provenance and redacted execution evidence
 ```
 
+See [test ownership](docs/development.md#test-ownership-and-layout) for test placement.
 Start with the [current runtime contracts](docs/architecture/runtime-contracts.md).
 Read dated specs only for the rule being changed. Completed implementation plans
 and superseded architecture drafts are recoverable from Git using the

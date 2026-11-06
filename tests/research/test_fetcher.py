@@ -12,7 +12,6 @@ from types import ModuleType, SimpleNamespace
 
 import pandas as pd
 import pytest
-from a_stock_lib.fetcher_utils import detect_split_ratio
 from a_stock_lib.providers import QuoteObservation
 
 from a_stock_agent_runtime import db, domain, fetcher, store
@@ -479,70 +478,6 @@ def test_sina_quote_validation_rejects_stale_and_future_quotes():
     assert fetcher._validate_sina_quote(valid, trading_dates, now) is None
     assert "stale" in fetcher._validate_sina_quote(stale, trading_dates, now)
     assert "stale" in fetcher._validate_sina_quote(future, trading_dates, now)
-
-
-def test_tushare_dividend_adapter_rescales_per_share_units_to_per_10_shares(
-    monkeypatch,
-):
-    """TuShare reports per-share (cash_div/stk_co_rate); downstream consumers
-    expect AKShare's per-10-share convention. Values mirror 603606's 2025 plan:
-    每10股转增2股派5.6元 -> cash_div 0.56, stk_co_rate 0.2."""
-    import a_stock_lib.providers as providers
-
-    class FakeProvider:
-        def fetch_dividend_history(self, code):
-            return SimpleNamespace(
-                status="ok",
-                value=pd.DataFrame(
-                    {
-                        "end_date": ["2025-12-31"],
-                        "ex_date": ["2026-05-26"],
-                        "div_proc": ["实施"],
-                        "stk_div": [0.00],
-                        "stk_bo_rate": [0.00],
-                        "stk_co_rate": [0.20],
-                        "cash_div": [0.56],
-                    }
-                ),
-            )
-
-    monkeypatch.setattr(
-        providers, "TushareDividendProvider", lambda **kwargs: FakeProvider()
-    )
-    frame = fetcher._fetch_dividends_tushare("603606")
-
-    assert frame.loc[0, "送转股份-送转总比例"] == pytest.approx(2.00)
-    assert frame.loc[0, "现金分红-现金分红比例"] == pytest.approx(5.60)
-
-    # The whole point of the rescale: these two consumers must recover the
-    # per-share figures the announcement states.
-    assert fetcher.compute_dividend_yield(frame, 38.67)[1] == pytest.approx(0.56)
-    assert detect_split_ratio(frame, 2025) == (pytest.approx(0.2), "2026-05-26")
-
-
-def test_tushare_dividend_adapter_rescales_stk_div_without_rate_columns(monkeypatch):
-    import a_stock_lib.providers as providers
-
-    class FakeProvider:
-        def fetch_dividend_history(self, code):
-            return SimpleNamespace(
-                status="ok",
-                value=pd.DataFrame(
-                    {
-                        "end_date": ["2025-12-31"],
-                        "stk_div": [0.10],
-                        "cash_div": [0.20],
-                    }
-                ),
-            )
-
-    monkeypatch.setattr(
-        providers, "TushareDividendProvider", lambda **kwargs: FakeProvider()
-    )
-    frame = fetcher._fetch_dividends_tushare("600519")
-
-    assert frame.loc[0, "送转股份-送转总比例"] == pytest.approx(1.0)
-    assert frame.loc[0, "现金分红-现金分红比例"] == pytest.approx(2.0)
 
 
 @pytest.mark.parametrize(
@@ -1484,9 +1419,17 @@ def quarter_frames():
                 **{
                     key: [None] * 5
                     for key in (
-                        "roe_waa", "netprofit_yoy", "debt_to_assets",
-                        "grossprofit_margin", "bps", "or_yoy", "dt_netprofit_yoy",
-                        "f_ann_date", "report_type", "comp_type", "end_type",
+                        "roe_waa",
+                        "netprofit_yoy",
+                        "debt_to_assets",
+                        "grossprofit_margin",
+                        "bps",
+                        "or_yoy",
+                        "dt_netprofit_yoy",
+                        "f_ann_date",
+                        "report_type",
+                        "comp_type",
+                        "end_type",
                     )
                 },
             }
@@ -1607,26 +1550,42 @@ def test_quarter_q1_and_annual_periods(period):
 
 @pytest.fixture
 def multi_year_dividends():
-    return pd.DataFrame({
-        "报告期": ["2024-12-31", "2025-06-30", "2025-12-31", "2026-06-30"],
-        "现金分红-现金分红比例": [18.0, 3.0, 5.6, 2.0],
-        "送转股份-送转总比例": [2.0, 0.0, 0.0, 0.0],
-        "除权除息日": ["2025-05-26", "2025-09-26", None, "2026-05-26"],
-        "方案进度": ["实施分配", "实施分配", "董事会预案", "实施分配"],
-    })
+    return pd.DataFrame(
+        {
+            "报告期": ["2024-12-31", "2025-06-30", "2025-12-31", "2026-06-30"],
+            "现金分红-现金分红比例": [18.0, 3.0, 5.6, 2.0],
+            "送转股份-送转总比例": [2.0, 0.0, 0.0, 0.0],
+            "除权除息日": ["2025-05-26", "2025-09-26", None, "2026-05-26"],
+            "方案进度": ["实施分配", "实施分配", "董事会预案", "实施分配"],
+        }
+    )
 
 
 @pytest.mark.parametrize("financial_year", [2025, 2026])
 @pytest.mark.parametrize("quote_kind", ["valid", "no_as_of", "invalid_price"])
 @pytest.mark.parametrize(
     "missing,deducted_failure,split_ratio,dps_override",
-    [(False, False, 0, None), (False, False, 0.2, None),
-     (False, True, 0, None), (True, True, 0, None),
-     (False, False, 0, 0), (False, False, 0, -1)],
+    [
+        (False, False, 0, None),
+        (False, False, 0.2, None),
+        (False, True, 0, None),
+        (True, True, 0, None),
+        (False, False, 0, 0),
+        (False, False, 0, -1),
+    ],
 )
 def test_quarter_cli_json_thresholds_and_missing_sources(
-    monkeypatch, capsys, quarter_frames, missing, deducted_failure, split_ratio,
-    isolated_db, quote_kind, dps_override, multi_year_dividends, financial_year,
+    monkeypatch,
+    capsys,
+    quarter_frames,
+    missing,
+    deducted_failure,
+    split_ratio,
+    isolated_db,
+    quote_kind,
+    dps_override,
+    multi_year_dividends,
+    financial_year,
 ):
     import json
     import tushare
@@ -1660,18 +1619,24 @@ def test_quarter_cli_json_thresholds_and_missing_sources(
     monkeypatch.setattr(
         providers, "TushareFinancialProvider", lambda **kwargs: Provider()
     )
+
     def direct_indicator(**kwargs):
         print("direct indicator diagnostic")
         assert kwargs["ts_code"] == "600000.SH"
         assert set(kwargs["fields"].split(",")) == {
-            "ts_code", "end_date", "ann_date", "update_flag", "profit_dedt",
+            "ts_code",
+            "end_date",
+            "ann_date",
+            "update_flag",
+            "profit_dedt",
         }
         if deducted_failure:
             raise RuntimeError("deducted source failed")
         return quarter_frames["deducted"]
 
     monkeypatch.setattr(
-        tushare, "pro_api",
+        tushare,
+        "pro_api",
         lambda token: SimpleNamespace(fina_indicator=direct_indicator),
     )
 
@@ -1698,12 +1663,14 @@ def test_quarter_cli_json_thresholds_and_missing_sources(
         # Positive disclosed amounts can round to a zero annual DPS.
         multi_year_dividends["现金分红-现金分红比例"] = 0.00001
     monkeypatch.setattr(
-        fetcher, "_fetch_dividends",
+        fetcher,
+        "_fetch_dividends",
         lambda code: None if missing else multi_year_dividends,
     )
     if dps_override == -1:
         monkeypatch.setattr(
-            fetcher, "_compute_dividend_basis",
+            fetcher,
+            "_compute_dividend_basis",
             lambda *args: (0, dps_override, None, 2025, ["2025-06-30", "2025-12-31"]),
         )
     monkeypatch.setattr(
@@ -1724,8 +1691,13 @@ def test_quarter_cli_json_thresholds_and_missing_sources(
 
     monkeypatch.setattr(fetcher, "_compute_dividends", capture_basis)
     monkeypatch.setattr(
-        fetcher, "_fetch_spot_data",
-        lambda *args: ("fixture", "fixture", None if quote_kind == "invalid_price" else 20),
+        fetcher,
+        "_fetch_spot_data",
+        lambda *args: (
+            "fixture",
+            "fixture",
+            None if quote_kind == "invalid_price" else 20,
+        ),
     )
 
     def financial_data(code, results, reasons):
@@ -1736,8 +1708,11 @@ def test_quarter_cli_json_thresholds_and_missing_sources(
     for name in ("_compute_ttm_valuation", "_fetch_pb_pe_data", "_fetch_percentiles"):
         monkeypatch.setattr(fetcher, name, lambda *args: None)
     monkeypatch.setattr(
-        fetcher, "_build_cache_payload",
-        lambda code, name, industry, results, reasons, period: fetch_results.update(results),
+        fetcher,
+        "_build_cache_payload",
+        lambda code, name, industry, results, reasons, period: fetch_results.update(
+            results
+        ),
     )
     assert fetcher.main(["fetch", "600000"]) == 0
     capsys.readouterr()
@@ -1757,7 +1732,9 @@ def test_quarter_cli_json_thresholds_and_missing_sources(
     expected_split = split_ratio if financial_year == 2025 and not missing else 0
     assert fetch_results["eps"] == round(1.2 / (1 + expected_split), 4)
     assert fetch_results["bps"] == round(6 / (1 + expected_split), 4)
-    assert fetch_results["operating_cf_per_share"] == round(2.4 / (1 + expected_split), 4)
+    assert fetch_results["operating_cf_per_share"] == round(
+        2.4 / (1 + expected_split), 4
+    )
     if dps_override is None and not missing and quote_kind != "invalid_price":
         assert fetch_results["dividend_yield"] == round(4.3 / (1 + expected_split), 2)
         assert fetch_results["dps_ttm"] == round(0.76 / (1 + expected_split), 4)
@@ -1817,10 +1794,13 @@ def test_quarter_rejects_invalid_arguments(args):
     assert fetcher.main(["quarter", *args]) == 1
 
 
-@pytest.mark.parametrize("frame,field", [
-    ("income", "net_profit_attributable_ttm"),
-    ("cashflow", "operating_cash_flow_ttm"),
-])
+@pytest.mark.parametrize(
+    "frame,field",
+    [
+        ("income", "net_profit_attributable_ttm"),
+        ("cashflow", "operating_cash_flow_ttm"),
+    ],
+)
 @pytest.mark.parametrize("missing", ["2026-09-30", "2025-09-30", "2025-12-31"])
 def test_quarter_ttm_requires_each_input_period(quarter_frames, frame, field, missing):
     quarter_frames[frame] = quarter_frames[frame].loc[
@@ -1832,7 +1812,9 @@ def test_quarter_ttm_requires_each_input_period(quarter_frames, frame, field, mi
     assert fields["operating_cash_flow_to_net_profit_ttm"]["value"] is None
 
 
-def test_quarter_ignores_indicator_period_and_prefers_corrected_deducted(quarter_frames):
+def test_quarter_ignores_indicator_period_and_prefers_corrected_deducted(
+    quarter_frames,
+):
     quarter_frames["indicator"].loc[4, "end_date"] = "2027-03-31"
     quarter_frames["deducted"].loc[5, "ann_date"] = "20261031"
     result = fetcher.build_quarter_check("600000", quarter_frames)
@@ -1840,16 +1822,30 @@ def test_quarter_ignores_indicator_period_and_prefers_corrected_deducted(quarter
     assert result["fields"]["deducted_net_profit_ytd"]["value"] == 12
 
 
-@pytest.mark.parametrize("latest,expected_single,expected_ttm", [
-    ("2025-12-31", 40, 14), ("2026-03-31", 30, 15),
-])
-def test_quarter_q4_derivation_and_complete_q1_ttm(latest, expected_single, expected_ttm):
-    income = pd.DataFrame({
-        "end_date": ["2024-09-30", "2024-12-31", "2025-03-31", "2025-09-30",
-                     "2025-12-31", "2026-03-31"],
-        "revenue": [70, 100, 20, 100, 140, 30],
-        "n_income_attr_p": [7, 10, 2, 10, 14, 3],
-    })
+@pytest.mark.parametrize(
+    "latest,expected_single,expected_ttm",
+    [
+        ("2025-12-31", 40, 14),
+        ("2026-03-31", 30, 15),
+    ],
+)
+def test_quarter_q4_derivation_and_complete_q1_ttm(
+    latest, expected_single, expected_ttm
+):
+    income = pd.DataFrame(
+        {
+            "end_date": [
+                "2024-09-30",
+                "2024-12-31",
+                "2025-03-31",
+                "2025-09-30",
+                "2025-12-31",
+                "2026-03-31",
+            ],
+            "revenue": [70, 100, 20, 100, 140, 30],
+            "n_income_attr_p": [7, 10, 2, 10, 14, 3],
+        }
+    )
     income = income.loc[income["end_date"] <= latest]
     fields = fetcher.build_quarter_check("600000", {"income": income})["fields"]
     assert fields["revenue_single_quarter"]["value"] == expected_single
