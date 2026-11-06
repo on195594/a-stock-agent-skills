@@ -58,6 +58,154 @@ def _resolve(**kwargs):
     return risk_policy.resolve_risk_parameters(now=NOW, **kwargs)
 
 
+def _account_file(**updates):
+    value = {
+        "schema_version": 1,
+        "currency": "CNY",
+        "account_scope": "fixture-account",
+        "portfolio_value": 100000,
+        "portfolio_value_as_of": None,
+        "recorded_at": "2026-09-17T10:00:00+08:00",
+        "source": "user_screenshot",
+        **updates,
+    }
+    path = paths.cache_db_path().with_name("account-snapshot.json")
+    _file(path, value)
+    return path
+
+
+def test_stored_assets_reuse_scope_without_inventing_valuation_time(tmp_path):
+    path = _account_file()
+    _file(tmp_path / "policy.json")
+    before = path.read_bytes()
+    result = _resolve(policy_file=str(tmp_path / "policy.json"))
+    assert result.portfolio_value == 100000
+    assert result.account_scope == "fixture-account"
+    assert result.risk_policy["source"] == "policy_file"
+    assert result.denominator_source() == "account_snapshot"
+    evidence = result.denominator_evidence()
+    assert evidence["portfolio_value_as_of"] is None
+    assert evidence["denominator_requires_review"] is True
+    assert evidence["portfolio_value_recorded_at"] == "2026-09-17T10:00:00+08:00"
+    assert path.read_bytes() == before
+
+
+def test_new_screenshot_replaces_default_value_without_a_ttl():
+    _account_file(recorded_at="2000-01-01T00:00:00+08:00")
+    assert _resolve().portfolio_value == 100000
+    _account_file(portfolio_value=120000)
+    assert _resolve().portfolio_value == 120000
+
+
+def test_explicit_value_does_not_inherit_stored_scope_or_timestamp():
+    _account_file(portfolio_value_as_of="2026-09-16T15:00:00+08:00")
+    result = _resolve(portfolio_value=90000)
+    assert result.portfolio_value == 90000
+    assert result.account_scope is None and result.portfolio_value_as_of is None
+    assert result.denominator_source() == "cli"
+
+
+def test_stored_scope_conflict_is_not_silently_applied():
+    _account_file()
+    with pytest.raises(risk_policy.RiskPolicyError, match="does not match"):
+        _resolve(account_scope="other-account")
+
+
+@pytest.mark.parametrize(
+    "stored_as_of",
+    [None, "2026-09-16T15:00:00+08:00", "invalid", "2027-01-01T00:00:00+08:00"],
+)
+def test_cli_timestamp_cannot_relabel_a_stored_asset_observation(stored_as_of):
+    path = _account_file(portfolio_value_as_of=stored_as_of)
+    before = path.read_bytes()
+    with pytest.raises(risk_policy.RiskPolicyError):
+        _resolve(portfolio_value_as_of="2026-09-17T11:00:00+08:00")
+    assert path.read_bytes() == before
+
+
+def test_matching_timestamp_keeps_stored_provenance_and_explicit_value_can_override():
+    stored_as_of = "2026-09-16T15:00:00+08:00"
+    path = _account_file(portfolio_value_as_of=stored_as_of)
+    before = path.read_bytes()
+    stored = _resolve(portfolio_value_as_of="2026-09-16T07:00:00Z")
+    assert stored.portfolio_value_as_of == stored_as_of
+    assert stored.denominator_source() == "account_snapshot"
+    assert stored.denominator_evidence()["denominator_requires_review"] is False
+    explicit = _resolve(
+        portfolio_value=90000,
+        account_scope="fixture-account",
+        portfolio_value_as_of="2026-09-17T11:00:00+08:00",
+    )
+    assert explicit.portfolio_value == 90000
+    assert explicit.denominator_source() == "cli"
+    assert explicit.portfolio_value_as_of == "2026-09-17T11:00:00+08:00"
+    assert path.read_bytes() == before
+
+
+def test_stored_asset_path_errors_use_the_risk_policy_error_contract(
+    tmp_path, monkeypatch
+):
+    config = tmp_path / "invalid-permissions.env"
+    config.write_text("# synthetic runtime config\n")
+    config.chmod(0o644)
+    monkeypatch.setenv("A_STOCK_CONFIG_FILE", str(config))
+    with pytest.raises(
+        risk_policy.RiskPolicyError, match="cannot read stored account snapshot"
+    ):
+        _resolve()
+
+
+@pytest.mark.parametrize(
+    "stored_scope,explicit_scope",
+    [
+        ("fixture-account", " fixture-account "),
+        (" fixture-account ", "fixture-account"),
+        (" fixture-account ", " fixture-account "),
+    ],
+)
+def test_stored_scope_uses_existing_nonempty_string_semantics(
+    stored_scope, explicit_scope
+):
+    path = _account_file(account_scope=stored_scope)
+    before = path.read_bytes()
+    result = _resolve(account_scope=explicit_scope)
+    assert result.account_scope == "fixture-account"
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"schema_version": True},
+        {"schema_version": 2},
+        {"currency": "USD"},
+        {"portfolio_value": 0},
+        {"portfolio_value": True},
+        {"portfolio_value": float("nan")},
+        {"account_scope": ""},
+        {"source": None},
+        {"recorded_at": "2026-09-17"},
+        {"portfolio_value_as_of": "2027-01-01T00:00:00+08:00"},
+    ],
+)
+def test_invalid_stored_assets_fail_closed_but_explicit_value_can_replace_them(updates):
+    _account_file(**updates)
+    with pytest.raises(risk_policy.RiskPolicyError):
+        _resolve()
+    assert _resolve(portfolio_value=90000).portfolio_value == 90000
+
+
+def test_stored_assets_require_private_permissions_and_ledger_locality(
+    tmp_path, monkeypatch
+):
+    path = _account_file()
+    path.chmod(0o644)
+    with pytest.raises(risk_policy.RiskPolicyError, match="cannot read"):
+        _resolve()
+    monkeypatch.setenv("CACHE_DB_PATH", str(tmp_path / "other" / "cache.db"))
+    assert _resolve().portfolio_value is None
+
+
 def test_absent_policy_does_not_create_files_and_retains_defaults(tmp_path):
     before = sorted(tmp_path.rglob("*"))
     result = _resolve(portfolio_value=100000)
@@ -287,8 +435,9 @@ def test_bad_denominator_time_cannot_be_used(bad):
 
 
 @pytest.mark.parametrize("override", [False, True])
+@pytest.mark.parametrize("use_stored", [False, True])
 def test_both_public_clis_use_identical_effective_policy_and_denominator(
-    override, tmp_path, isolated_cache_database, monkeypatch, capsys
+    override, use_stored, tmp_path, isolated_cache_database, monkeypatch, capsys
 ):
     _seed_holding(isolated_cache_database, "600000")
     mock_price_quotes(monkeypatch, _quotes)
@@ -303,6 +452,9 @@ def test_both_public_clis_use_identical_effective_policy_and_denominator(
         "--portfolio-value-as-of",
         "2000-01-01T16:00:00+08:00",
     ]
+    if use_stored:
+        _account_file(portfolio_value_as_of="2000-01-01T16:00:00+08:00")
+        args = ["--policy-file", path]
     if override:
         args += ["--max-position-risk-pct", "3"]
     assert cache.main(["monitor-snapshot", *args, "--json"]) == 0
@@ -317,6 +469,9 @@ def test_both_public_clis_use_identical_effective_policy_and_denominator(
     assert account["portfolio_value_as_of"] == "2000-01-01T16:00:00+08:00"
     assert account["denominator_freshness_status"] == "as_of_provided"
     assert account["denominator_scope_status"] == "provided"
+    assert payload["manifest"]["denominator_source"] == (
+        "account_snapshot" if use_stored else "cli"
+    )
     assert cache.main(["portfolio-risk", *args]) == 0
     text = capsys.readouterr().out
     assert ("已知超预算" in text) is not override
@@ -376,8 +531,12 @@ def test_off_account_strategy_cash_extends_cli_denominator_in_both_clis(
     mock_price_quotes(monkeypatch, _quotes)
     path = _file(tmp_path / "policy.json", _policy(off_account_strategy_cash=150000))
     args = [
-        "--portfolio-value", "100000", "--policy-file", path,
-        "--account-scope", "fixture-account",
+        "--portfolio-value",
+        "100000",
+        "--policy-file",
+        path,
+        "--account-scope",
+        "fixture-account",
     ]
     assert cache.main(["monitor-snapshot", *args, "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -455,7 +614,9 @@ def test_portfolio_attribution_is_unknown_when_any_position_split_is_unknown():
         {"code": "600900", "stop_risk": 9000.0, "stop_risk_unrealized_gain": 3000.0},
         {"code": "603606", "stop_risk": None, "stop_risk_unrealized_gain": None},
     ]
-    breaches = risk_budget.assess(positions, 100000, risk_budget.policy(10, 8))["breaches"]
+    breaches = risk_budget.assess(positions, 100000, risk_budget.policy(10, 8))[
+        "breaches"
+    ]
     assert [item["code"] for item in breaches] == [None]
     assert "principal=unknown; unrealized_gain=unknown" in breaches[0]["detail"]
 
@@ -484,13 +645,23 @@ def test_monitor_missing_scope_keeps_holding_layer_without_applying_policy(
     )
     _file(path, _policy(off_account_strategy_cash=150000))
     before = path.read_bytes()
-    args = ["monitor-snapshot", "--json", "--max-position-risk-pct", "3",
-            "--max-portfolio-risk-pct", "6"]
+    args = [
+        "monitor-snapshot",
+        "--json",
+        "--max-position-risk-pct",
+        "3",
+        "--max-portfolio-risk-pct",
+        "6",
+    ]
     if source == "explicit":
         args += ["--policy-file", str(path)]
     if with_value:
-        args += ["--portfolio-value", "100000", "--portfolio-value-as-of",
-                 "2026-01-01T00:00:00+08:00"]
+        args += [
+            "--portfolio-value",
+            "100000",
+            "--portfolio-value-as-of",
+            "2026-01-01T00:00:00+08:00",
+        ]
     assert cache.main(args) == 1
     payload = json.loads(capsys.readouterr().out)
     account = payload["account"]
@@ -513,7 +684,8 @@ def test_monitor_missing_scope_keeps_holding_layer_without_applying_policy(
         {"account_scope"} if with_value else {"account_scope", "portfolio_value"}
     )
     denominator_escalations = [
-        item for item in payload["escalations"]
+        item
+        for item in payload["escalations"]
         if item["reason_code"] == "denominator_missing"
     ]
     assert len(denominator_escalations) == 1
@@ -582,13 +754,20 @@ def test_untradable_boards_apply_with_or_without_account_scope(tmp_path):
     """0.1.36: the restriction only narrows advice, so it applies even when limits cannot."""
     path = _file(tmp_path / "policy.json", _policy(untradable_boards=["STAR"]))
     applied = _resolve(policy_file=path, account_scope="fixture-account").risk_policy
-    assert applied["untradable_boards"] == ["STAR"] and applied["max_position_risk_pct"] == 1
+    assert (
+        applied["untradable_boards"] == ["STAR"]
+        and applied["max_position_risk_pct"] == 1
+    )
     unscoped = _resolve(policy_file=path, allow_missing_scope=True).risk_policy
     assert unscoped["status"] == "not_applied_account_scope_required"
     assert unscoped["untradable_boards"] == ["STAR"]
     assert unscoped["field_sources"]["untradable_boards"] == "policy_file"
-    assert "untradable_boards" not in _resolve(policy_file=_file(tmp_path / "plain.json"),
-                                               account_scope="fixture-account").risk_policy
+    assert (
+        "untradable_boards"
+        not in _resolve(
+            policy_file=_file(tmp_path / "plain.json"), account_scope="fixture-account"
+        ).risk_policy
+    )
 
 
 @pytest.mark.parametrize("bad", ["STAR", ["CHINEXT"], ["STAR", "STAR"], [None], {}])

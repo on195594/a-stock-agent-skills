@@ -352,7 +352,10 @@ def _denominator_source(portfolio_value, denominator_evidence) -> str | None:
     components = (denominator_evidence or {}).get("denominator_components") or {}
     if portfolio_value is None:
         return None
-    return "cli+policy_file" if components.get("off_account_strategy_cash") else "cli"
+    source = (denominator_evidence or {}).get("portfolio_value_source", "cli")
+    return source + (
+        "+policy_file" if components.get("off_account_strategy_cash") else ""
+    )
 
 
 def build_monitor_snapshot(
@@ -1109,7 +1112,11 @@ def format_daily_brief(snapshot: dict, extra: list[str], today: str) -> str:
             if stop
         )
         change_text = f"（{change:+.2f}%）" if change is not None else ""
-        lines.append(f"{item['name']} {item['code']} {price:.2f}{change_text} {stops}")
+        weight = item.get("portfolio_weight_pct")
+        weight_text = f" 仓位{weight:.2f}%" if weight is not None else ""
+        lines.append(
+            f"{item['name']} {item['code']} {price:.2f}{change_text} {stops}{weight_text}"
+        )
     attention = [
         f"{event['code'] or '组合'} {_BRIEF_REASONS.get(event['reason_code'], event['reason_code'])}："
         f"{event['detail']}"
@@ -1143,7 +1150,36 @@ def format_daily_brief(snapshot: dict, extra: list[str], today: str) -> str:
     attention += extra
     lines.append("需关注：" + ("" if attention else "无触发项"))
     lines += [f"- {text}" for text in attention]
-    lines.append("仓位与风险预算需当日账户总资产：发资金截图后由 Hermes 计算。")
+    account = snapshot.get("account") or {}
+    value = account.get("portfolio_value")
+    if value is None:
+        lines.append("总资产尚无保存记录；后续随账户截图更新。")
+    else:
+        weight = account.get("stock_weight_pct")
+        if weight is not None:
+            label = (
+                "股票仓位"
+                if snapshot.get("valuation_status") == "exact"
+                else "已取价股票仓位（下限）"
+            )
+            lines.append(f"{label} {weight:.2f}%（总资产 {value:,.2f} 元）")
+        policy = account.get("risk_policy") or {}
+        risk = account.get("total_stop_risk_pct")
+        if risk is not None:
+            lines.append(
+                f"组合第二档止损风险 {risk:.2f}% / 预算{policy['max_portfolio_risk_pct']:g}%"
+                f"；单股预算{policy['max_position_risk_pct']:g}%"
+            )
+        else:
+            lines.append("组合止损风险不完整，已知下限不视为完整风险。")
+        if account.get("portfolio_value_source") == "account_snapshot":
+            lines.append(
+                f"资产基线：系统保存，记录于 {account['portfolio_value_recorded_at']}。"
+            )
+        if account.get("portfolio_value_as_of"):
+            lines.append(f"资产估值时点：{account['portfolio_value_as_of']}。")
+        else:
+            lines.append("资产估值时点未标注；不以本次采集时间代替。")
     return "\n".join(lines)
 
 
@@ -1151,11 +1187,21 @@ def cmd_daily_brief(args: list[str]) -> None:
     """Print a post-close brief for push delivery; prints nothing on non-trading days."""
     if args:
         _fail("daily-brief 不接受参数")
+    parameters = commands_holdings._parse_portfolio_risk_args(
+        [], allow_missing_scope=True
+    )
     local = _load_monitor_local_snapshot()
     codes = list(dict.fromkeys(item["code"] for item in local["holdings"]))
     quotes, industry_result = commands_holdings.fetch_monitor_price_quotes(codes)
     snapshot = build_monitor_snapshot(
-        local, quotes, None, industry_result=industry_result, now=domain.cst_now()
+        local,
+        quotes,
+        parameters.portfolio_value,
+        industry_result=industry_result,
+        now=domain.cst_now(),
+        risk_policy=parameters.risk_policy,
+        denominator_evidence=parameters.denominator_evidence(),
+        account_scope_required=parameters.account_scope_required,
     )
     _, findings, failures = commands_holdings.scan_unrecorded_dividends()
     extra = [

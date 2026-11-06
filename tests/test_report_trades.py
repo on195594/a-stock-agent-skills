@@ -166,6 +166,78 @@ def test_same_day_trade_has_no_invented_gap_from_its_trade_price(monkeypatch, ca
     assert "含分红送转 +0.00%，基准 +0.00%，差 +0.00pp" in _lines(capsys)[1][0]
 
 
+@pytest.mark.parametrize(
+    "day", ["20261105", "2026-W45-4", "2026W454", "2026-11-5", "2026-02-29"]
+)
+@pytest.mark.parametrize(
+    "command,arguments",
+    [
+        ("add-holding", ["000001", "10", "100", "--date"]),
+        ("buy-holding", ["000001", "10", "100", "--date"]),
+        ("sell-holding", ["000001", "10", "100", "--date"]),
+        ("close-holding", ["000001", "10"]),
+        ("record-dividend", ["000001", "10"]),
+        ("corporate-action", ["000001", "0.1", "0"]),
+        ("report-trades", ["--end"]),
+        ("benchmark-report", ["--end"]),
+    ],
+)
+def test_ledger_cli_rejects_noncanonical_dates_before_io(
+    monkeypatch, capsys, isolated_cache_database, command, arguments, day
+):
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid dates must be rejected before database or Research access")
+
+    monkeypatch.setattr(db, "get_db", forbidden)
+    monkeypatch.setattr(db, "read_only_db_session", forbidden)
+    monkeypatch.setattr(research_client, "request_json", forbidden)
+    monkeypatch.setattr(commands_holdings, "_require_report", REAL_REQUIRE_REPORT)
+    prefix = (
+        ["--confirm-write"] if cache.COMMAND_CLASSIFICATION[command] == "W1" else []
+    )
+    link = (
+        ["--report-id", "7"]
+        if command in {"add-holding", "buy-holding", "sell-holding"}
+        else []
+    )
+    assert cache.main([*prefix, command, *arguments, day, *link]) == 1
+    assert "日期必须为 YYYY-MM-DD" in capsys.readouterr().err
+    assert not isolated_cache_database.exists()
+
+
+@pytest.mark.parametrize("day", ["2024-02-29", "2026-11-05"])
+def test_canonical_trade_date_is_preserved_and_included_on_same_day(
+    monkeypatch, capsys, day
+):
+    assert (
+        cache.main(
+            [
+                "--confirm-write",
+                "add-holding",
+                "000001",
+                "10",
+                "100",
+                "--date",
+                day,
+                "--report-id",
+                "7",
+            ]
+        )
+        == 0
+    )
+    with db.db_session() as conn:
+        assert conn.execute("SELECT buy_date FROM holdings").fetchone() == (day,)
+        assert conn.execute(
+            "SELECT event_date, report_id FROM holding_events"
+        ).fetchone() == (day, 7)
+    _market(monkeypatch, {day: 100.0}, {day: _close(10.0)})
+    assert cache.main(["report-trades", "--end", day]) == 0
+    out, lines = _lines(capsys)
+    assert "关联报告的买卖 1 笔，未关联 0 笔" in out
+    assert len(lines) == 1 and f"000001 {day} 买入后" in lines[0]
+    assert "含分红送转 +0.00%，基准 +0.00%，差 +0.00pp" in lines[0]
+
+
 def test_a_split_is_not_scored_as_a_price_collapse(monkeypatch, capsys):
     commands_holdings.cmd_add_holding(
         ["000001", "10.0", "500", "--date", "2026-06-01", "--report-id", "101"]

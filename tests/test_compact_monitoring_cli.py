@@ -232,7 +232,8 @@ def test_monitor_skill_uses_compact_views_and_preserves_uncertainty() -> None:
         PROJECT_ROOT / "skills/a-stock-monitor/references/daily-monitoring-and-l3.md"
     ).read_text(encoding="utf-8")
 
-    assert "monitor-snapshot --portfolio-value <账户总资产> --json" in skill
+    assert "a-stock-cache monitor-snapshot --json" in skill
+    assert "默认使用系统保存的最新账户总资产" in skill
     assert "解析前不得额外调用 `holdings`" in skill
     assert "缺少 required 数据时不得输出确定性无动作" in skill
     assert "不得补造触发、股数或成交" in skill

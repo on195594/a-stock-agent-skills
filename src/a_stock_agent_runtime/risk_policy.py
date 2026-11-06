@@ -22,12 +22,14 @@ class RiskParameters:
     portfolio_value_as_of: str | None = None
     off_account_strategy_cash: float = 0.0
     account_scope_required: bool = False
+    portfolio_value_source: str = "cli"
+    portfolio_value_recorded_at: str | None = None
 
     def denominator_evidence(self) -> dict[str, Any]:
         has_value = self.portfolio_value is not None
         scope_known = has_value and self.account_scope is not None
         as_of_known = has_value and self.portfolio_value_as_of is not None
-        return {
+        evidence = {
             "account_scope": self.account_scope,
             "portfolio_value_as_of": self.portfolio_value_as_of,
             "denominator_scope_status": "provided" if scope_known else "unknown",
@@ -43,11 +45,17 @@ class RiskParameters:
             if has_value
             else None,
         }
+        if self.portfolio_value_source == "account_snapshot":
+            evidence["portfolio_value_source"] = self.portfolio_value_source
+            evidence["portfolio_value_recorded_at"] = self.portfolio_value_recorded_at
+        return evidence
 
     def denominator_source(self) -> str | None:
         if self.portfolio_value is None:
             return None
-        return "cli+policy_file" if self.off_account_strategy_cash else "cli"
+        return self.portfolio_value_source + (
+            "+policy_file" if self.off_account_strategy_cash else ""
+        )
 
 
 def _nonempty(value: object, field: str) -> str:
@@ -173,6 +181,40 @@ def untradable_boards(value: object) -> list[str]:
     return list(value)
 
 
+def _load_account_snapshot() -> dict | None:
+    """Read the asset observation belonging to this ledger, never create it."""
+    try:
+        selected = paths.cache_db_path().with_name("account-snapshot.json")
+        if not selected.exists() and not selected.is_symlink():
+            return None
+        value = json.loads(
+            paths.read_private_config(selected, label="account snapshot"),
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_constant,
+            parse_float=_json_float,
+        )
+    except (OSError, RuntimeError, UnicodeError, ValueError) as exc:
+        raise RiskPolicyError(
+            f"cannot read stored account snapshot ({type(exc).__name__})"
+        ) from None
+    if (
+        not isinstance(value, dict)
+        or type(value.get("schema_version")) is not int
+        or value["schema_version"] != 1
+        or value.get("currency") != "CNY"
+        or not risk_budget.positive_number(value.get("portfolio_value"))
+    ):
+        raise RiskPolicyError("invalid stored account snapshot")
+    value["account_scope"] = _nonempty(
+        value.get("account_scope"), "stored account_scope"
+    )
+    _nonempty(value.get("source"), "stored account source")
+    _timestamp(value.get("recorded_at"), "stored account recorded_at")
+    if value.get("portfolio_value_as_of") is not None:
+        _timestamp(value["portfolio_value_as_of"], "stored portfolio_value_as_of")
+    return value
+
+
 def resolve_risk_parameters(
     *,
     portfolio_value: float | None = None,
@@ -192,6 +234,25 @@ def resolve_risk_parameters(
     scope = (
         _nonempty(account_scope, "account_scope") if account_scope is not None else None
     )
+    value_source, recorded_at = "cli", None
+    if portfolio_value is None and (stored := _load_account_snapshot()) is not None:
+        if scope is not None and scope != stored["account_scope"]:
+            raise RiskPolicyError(
+                "stored account snapshot does not match account-scope"
+            )
+        portfolio_value = float(stored["portfolio_value"])
+        scope = stored["account_scope"]
+        stored_as_of = stored.get("portfolio_value_as_of")
+        if portfolio_value_as_of is not None and (
+            stored_as_of is None
+            or _timestamp(portfolio_value_as_of, "portfolio_value_as_of")
+            != _timestamp(stored_as_of, "stored portfolio_value_as_of")
+        ):
+            raise RiskPolicyError(
+                "changing stored asset valuation time requires --portfolio-value"
+            )
+        portfolio_value_as_of = stored_as_of
+        value_source, recorded_at = "account_snapshot", stored["recorded_at"]
     as_of = None
     if portfolio_value_as_of is not None:
         timestamp = _timestamp(portfolio_value_as_of, "portfolio_value_as_of")
@@ -275,7 +336,14 @@ def resolve_risk_parameters(
     else:
         portfolio_value += off_account
     return RiskParameters(
-        portfolio_value, effective, scope, as_of, off_account, account_scope_required
+        portfolio_value,
+        effective,
+        scope,
+        as_of,
+        off_account,
+        account_scope_required,
+        value_source,
+        recorded_at,
     )
 
 

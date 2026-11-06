@@ -2,6 +2,16 @@
 
 本节用于账户差异、交易记账、状态更新和公司行动；无这些事项的日常监控不加载。
 
+### 账户资产快照
+
+2026-11-06 用户授权：仓位与风险预算默认复用系统已存总资产，后续日常截图由系统更新，不每次索要。
+
+- 资产观察存于 `CACHE_DB_PATH` 同目录的 `account-snapshot.json`，仓库外、user-owned、0600；不写入风险政策，也不迁移持仓数据库。
+- 收到清晰的同账户截图后，核对总资产与可见账户标识，备份原记录后更新并读回核对；这是已授权的资产观察更新，不代表成交、持仓或风险限额修改，不重复征询。账户不同、金额不可辨或互相冲突时只问具体缺项。
+- 保存 `schema_version=1`、`currency=CNY`、`account_scope`、`portfolio_value`、`portfolio_value_as_of`（无明确资产估值时点则为 null）、`recorded_at`（本次记录时间）、`source=user_screenshot`、`source_ref`（截图路径或消息出处）；可另存明确可见的 `stock_market_value`、`available_cash`，缺失不填 0。
+- 手机状态栏时间和记录时间不冒充资产估值时间；收到无时点截图仍更新已辨明金额，日常监控保留未知标记，不反复催问。已知旧截图不覆盖更新的资产观察。
+- 后续只读监控自动使用最新保存值；显式 `--portfolio-value` 仅覆盖本次，不回写、不混用旧范围/时点。资产文件不存在时才补一次初值，非法记录或账户冲突不得静默回退成已确认预算。
+
 ### 对账先闭环，不重复研究
 
 1. 用本轮快照对比用户最新截图/已成交说明，列出股数、账户范围、成交、费用税费及分红差异；先复用已提供材料，不重跑取价。成本口径与交易限制见 [对账门](portfolio-risk.md#券商成本与规则参考成本对账门)。
@@ -82,7 +92,7 @@ echo '<P0事实JSON>' | $CACHE --confirm-write regulatory-evidence <代码>
 `record-dividend`，否则会重复计算回报。后者只用于不伴随规则参考成本调整的独立补录。
 
 `close-holding` 与 `update-return` 仅保留给旧数据兼容，不再作为本 skill 的交易写入路径。
-每次写入后执行 `$CACHE holdings`，确认股数、成本与 buy_date；再按 [有效政策与分母证据](portfolio-risk.md#有效政策与分母证据) 运行 `$CACHE portfolio-risk --portfolio-value <可投资总资产>`，沿用本轮 `--policy-file`（如有），存在个人政策文件时附用户明确提供的 `--account-scope`，已确认估值时点附 `--portfolio-value-as-of`。政策或账户证据不齐时报告风险复核未闭合，不回退预算、不否认已成功记账；这项写后复核不属于只读监控的重复取价。
+每次写入后执行 `$CACHE holdings`，确认股数、成本与 buy_date；再按 [有效政策与分母证据](portfolio-risk.md#有效政策与分母证据) 默认运行 `$CACHE portfolio-risk`，复用已存总资产、账户范围和时点，沿用本轮 `--policy-file`（如有），不重新索要截图或把旧金额当作显式覆盖传入。仅本次明确覆盖总资产时，才同传 `--portfolio-value` 与同源已确认的 `--account-scope`、可选 `--portfolio-value-as-of`；不得只给旧存值补一个新时点。政策或账户证据不齐时报告风险复核未闭合，不回退预算、不否认已成功记账；这项写后复核不属于只读监控的重复取价。
 
 ### 结构化状态命令
 

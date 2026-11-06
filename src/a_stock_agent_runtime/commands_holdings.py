@@ -88,6 +88,17 @@ def _parse_cli_finite_float(
     return value
 
 
+def _parse_cli_date(raw: str) -> str:
+    """Keep ledger dates sortable as YYYY-MM-DD; reject other ISO date forms."""
+    try:
+        if date.fromisoformat(raw).isoformat() != raw:
+            raise ValueError
+    except ValueError:
+        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
+        sys.exit(1)
+    return raw
+
+
 def _validate_event_date_not_before(
     conn: sqlite3.Connection,
     holding_id: int,
@@ -689,12 +700,7 @@ def _parse_trade_options(args: list[str], start: int) -> tuple[float, float, str
             sys.exit(1)
         value = args[i + 1]
         if args[i] == "--date":
-            try:
-                date.fromisoformat(value)
-            except ValueError:
-                print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
-                sys.exit(1)
-            trade_date = value
+            trade_date = _parse_cli_date(value)
         else:
             label = "费用" if args[i] == "--fee" else "税费"
             amount = _parse_cli_finite_float(value, label, minimum=0)
@@ -1222,12 +1228,7 @@ def cmd_benchmark_report(args: list[str]) -> None:
     if args and (len(args) != 2 or args[0] != "--end"):
         print("错误：用法 benchmark-report [--end YYYY-MM-DD]", file=sys.stderr)
         sys.exit(1)
-    end = args[1] if args else domain.cst_today()
-    try:
-        date.fromisoformat(end)
-    except ValueError:
-        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
-        sys.exit(1)
+    end = _parse_cli_date(args[1] if args else domain.cst_today())
     with db.read_only_db_session() as conn:
         events = conn.execute(
             """SELECT code, event_type, event_date, shares, price, fees, tax,
@@ -1327,12 +1328,7 @@ def cmd_report_trades(args: list[str]) -> None:
     if args and (len(args) != 2 or args[0] != "--end"):
         print("错误：用法 report-trades [--end YYYY-MM-DD]", file=sys.stderr)
         sys.exit(1)
-    end = args[1] if args else domain.cst_today()
-    try:
-        date.fromisoformat(end)
-    except ValueError:
-        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
-        sys.exit(1)
+    end = _parse_cli_date(args[1] if args else domain.cst_today())
     with db.read_only_db_session() as conn:
         linked = conn.execute(
             """SELECT report_id, code, event_type, event_date, shares, price, realized_pnl
@@ -1412,12 +1408,7 @@ def cmd_record_dividend(args: list[str]) -> None:
         sys.exit(1)
     code = args[0]
     cash_amount = _parse_cli_finite_float(args[1], "现金总额", minimum=0)
-    event_date = args[2] if len(args) > 2 else domain.cst_today()
-    try:
-        date.fromisoformat(event_date)
-    except ValueError:
-        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
-        sys.exit(1)
+    event_date = _parse_cli_date(args[2] if len(args) > 2 else domain.cst_today())
     with db.db_session() as conn:
         row = conn.execute(
             """SELECT id FROM holdings
@@ -1450,12 +1441,7 @@ def cmd_corporate_action(args: list[str]) -> None:
     code = args[0]
     dps = _parse_cli_finite_float(args[1], "分红", minimum=0)
     split_ratio = _parse_cli_finite_float(args[2], "转增比例", minimum=0)
-    action_date = args[3] if len(args) > 3 else domain.cst_today()
-    try:
-        date.fromisoformat(action_date)
-    except ValueError:
-        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
-        sys.exit(1)
+    action_date = _parse_cli_date(args[3] if len(args) > 3 else domain.cst_today())
     with db.db_session() as conn:
         conn.execute("BEGIN IMMEDIATE")
         holding_id, _, framework = _single_open_holding(conn, code)
@@ -1548,12 +1534,7 @@ def cmd_close_holding(args: list[str]) -> None:
     exit_price = _parse_cli_finite_float(
         args[1], "卖出价", minimum=0, strict_minimum=True
     )
-    exit_date = args[2] if len(args) > 2 else domain.cst_today()
-    try:
-        date.fromisoformat(exit_date)
-    except ValueError:
-        print("错误：日期必须为 YYYY-MM-DD", file=sys.stderr)
-        sys.exit(1)
+    exit_date = _parse_cli_date(args[2] if len(args) > 2 else domain.cst_today())
 
     with db.db_session() as conn:
         row = conn.execute(

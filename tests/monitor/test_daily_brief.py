@@ -1,5 +1,8 @@
 """Post-close push brief built from the monitor-v1 snapshot."""
 
+import json
+
+from a_stock_agent_runtime import cache, commands_holdings, commands_monitor, paths
 from a_stock_agent_runtime.commands_monitor import format_daily_brief
 
 
@@ -60,6 +63,76 @@ def test_brief_lists_stop_distance_triggers_due_l3_and_extras():
 def test_calm_day_says_no_triggers():
     brief = format_daily_brief(_snapshot([_holding("000963", 26.21)]), [], "2026-10-22")
     assert "需关注：无触发项" in brief
+
+
+def test_brief_uses_saved_denominator_without_repeated_screenshot_requests():
+    snapshot = _snapshot([_holding("000963", 26.21)])
+    snapshot["valuation_status"] = "exact"
+    snapshot["holdings"][0]["portfolio_weight_pct"] = 25
+    snapshot["account"] = {
+        "portfolio_value": 100000,
+        "stock_weight_pct": 75,
+        "total_stop_risk_pct": 12.5,
+        "risk_policy": {"max_position_risk_pct": 6, "max_portfolio_risk_pct": 18},
+        "portfolio_value_source": "account_snapshot",
+        "portfolio_value_recorded_at": "2026-10-22T15:40:00+08:00",
+        "portfolio_value_as_of": None,
+    }
+    brief = format_daily_brief(snapshot, [], "2026-10-22")
+    assert "仓位25.00%" in brief
+    assert "股票仓位 75.00%（总资产 100,000.00 元）" in brief
+    assert "组合第二档止损风险 12.50% / 预算18%；单股预算6%" in brief
+    assert "资产基线：系统保存" in brief and "资产估值时点未标注" in brief
+    assert "发资金截图" not in brief and "需当日账户总资产" not in brief
+    snapshot["valuation_status"] = "priced_positions_lower_bound"
+    snapshot["account"]["total_stop_risk_pct"] = None
+    partial = format_daily_brief(snapshot, [], "2026-10-22")
+    assert "已取价股票仓位（下限）" in partial and "风险不完整" in partial
+
+
+def test_daily_brief_command_passes_saved_assets_through_shared_resolver(
+    monkeypatch, capsys
+):
+    path = paths.cache_db_path().with_name("account-snapshot.json")
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "currency": "CNY",
+                "account_scope": "fixture-account",
+                "portfolio_value": 100000,
+                "portfolio_value_as_of": None,
+                "recorded_at": "2026-10-22T15:40:00+08:00",
+                "source": "user_screenshot",
+            }
+        )
+    )
+    path.chmod(0o600)
+    monkeypatch.setattr(
+        commands_monitor, "_load_monitor_local_snapshot", lambda: {"holdings": []}
+    )
+    monkeypatch.setattr(
+        commands_holdings, "fetch_monitor_price_quotes", lambda _: ({}, None)
+    )
+    monkeypatch.setattr(
+        commands_holdings, "scan_unrecorded_dividends", lambda: ([], [], [])
+    )
+    seen = []
+
+    def build(local, quotes, portfolio_value, **kwargs):
+        seen.append((portfolio_value, kwargs))
+        return _snapshot([_holding("000963", 26.21)])
+
+    monkeypatch.setattr(commands_monitor, "build_monitor_snapshot", build)
+    monkeypatch.setattr(commands_monitor.domain, "cst_today", lambda: "2026-10-22")
+    assert cache.main(["daily-brief"]) == 0
+    assert seen[0][0] == 100000
+    assert (
+        seen[0][1]["denominator_evidence"]["portfolio_value_source"]
+        == "account_snapshot"
+    )
+    assert seen[0][1]["denominator_evidence"]["account_scope"] == "fixture-account"
+    assert "发资金截图" not in capsys.readouterr().out
 
 
 def test_routine_l3_groups_by_date_without_hiding_due_or_unverified_items():

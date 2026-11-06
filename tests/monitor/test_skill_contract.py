@@ -45,7 +45,8 @@ def test_reconciliation_preserves_events_and_authorization():
     assert "暂缓该笔写入" in DATA_OPERATIONS
     assert "不否认已成功记账" in DATA_OPERATIONS
     assert "--account-scope" in DATA_OPERATIONS
-    assert "范围缺失先请求补充" in PORTFOLIO_RISK
+    assert "本次及存储都缺范围才请求补充" in PORTFOLIO_RISK
+    assert "不从政策文件反推用户确认" in PORTFOLIO_RISK
     assert "不在示例命令中覆盖个人预算" in PORTFOLIO_RISK
     assert "--max-position-risk-pct 2" not in PORTFOLIO_RISK
 
@@ -72,7 +73,8 @@ def test_level2_checklist_semantics_remain_owned_after_main_is_thinned():
 
 def test_generic_single_holding_request_has_bounded_delivery_contract():
     assert "### Level 1：默认快照" in SKILL
-    assert "monitor-snapshot --portfolio-value <账户总资产> --json" in SKILL
+    assert "a-stock-cache monitor-snapshot --json" in SKILL
+    assert "默认使用系统保存的最新账户总资产" in SKILL
     assert "干净快速路径" in SKILL and "立即停止" in SKILL
     assert (
         "只加载与 runtime 升级原因、上述账户差异、已有研究提醒或用户明确请求相符的资料"
@@ -230,10 +232,32 @@ def test_monitor_has_no_ambiguous_direct_sell_shortcuts():
 
 def test_missing_account_inputs_still_require_one_holding_snapshot():
     assert "缺少总资产时仍运行一次 `a-stock-cache monitor-snapshot --json`" in SKILL
-    assert "账户范围未经确认也省略 `--account-scope`" in SKILL
+    assert "政策要求范围但本次及存储均未确认时" in SKILL
     assert "不得以 `holdings`、fetcher 报价或手工风险求和替代快照" in SKILL
     assert "不授予新增或加仓权限" in SKILL
     assert "不调用快照" not in SKILL
+
+
+def test_asset_observations_reuse_and_update_without_repeated_requests():
+    assert "不每次索要资金截图" in SKILL
+    assert "account-snapshot.json" in SKILL
+    assert "不以记录时间补造" in SKILL
+    for marker in (
+        "### 账户资产快照",
+        "2026-11-06 用户授权",
+        "备份原记录后更新并读回核对",
+        "不代表成交、持仓或风险限额修改",
+        "已知旧截图不覆盖更新的资产观察",
+    ):
+        assert marker in DATA_OPERATIONS
+
+
+def test_post_write_risk_review_reuses_the_stored_asset_observation():
+    post_write = DATA_OPERATIONS.split("每次写入后执行", 1)[1].split("###", 1)[0]
+    assert "`$CACHE portfolio-risk`" in post_write
+    assert "`$CACHE portfolio-risk --portfolio-value" not in post_write
+    assert "仅本次明确覆盖总资产" in post_write and "同源" in post_write
+    assert "不要单独附 `--portfolio-value-as-of`" in PORTFOLIO_RISK
 
 
 def test_l3_cadence_and_quarterly_comparison_require_evidence():

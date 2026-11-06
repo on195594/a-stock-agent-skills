@@ -178,6 +178,17 @@ it is not configured. An optional `untradable_boards` field (`STAR`, `BSE`) keep
 researched but out of buy/switch advice and sizing, and applies even without an account scope
 ([2026-11-04 spec](specs/2026-11-04-untradable-boards-spec.md)).
 
+## Stored asset observations (2026-11-06 user authorization)
+
+The risk resolver and daily brief reuse `account-snapshot.json` beside the selected
+`CACHE_DB_PATH` when no total is passed explicitly. The private 0600 JSON records
+the screenshot's total, account scope, source/reference and recording time; an
+unobserved asset valuation time stays null. A new same-account screenshot updates
+this observation under the user's standing authorization, without changing the
+ledger, risk limits, schema or cron. Explicit CLI totals remain per-call overrides.
+Daily briefs show saved-total weights and risk budgets, not repeated screenshot
+requests. Missing valuation time still retains the existing new-risk review gate.
+
 ## Write boundary
 
 `set*`, alert/L3/Tier updates and holding or transaction commands are W1.

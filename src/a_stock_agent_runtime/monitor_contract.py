@@ -277,6 +277,9 @@ def _research_card(raw: Any) -> dict:
     if current["valuation"] is not None:
         _research_boundary(current["valuation"])
     _research_caution_values(research_cautions(card))
+    stance = card.get("stance")
+    if stance is not None:
+        stance = _object(stance, "research.card.stance")
     # Research V4 frozen stance (Research 2026-11-04); older cards have none.
     if card.get("stance_calc") is not None:
         frozen = _object(card["stance_calc"], "research.card.stance_calc")
@@ -288,8 +291,7 @@ def _research_card(raw: Any) -> dict:
                 if frozen["action"] != action:
                     raise MonitorContractError("research checkpoint action is inconsistent")
                 _research_trigger(frozen[field])
-            stance = card.get("stance") or {}
-            if card.get("stance") is not None and stance.get(field) != frozen.get(field):
+            if stance is not None and stance.get(field) != frozen.get(field):
                 raise MonitorContractError("research frozen checkpoint is inconsistent with stance")
         if frozen["action"] == "等证据" and "trigger" not in frozen:
             raise MonitorContractError("legacy evidence stance requires trigger")

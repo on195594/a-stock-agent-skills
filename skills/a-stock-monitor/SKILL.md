@@ -17,17 +17,17 @@ compatibility: Requires local command execution, the installed a-stock-agent run
 
 ### Level 1：默认快照
 
-使用用户明确的账户总资产，并把本会话或截图已确认的账户范围、资产估值时点随首次调用传入，只读运行一次：
+默认使用系统保存的最新账户总资产与已确认账户范围，只读运行一次；本次用户明确覆盖时再传入新值。已存值不因本轮未重述或跨日而消失，不每次索要资金截图。新账户截图按下表数据操作资料的“账户资产快照”更新后再取快照。
 
-现金余额、单只持仓市值不能替代账户总资产。缺少总资产时仍运行一次 `a-stock-cache monitor-snapshot --json`，省略 `--portfolio-value`，账户范围未经确认也省略 `--account-scope`；报告持仓层报价、止损距离、L3/预警/Tier 到期项和升级项，再请求缺失输入。不得以 `holdings`、fetcher 报价或手工风险求和替代快照，不把现金填入 `--portfolio-value`；继续复用已有持仓、成交和截图说明对账缺口。
+现金余额、单只持仓市值不能替代账户总资产。缺少总资产时仍运行一次 `a-stock-cache monitor-snapshot --json`；runtime 自动读取账本旁的 `account-snapshot.json`，只有确无有效存值或账户范围冲突时才请求具体缺项。不得以 `holdings`、fetcher 报价或手工风险求和替代快照，不把现金填入 `--portfolio-value`；继续复用已有持仓、成交和截图说明对账缺口。
 
 ```bash
-a-stock-cache monitor-snapshot --portfolio-value <账户总资产> --json
+a-stock-cache monitor-snapshot --json
 ```
 
 `monitor-snapshot --json` 输出是 `monitor-v1` machine contract；状态、动作、缺口和停止条件只从结构化字段读取，不从自然语言重建。
 
-已确认账户范围时在上述命令追加 `--account-scope <账户范围>`；政策要求范围但用户尚未确认时，仍取无范围的持仓层快照并请求补充，不从政策文件反推账户；该模式不应用政策，权重与风险预算为空，不授予新增或加仓权限。可附用户提供的 `--policy-file`，不得生成政策或确认引用。`--portfolio-value-as-of` 须用户或截图明确确认资产估值日期与时间，格式 `YYYY-MM-DDTHH:MM:SS+08:00`；手机设备状态栏时间不能替代资产估值时间，缺日期/时点则保持缺省并请求补充。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时即使 clean 也不授予加仓权限。2%/8% 是兼容默认，不是个人回撤目标；非法政策不得静默回退，确认元数据不是 W1 令牌。
+本次覆盖总资产时附 `--portfolio-value <账户总资产>`，并使用同一份证据已确认的 `--account-scope <账户范围>` 与可选 `--portfolio-value-as-of`；显式金额不混用旧记录的范围或时点。政策要求范围但本次及存储均未确认时，仍取无范围的持仓层快照并请求补充，不从政策文件反推账户；该模式不应用政策，权重与风险预算为空，不授予新增或加仓权限。可附用户提供的 `--policy-file`，不得生成政策或确认引用。资产估值时点须用户或截图明确确认，格式 `YYYY-MM-DDTHH:MM:SS+08:00`；手机设备状态栏时间不能替代资产估值时间，缺失时标未知，不反复催问，不以记录时间补造。展示 `risk_policy` 逐字段来源及分母时点/范围；`denominator_requires_review=true` 时即使 clean 也不授予加仓权限。2%/8% 是兼容默认，不是个人回撤目标；非法政策不得静默回退，确认元数据不是 W1 令牌。
 
 通过宿主的命令执行工具调用 runtime CLI，保留 stdout、stderr 和退出码；不要在有硬超时的临时代码内核中包裹整轮监控。
 

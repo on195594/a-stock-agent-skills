@@ -329,6 +329,68 @@ def test_optional_failures_preserve_all_gates(
     assert bool(prompts(payload, "research_unavailable")) is (status == "unavailable")
 
 
+@pytest.mark.parametrize(
+    "stance", ["现在分批", ["现在分批"], 1, True, "", [], 0, False]
+)
+@pytest.mark.parametrize("with_frozen", [False, True])
+def test_nonobject_stance_is_a_contract_error(cards, stance, with_frozen):
+    held = card(cards, "600900")
+    held["stance"] = stance
+    if with_frozen:
+        held["stance_calc"] = {"action": "现在分批"}
+    else:
+        held.pop("stance_calc", None)
+    with pytest.raises(
+        monitor_contract.MonitorContractError,
+        match="research.card.stance must be an object",
+    ):
+        monitor_contract.validate_research_cards(cards)
+
+
+@pytest.mark.parametrize("stance", [None, {}, {"action": "现在分批"}])
+def test_optional_object_stance_remains_compatible_and_unchanged(cards, stance):
+    held = card(cards, "600900")
+    held["stance_calc"] = {"action": "现在分批"}
+    held["stance"] = stance
+    before = deepcopy(cards)
+    monitor_contract.validate_research_cards(cards)
+    assert cards == before
+    del held["stance"]
+    monitor_contract.validate_research_cards(cards)
+
+
+@pytest.mark.parametrize(
+    "stance", ["现在分批", ["现在分批"], 1, True, "", [], 0, False]
+)
+def test_malformed_stance_degrades_research_without_changing_monitor_gates(
+    run_snapshot, cards, http, stance
+):
+    _, baseline = run_snapshot("--no-research")
+    held = card(cards, "600900")
+    held["stance_calc"] = {"action": "现在分批"}
+    held["stance"] = stance
+    result, payload = run_snapshot()
+    assert result == 0 and payload["research"]["status"] == "unavailable"
+    assert payload["research"]["reason"] == "research.card.stance must be an object"
+    assert_gate_unchanged(baseline, payload)
+    assert len(http[1]) == 1 and len(prompts(payload, "research_unavailable")) == 1
+
+
+def test_malformed_stance_does_not_hide_a_price_stop(run_snapshot, cards, monkeypatch):
+    close = card(cards, "600900")["current"]["last_close"]
+    mock_price_quotes(monkeypatch, lambda codes: _quotes(codes, price=close * 0.7))
+    baseline_status, baseline = run_snapshot("--no-research")
+    assert any(
+        item["reason_code"] == "price_stop_2" for item in baseline["escalations"]
+    )
+    held = card(cards, "600900")
+    held["stance_calc"] = {"action": "现在分批"}
+    held["stance"] = "现在分批"
+    result, payload = run_snapshot()
+    assert result == baseline_status and payload["research"]["status"] == "unavailable"
+    assert_gate_unchanged(baseline, payload)
+
+
 def test_missing_cards_and_l5_scope(run_snapshot, cards):
     held = card(cards, "600900")
     held["origin"] = "l5"  # In-scope holding must not also become a candidate.

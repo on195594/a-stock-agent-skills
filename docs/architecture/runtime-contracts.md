@@ -84,6 +84,8 @@ The new reason enum requires matching runtime, validator and Monitor Skill consu
 none starts a research task. Missing configuration gives `not_configured`, opt-out
 `skipped`, and transport/version/malformed-card errors `unavailable` with a bounded
 reason. Successful reads are `ok`. Tests inject HTTP and never use live credentials.
+An optional `stance` must be an object or null; malformed types follow the same
+`unavailable` path without changing local monitoring gates or hiding price stops.
 
 `research.holdings` has one row per active code; `candidates` contains only L5 codes
 outside holdings (including missing L5 cards). Rows contain `code`, the original
@@ -341,6 +343,28 @@ not exposed to this capture. This capture is historical: the test checks its
 recorded Skill bytes at its recorded commit, not today's edited Skills. It does
 not qualify the S1 budget extension or current production clients.
 
+### Stored account assets (2026-11-06 user authorization)
+
+Without an explicit `--portfolio-value`, the shared risk resolver reads a private
+`account-snapshot.json` beside the selected ledger (`CACHE_DB_PATH`). It requires
+schema_version 1, CNY, positive finite portfolio_value, an observed account_scope,
+source and timezone-aware recorded_at. Optional portfolio_value_as_of remains
+unknown unless actually observed; recording time never substitutes for it.
+Stored scope can match the existing policy; a conflicting explicit scope fails.
+Explicit values win without inheriting stored scope/time. No automatic TTL or
+new-risk authorization is added. Reads never create or rewrite asset observations.
+User-authorized screenshot intake updates the observation, not holdings or policy.
+An as-of-only CLI argument may repeat the stored instant, but cannot supply a
+missing or different time for an old amount; changing it requires an explicit
+value and same-source metadata. Invalid stored timestamps remain errors, not
+masked by a CLI time. Asset-path/config failures use the risk-policy error contract.
+
+`daily-brief` uses this same resolver and projects snapshot weights, stop-risk
+budgets and asset provenance instead of a fixed request for another screenshot.
+Stored reads add optional account portfolio_value_source/portfolio_value_recorded_at;
+old snapshots remain readable and schema_version stays 1. Tests keep the asset
+file beside their isolated ledger, never resolve a production HOME asset file.
+
 ### Linked trade report validation and price reuse
 
 Before recording a linked trade, the runtime verifies the returned report's stock
@@ -349,6 +373,11 @@ compares the timestamp's Shanghai calendar date with the trade date and rejects
 unknown or malformed evidence. Same-day report/trade ordering remains unknown.
 Unlinked trades do not call Research. This does not solve later report deletion
 or ID reuse; the existing deletion caution in operations still applies.
+
+Holding lifecycle dates and `report-trades` / `benchmark-report` `--end` values
+require canonical `YYYY-MM-DD`.
+Other ISO forms (compact or week dates) are rejected before database or Research
+access, not normalized, so text date ordering and range queries remain consistent.
 
 `report-trades` reuses closing-price results, including freshness metadata and
 failures, by `(code, day)` only within one invocation. A subsequent invocation
