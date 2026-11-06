@@ -228,6 +228,40 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### 0.1.42 activation (2026-11-06)
+
+Owner approved commit, push and activation (Telegram msg 4220, 2026-11-06) after a
+read-only review of the report link. Activated **`0.1.42-14cbe7ff9acc`** using the
+native installer (`--client all --mode symlink`, dry-run then force), only after
+hosted CI succeeded on the exact commit `14cbe7f` (run `42134707740`).
+
+Change: `--report-id` on `add-holding` / `buy-holding` / `sell-holding` is checked
+with `GET /api/reports?code=` before the write transaction. The report must belong
+to the traded code, be `done` and passed, and not be dated after the trade date.
+Otherwise nothing is written, including when Research is unavailable or not
+configured. Unlinked trades never call Research. No Research change, schema change,
+new dependency, or eligibility, account gate, L3, W1 or investment-policy change.
+The check cannot tell apart reports of the same stock or order a report and a trade
+within one day, so it echoes the report's name and time. A report deleted after
+linking leaves the link dangling, and `reports.id` has no AUTOINCREMENT, so deleting
+the newest report reuses its id: check the ledger before deleting a Research report.
+
+Validation: ordinary-change tier, 361 passed / 2 skipped (report-trades, version,
+installation, Skill validation, CLI contract, Research client, cache), Ruff; 10 of 10
+mutations of the gate caught; full gate by hosted CI. Installed readback: runtime
+0.1.42, all 31 modules match source. The installed CLI on an isolated ledger against
+real Research refused #94 on 002648 (another stock), #110 on a trade before it,
+failed #106 and unknown #999999, accepted #102, refused a linked trade with Research
+unreachable and recorded an unlinked one. Live ledger data and schema digests match
+before and after (37 events, 0 linked). No trades, backfill, notifications, paid
+research, credentials, configuration or cron changes.
+
+Evidence: `~/.local/share/a-stock-agent/deployments/report-link-0.1.42-20261106-0810/`
+and `~/.local/share/a-share-research-evaluations/report-link-review-20261106/`.
+Rollback manifest: `~/.local/share/a-stock-agent/rollback-1793923835472424400.json`.
+0.1.41 remains executable. The Skill text in `data-operations.md` must roll back with
+the runtime, because it describes the check.
+
 ### 0.1.41 activation (2026-11-05)
 
 Owner explicitly authorized commit, push and publication in this Telegram session.
