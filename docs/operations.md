@@ -245,6 +245,30 @@ under explicit authorization and reconcile compatibility before proceeding.
 
 ## Current deployment record
 
+### 0.1.43 cleanup activation (2026-11-06)
+
+Owner explicitly requested commit, push and deployment after repository cleanup.
+Activated **`0.1.43-9ff3909d283f`** from commit `9ff3909`, without a version bump
+or investment-rule change. Reused the local targeted result (445 passed / 2 skipped,
+changed-file Ruff and formatting checks); hosted
+[CI run 42173290053](https://github.com/on195594/a-stock-agent-skills/actions/runs/42173290053)
+then passed the full matrix (1852 passed / 11 skipped, Ruff, regulatory freshness,
+standalone QA and cron smoke). The native installer ran dry-run, then
+`--client all --mode symlink --force`.
+
+Readback verified all 9 Claude/Codex/Hermes Skill links and all 3 stable CLI links.
+All 59 runtime/Skill source files match the activated commit by SHA-256; installed
+versions remain suite 0.1.43 and a-stock-lib 0.10.2. All three CLI help commands
+passed with isolated state, absent config and notifications disabled, without
+initializing a database. No account operations, schema migration, credentials or
+cron changes were made. Existing client sessions must reload Skills; live-session
+reload and candidate model behavior replay were not verified.
+
+Evidence: `~/.local/share/a-stock-agent/deployments/maintenance-0.1.43-9ff3909d283f-20261106/`.
+Rollback manifest: `~/.local/share/a-stock-agent/rollback-1793945798594335320.json`.
+The previous `0.1.43-14838df3a862` runtime and frozen Skills remain available.
+The following documentation-only commit does not alter activated runtime/Skill bytes.
+
 ### 0.1.43 activation (2026-11-06)
 
 Owner explicitly requested commit and deployment in the maintenance session.

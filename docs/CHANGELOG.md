@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.43 cleanup (2026-11-06)
 
-Repository-only maintenance; no version bump or deployment:
+Maintenance source `9ff3909`, deployed without a version bump or rule changes;
+activation and rollback are recorded in
+[operations](operations.md#current-deployment-record):
 
 - Remove the test-only dividend-yield wrapper; regressions exercise the production
   dividend-basis implementation directly, without changing calculation rules.
