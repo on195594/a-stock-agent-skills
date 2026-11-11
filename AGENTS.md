@@ -1,8 +1,8 @@
 # Repository working rules
 
-- This repository is being merged into `a-share-research` and will be archived by 2026-12-07
+- This repository is being merged into `a-share-research` and will be archived by 2026-12-12
   (owner decision 2026-11-11, `a-share-research/docs/consolidation.md`). Add new features there;
-  land only production fixes here and mirror them. Until the 2026-12-02 cutover this runtime stays
+  land only production fixes here and mirror them. Until the account cutover (2026-12-05 at the earliest) this runtime stays
   the only writer of account state and the rules below still apply.
 
 - Develop only on `master` with small, verified direct commits. Do not create feature branches, open pull requests, or force-push.
