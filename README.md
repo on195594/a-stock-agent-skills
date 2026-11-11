@@ -1,5 +1,12 @@
 # Portable A-Stock Agent Skills Suite
 
+> **Being merged (owner decision 2026-11-11).** This repository is being consolidated into
+> [a-share-research](https://github.com/on195594/a-share-research) (`account/`, `policy/`, one Skill)
+> and will be archived by 2026-12-07. Until the 2026-12-02 cutover this runtime remains the only
+> writer of account state and its W1 gate still applies. New features go to a-share-research; only
+> production fixes land here and are mirrored there. See the
+> [consolidation plan](https://github.com/on195594/a-share-research/blob/main/docs/consolidation.md).
+
 Canonical source for three client-neutral Agent Skills:
 
 - `a-stock-research` — first-time A-share research and valuation;
